@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<Target Name="KillProcessBeforeBuild" BeforeTargets="BeforeBuild">
+		<Exec Command="taskkill /IM E-Tax.exe /F" ContinueOnError="true" />
+	</Target>
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>E_Tax</RootNamespace>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="EPPlus" Version="8.2.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3485.44" />
+  </ItemGroup>
+	<ItemGroup>
+    <PackageReference Include="Svg" Version="3.4.7" />
+    </ItemGroup>	
+
+<ItemGroup>
+    <Folder Include="Resources\" />
+  </ItemGroup>
+
+</Project>

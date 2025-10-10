@@ -1,0 +1,97 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Login Demo</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input {
+            width: 250px;
+            padding: 5px;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 5px 15px;
+        }
+
+        #captcha-img {
+            margin-top: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <label type="text">Phiên bản dùng thử </label>
+    <h2>Login</h2>
+    <label>Username:</label>
+    <input type="text" id="username" />
+
+    <label>Password:</label>
+    <input type="password" id="password" />
+
+    <label>Captcha:</label>
+    <input type="text" id="cvalue" placeholder="Nhập captcha..." />
+    <div>
+        <img id="captcha-img" src="" alt="captcha" />
+        <button type="button" onclick="loadCaptcha()">Làm mới Captcha</button>
+    </div>
+
+    <button onclick="doLogin()">Login</button>
+
+    <pre id="result"></pre>
+
+    <script>
+        let ckey = "";
+
+        async function loadCaptcha() {
+            try {
+                const res = await fetch("https://hoadondientu.gdt.gov.vn:30000/captcha");
+                const data = await res.json();
+
+                // data giả sử trả về: { ckey: "...", image: "data:image/png;base64,..." }
+                ckey = data.ckey;
+                document.getElementById("captcha-img").src = data.image;
+            } catch (e) {
+                document.getElementById("result").innerText = "Lỗi load captcha: " + e;
+            }
+        }
+
+        async function doLogin() {
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+            const cvalue = document.getElementById("cvalue").value;
+
+            try {
+                const res = await fetch("https://hoadondientu.gdt.gov.vn:30000/security-taxpayer/authenticate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        cvalue: cvalue,
+                        ckey: ckey
+                    })
+                });
+
+                const result = await res.text();
+                document.getElementById("result").innerText = result;
+            } catch (e) {
+                document.getElementById("result").innerText = "Lỗi login: " + e;
+            }
+        }
+
+        // load captcha lần đầu
+        loadCaptcha();
+    </script>
+</body>
+</html>
