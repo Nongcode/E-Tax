@@ -65,7 +65,10 @@ namespace E_Tax
 
         private async void Form1_Load(object sender, EventArgs e)
         {
+            CheckForLicense();
+
             await LoadCaptchaAsync();
+
         }
 
         private async void btnRefreshCaptcha_Click(object sender, EventArgs e)
@@ -923,7 +926,7 @@ namespace E_Tax
             }
 
             using var fbd = new FolderBrowserDialog();
-            fbd.Description = "Chọn thư mục để lưu các file .zip hóa đơn gốc";
+            fbd.Description = "Chọn thư mục để lưu và giải nén các hóa đơn gốc";
             if (fbd.ShowDialog() != DialogResult.OK) return;
 
             Cursor current = Cursor.Current;
@@ -934,7 +937,7 @@ namespace E_Tax
                 Cursor.Current = Cursors.WaitCursor;
                 AppendLog($"🚀 Bắt đầu quá trình tải {_latestResults.Count} hóa đơn gốc...");
 
-                // Lặp qua từng hóa đơn trong kết quả và tải file zip tương ứng
+                // --- PHẦN TẢI FILE (GIỮ NGUYÊN) ---
                 foreach (var invoice in _latestResults)
                 {
                     bool success = await DownloadSingleInvoiceZipAsync(invoice, fbd.SelectedPath);
@@ -946,24 +949,78 @@ namespace E_Tax
                     {
                         failedCount++;
                     }
-                    // Thêm một khoảng nghỉ nhỏ để tránh gửi quá nhiều yêu cầu lên server cùng lúc
                     await Task.Delay(250);
                 }
 
+                // --- PHẦN GIẢI NÉN MỚI ---
+                if (successCount > 0)
+                {
+                    AppendLog("⚙️ Hoàn tất tải file. Bắt đầu quá trình giải nén...");
+                    // Chạy giải nén trên một luồng khác để không làm treo UI
+                    await Task.Run(() => UnzipFilesInDirectory(fbd.SelectedPath));
+                    AppendLog("✅ Quá trình giải nén đã hoàn tất.");
+                }
+
+                // Cập nhật thông báo cuối cùng
                 string summaryMessage = $"Hoàn tất! \n\n" +
                                         $"✅ Tải thành công: {successCount} hóa đơn.\n" +
                                         $"❌ Tải thất bại: {failedCount} hóa đơn.\n\n" +
-                                        $"Các file đã được lưu tại: {fbd.SelectedPath}";
+                                        $"Các file đã được lưu và tự động giải nén tại:\n{fbd.SelectedPath}";
                 MessageBox.Show(summaryMessage, "Hoàn tất");
             }
             catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình tải hàng loạt: {ex.Message}");
+                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình tải và giải nén: {ex.Message}");
                 MessageBox.Show("❌ Đã xảy ra lỗi không xác định. Vui lòng kiểm tra log.", "Lỗi");
             }
             finally
             {
                 Cursor.Current = current;
+            }
+        }
+
+        /// <summary>
+        /// Tự động giải nén tất cả các file .zip trong một thư mục và sau đó xóa file zip gốc.
+        /// </summary>
+        /// <param name="directoryPath">Đường dẫn đến thư mục chứa các file .zip</param>
+        private void UnzipFilesInDirectory(string directoryPath)
+        {
+            try
+            {
+                string[] zipFiles = Directory.GetFiles(directoryPath, "*.zip");
+
+                if (!zipFiles.Any())
+                {
+                    AppendLog("ℹ️ Không tìm thấy file .zip nào để giải nén.");
+                    return;
+                }
+
+                AppendLog($"⚙️ Tìm thấy {zipFiles.Length} file .zip. Bắt đầu giải nén và dọn dẹp...");
+
+                foreach (var zipFilePath in zipFiles)
+                {
+                    try
+                    {
+                        string destinationPath = Path.Combine(directoryPath, Path.GetFileNameWithoutExtension(zipFilePath));
+                        Directory.CreateDirectory(destinationPath);
+                        ZipFile.ExtractToDirectory(zipFilePath, destinationPath, true);
+                        AppendLog($"✅ Đã giải nén thành công: '{Path.GetFileName(zipFilePath)}'");
+
+                        // ---- THAY ĐỔI DUY NHẤT LÀ DÒNG NÀY ----
+                        // Sau khi giải nén thành công, tiến hành xóa file .zip gốc.
+                        File.Delete(zipFilePath);
+                        AppendLog($"🗑️ Đã xóa file zip: '{Path.GetFileName(zipFilePath)}'");
+                        // ----------------------------------------
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"❌ Lỗi khi xử lý file '{Path.GetFileName(zipFilePath)}': {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình giải nén: {ex.Message}");
             }
         }
 
@@ -1014,5 +1071,56 @@ namespace E_Tax
         {
             await SaveOriginalInvoicesAsync();
         }
+
+        private void CheckForLicense()
+        {
+            var status = LicenseManager.CheckLicense();
+
+            switch (status)
+            {
+                case LicenseStatus.Activated:
+                    this.Text = "E-Tax (Phiên bản đầy đủ)";
+                    panelActivation.Visible = false;
+                    panelLogin.Enabled = true;
+                    break;
+
+                case LicenseStatus.ValidTrial:
+                    int daysLeft = LicenseManager.GetDaysRemaining();
+                    this.Text = $"E-Tax (Bản dùng thử - Còn lại {daysLeft} ngày)";
+                    panelActivation.Visible = false;
+                    panelLogin.Enabled = true;
+                    break;
+
+                case LicenseStatus.Expired:
+                    this.Text = "E-Tax (Bản dùng thử đã hết hạn)";
+                    panelActivation.Visible = true;
+                    panelLogin.Enabled = false;
+                    MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm để tiếp tục sử dụng.", "Hết hạn dùng thử", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    break;
+            }
+        }
+
+        private void btnActivate_Click(object sender, EventArgs e)
+        {
+            string key = txtActivationKey.Text.Trim();
+            if (string.IsNullOrEmpty(key))
+            {
+                MessageBox.Show("Vui lòng nhập mã kích hoạt.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (LicenseManager.Activate(key))
+            {
+                MessageBox.Show("✅ Kích hoạt thành công! Cảm ơn bạn đã sử dụng sản phẩm.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // Sau khi kích hoạt thành công, kiểm tra lại license để mở khóa giao diện
+                CheckForLicense();
+            }
+            else
+            {
+                MessageBox.Show("❌ Mã kích hoạt không hợp lệ. Vui lòng thử lại.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+
     }
 }

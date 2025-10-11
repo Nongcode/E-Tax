@@ -54,11 +54,17 @@ namespace E_Tax
             label2 = new Label();
             label4 = new Label();
             panelSearch = new Panel();
+            panelActivation = new Panel();
+            label6 = new Label();
+            txtActivationKey = new TextBox();
+            label5 = new Label();
             label3 = new Label();
             lblVersion = new Label();
+            btnActivate = new Button();
             panelLogin.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).BeginInit();
             panelSearch.SuspendLayout();
+            panelActivation.SuspendLayout();
             SuspendLayout();
             // 
             // txtUser
@@ -223,6 +229,7 @@ namespace E_Tax
             // 
             // panelSearch
             // 
+            panelSearch.Controls.Add(panelActivation);
             panelSearch.Controls.Add(panelLogin);
             panelSearch.Controls.Add(txtSearch);
             panelSearch.Controls.Add(btnSearch);
@@ -234,6 +241,44 @@ namespace E_Tax
             panelSearch.Name = "panelSearch";
             panelSearch.Size = new Size(460, 560);
             panelSearch.TabIndex = 1;
+            // 
+            // panelActivation
+            // 
+            panelActivation.Controls.Add(btnActivate);
+            panelActivation.Controls.Add(label6);
+            panelActivation.Controls.Add(txtActivationKey);
+            panelActivation.Controls.Add(label5);
+            panelActivation.Location = new Point(29, 310);
+            panelActivation.Name = "panelActivation";
+            panelActivation.Size = new Size(394, 100);
+            panelActivation.TabIndex = 17;
+            panelActivation.Visible = false;
+            // 
+            // label6
+            // 
+            label6.AutoSize = true;
+            label6.Location = new Point(21, 41);
+            label6.Name = "label6";
+            label6.Size = new Size(29, 15);
+            label6.TabIndex = 2;
+            label6.Text = "OTP";
+            // 
+            // txtActivationKey
+            // 
+            txtActivationKey.Location = new Point(77, 38);
+            txtActivationKey.Name = "txtActivationKey";
+            txtActivationKey.PlaceholderText = "Nhập mã kích hoạt";
+            txtActivationKey.Size = new Size(200, 23);
+            txtActivationKey.TabIndex = 1;
+            // 
+            // label5
+            // 
+            label5.AutoSize = true;
+            label5.Location = new Point(21, 10);
+            label5.Name = "label5";
+            label5.Size = new Size(356, 15);
+            label5.TabIndex = 0;
+            label5.Text = "Bản dùng thử đã hết hạn. Vui lòng liên hệ chủ sở hữu để kích hoạt";
             // 
             // label3
             // 
@@ -252,6 +297,15 @@ namespace E_Tax
             lblVersion.TabIndex = 17;
             lblVersion.Text = "Phiên bản dùng thử trong vòng 1 tháng";
             // 
+            // btnActivate
+            // 
+            btnActivate.Location = new Point(302, 38);
+            btnActivate.Name = "btnActivate";
+            btnActivate.Size = new Size(75, 23);
+            btnActivate.TabIndex = 3;
+            btnActivate.Text = "Add OTP";
+            btnActivate.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             ClientSize = new Size(500, 600);
@@ -265,8 +319,16 @@ namespace E_Tax
             ((System.ComponentModel.ISupportInitialize)picCaptcha).EndInit();
             panelSearch.ResumeLayout(false);
             panelSearch.PerformLayout();
+            panelActivation.ResumeLayout(false);
+            panelActivation.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
+
+        private Panel panelActivation;
+        private TextBox txtActivationKey;
+        private Label label5;
+        private Label label6;
+        private Button btnActivate;
     }
 }
