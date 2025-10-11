@@ -43,6 +43,8 @@ namespace E_Tax
             {
                 BaseAddress = new Uri("https://hoadondientu.gdt.gov.vn:30000/")
             };
+            panelLogin.Visible = true;
+            panelSearch.Visible = false;
         }
 
         protected override void Dispose(bool disposing)
@@ -60,7 +62,22 @@ namespace E_Tax
 
         private void AppendLog(string message)
         {
-            //txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            // Kiểm tra xem có cần "nhờ" luồng giao diện viết hộ không
+            if (txtResult.InvokeRequired)
+            {
+                // Nếu có, chúng ta gửi yêu cầu (Invoke) đến luồng giao diện
+                // để nó thực hiện hành động viết chữ.
+                txtResult.Invoke(new Action(() =>
+                {
+                    txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+                }));
+            }
+            else
+            {
+                // Nếu không cần, nghĩa là chúng ta đang ở trên luồng giao diện rồi,
+                // nên có thể tự viết trực tiếp.
+                txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            }
         }
 
         private async void Form1_Load(object sender, EventArgs e)
@@ -346,51 +363,89 @@ namespace E_Tax
 
         private async void btnSearch_Click(object sender, EventArgs e)
         {
-            // txtResult.Clear();
-            AppendLog("🔍 Đang truy vấn dữ liệu hoá đơn...");
-
             if (string.IsNullOrEmpty(jwtToken))
             {
                 MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
+            DateTime fromDate = dtpFromDate.Value.Date;
+            DateTime toDate = dtpToDate.Value.Date;
+
+            // === BƯỚC KIỂM TRA MỚI ===
+            // Kiểm tra xem "Đến ngày" có vượt quá "Từ ngày" + 1 tháng không.
+            if (toDate > fromDate.AddMonths(1))
+            {
+                MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng. Vui lòng chọn lại.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return; // Dừng lại không thực hiện tìm kiếm
+            }
+            // ==========================
+
+            if (fromDate > toDate)
+            {
+                MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            txtResult.Clear();
+            btnSearch.Enabled = false;
+            btnSaveOriginal.Enabled = false;
+            searchProgressBar.Visible = true;
+
             try
             {
-                DateTime fromDate = new DateTime(2025, 9, 5);
-                DateTime toDate = new DateTime(2025, 10, 4);
-                string query = Timef(fromDate, toDate);
+                AppendLog("🔍 Bắt đầu truy vấn dữ liệu hoá đơn...");
+                // Điều chỉnh lại toDate để bao gồm cả ngày cuối cùng
+                DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1);
+                string query = Timef(fromDate, preciseToDate);
+                AppendLog($"➡️ URL Query được tạo: {query}");
 
                 string result = await GetProductsAsync(query);
+                AppendLog($"⬅️ Dữ liệu thô nhận từ server:\n{result}");
+
                 if (result.StartsWith("❌"))
                 {
-                    AppendLog(result);
+                    // Trích xuất thông báo lỗi từ JSON nếu có
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(result.Substring(result.IndexOf('{')));
+                        if (doc.RootElement.TryGetProperty("message", out var messageElement))
+                        {
+                            MessageBox.Show(messageElement.GetString(), "Lỗi từ API", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                    catch
+                    {
+                        MessageBox.Show(result, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                     return;
                 }
 
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                 var searchResponse = JsonSerializer.Deserialize<SearchResponse>(result, options);
 
-                if (searchResponse?.Datas == null || searchResponse.Datas.Count == 0)
+                if (searchResponse?.Datas == null || !searchResponse.Datas.Any())
                 {
-                    AppendLog("⚠️ Không có dữ liệu hợp lệ trong phản hồi API.");
+                    AppendLog("⚠️ Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.");
+                    MessageBox.Show("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo");
+                    _latestResults.Clear();
                     return;
                 }
 
                 _latestResults = searchResponse.Datas;
                 AppendLog($"✅ Đã lấy {_latestResults.Count} kết quả.");
-                foreach (var item in _latestResults)
-                {
-                    AppendLog($"MST: {item.Ma_so_thue} | Số HĐ: {item.Ky_hieu_hoa_don}-{item.So_hoa_don} | Ngày: {item.Ngay_lap}");
-                }
-            }
-            catch (JsonException jex)
-            {
-                AppendLog($"❌ Lỗi parse JSON: {jex.Message}");
+                MessageBox.Show($"Tìm thấy {_latestResults.Count} hóa đơn.", "Hoàn tất");
             }
             catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi khi gọi API: {ex.Message}");
+                AppendLog($"🐞 LỖI NGHIÊM TRỌNG: {ex.ToString()}");
+                MessageBox.Show($"Đã xảy ra lỗi: {ex.Message}", "Lỗi");
+            }
+            finally
+            {
+                btnSearch.Enabled = true;
+                btnSaveOriginal.Enabled = true;
+                searchProgressBar.Visible = false;
             }
         }
 
@@ -513,18 +568,19 @@ namespace E_Tax
 
         public async Task ExportSearchResultsToExcelAsync(List<SearchResult> results, string filePath)
         {
+            if (results == null || !results.Any())
+            {
+                AppendLog("⚠️ Không có dữ liệu danh sách để xuất Excel.");
+                return;
+            }
+
             try
             {
-                if (results == null || results.Count == 0)
-                {
-                    MessageBox.Show("Không có dữ liệu để xuất!");
-                    return;
-                }
-
                 using (var package = new ExcelPackage())
                 {
                     var ws = package.Workbook.Worksheets.Add("DanhSachHoaDon");
 
+                    // --- PHẦN CODE ĐƯỢC BỔ SUNG ---
                     // Thêm tiêu đề chung
                     ws.Cells[1, 1].Value = "DANH SÁCH HÓA ĐƠN";
                     ws.Cells[1, 1, 1, 16].Merge = true;
@@ -534,14 +590,17 @@ namespace E_Tax
                     ws.Cells[2, 1].Value = $"Ngày xuất: {DateTime.Now:dd/MM/yyyy HH:mm}";
                     ws.Cells[2, 1, 2, 16].Merge = true;
                     ws.Cells[2, 1].Style.Font.Italic = true;
+                    // -----------------------------
 
                     // Tiêu đề cột
                     string[] headers = {
-                        "Mã số thuế", "Ký hiệu mã số", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày lập",
-                        "Thông tin hóa đơn", "Tổng tiền chưa thuế", "Tổng tiền thuế", "Tổng tiền chiết khấu",
-                        "Tổng tiền phí", "Tổng tiền thanh toán", "Đơn vị tiền tệ",
-                        "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Thông tin liên quan"
-                    };
+                "Mã số thuế", "Ký hiệu mã số", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày lập",
+                "Thông tin hóa đơn", "Tổng tiền chưa thuế", "Tổng tiền thuế", "Tổng tiền chiết khấu",
+                "Tổng tiền phí", "Tổng tiền thanh toán", "Đơn vị tiền tệ",
+                "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Thông tin liên quan"
+            };
+                    // --- PHẦN CODE ĐƯỢC BỔ SUNG ---
+                    // Dời dòng tiêu đề xuống để có khoảng trống cho tiêu đề chung
                     for (int i = 0; i < headers.Length; i++)
                         ws.Cells[4, i + 1].Value = headers[i].ToUpper();
 
@@ -552,18 +611,18 @@ namespace E_Tax
                         headerRange.Style.Font.Size = 12;
                         headerRange.Style.Font.Bold = true;
                         headerRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        headerRange.Style.Fill.Gradient.Color1.SetColor(Color.LightBlue);
-                        headerRange.Style.Fill.Gradient.Color2.SetColor(Color.White);
+                        headerRange.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
                         headerRange.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
                         headerRange.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-                        headerRange.Style.Border.Top.Style = ExcelBorderStyle.Medium;
-                        headerRange.Style.Border.Bottom.Style = ExcelBorderStyle.Medium;
+                        headerRange.Style.Border.Top.Style = ExcelBorderStyle.Thin;
+                        headerRange.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
                         headerRange.Style.Border.Left.Style = ExcelBorderStyle.Thin;
                         headerRange.Style.Border.Right.Style = ExcelBorderStyle.Thin;
                     }
+                    // -----------------------------
 
                     // Dữ liệu
-                    int row = 5;
+                    int row = 5; // Bắt đầu từ dòng 5
                     for (int i = 0; i < results.Count; i++)
                     {
                         var item = results[i];
@@ -584,24 +643,22 @@ namespace E_Tax
                         ws.Cells[row, 15].Value = item.Hoa_don_lien_quan;
                         ws.Cells[row, 16].Value = item.Thong_tin_lien_quan;
 
+                        // --- PHẦN CODE ĐƯỢC BỔ SUNG ---
                         // Định dạng số tiền
-                        ws.Cells[row, 7].Style.Numberformat.Format = "#,##0.00 VNĐ";
-                        ws.Cells[row, 8].Style.Numberformat.Format = "#,##0.00 VNĐ";
-                        ws.Cells[row, 9].Style.Numberformat.Format = "#,##0.00 VNĐ";
-                        ws.Cells[row, 10].Style.Numberformat.Format = "#,##0.00 VNĐ";
-                        ws.Cells[row, 11].Style.Numberformat.Format = "#,##0.00 VNĐ";
+                        ws.Cells[row, 7, row, 11].Style.Numberformat.Format = "#,##0";
 
                         // Màu xen kẽ
                         if (i % 2 == 0)
                         {
-                            ws.Cells[row, 1, row, 16].Style.Fill.PatternType = ExcelFillStyle.Solid;
-                            ws.Cells[row, 1, row, 16].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(240, 240, 240));
+                            ws.Cells[row, 1, row, headers.Length].Style.Fill.PatternType = ExcelFillStyle.Solid;
+                            ws.Cells[row, 1, row, headers.Length].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(240, 240, 240));
                         }
-
+                        // -----------------------------
                         row++;
                     }
 
-                    // Định dạng viền cho toàn bộ bảng
+                    // --- PHẦN CODE ĐƯỢC BỔ SUNG ---
+                    // Thêm viền cho toàn bộ bảng dữ liệu
                     using (var dataRange = ws.Cells[4, 1, row - 1, headers.Length])
                     {
                         dataRange.Style.Border.Top.Style = ExcelBorderStyle.Thin;
@@ -609,39 +666,34 @@ namespace E_Tax
                         dataRange.Style.Border.Left.Style = ExcelBorderStyle.Thin;
                         dataRange.Style.Border.Right.Style = ExcelBorderStyle.Thin;
                     }
+                    // -----------------------------
 
-                    // Tự động điều chỉnh độ rộng cột
-                    ws.Cells[4, 1, row - 1, headers.Length].AutoFitColumns();
-                    for (int col = 1; col <= headers.Length; col++)
-                        ws.Column(col).Width = Math.Min(ws.Column(col).Width, 20); // Giới hạn tối đa 20
-
+                    ws.Cells[ws.Dimension.Address].AutoFitColumns();
                     await package.SaveAsAsync(new FileInfo(filePath));
                 }
-
-                MessageBox.Show($"✅ Đã xuất {results.Count} dòng ra file Excel:\n{filePath}");
+                AppendLog($"✅ Đã tạo file Excel danh sách tại: {filePath}");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"❌ Lỗi khi xuất Excel: {ex.Message}");
+                AppendLog($"❌ Lỗi khi tạo file Excel danh sách: {ex.Message}");
+                throw;
             }
         }
 
         private async Task ExportInvoiceDetailsToExcelAsync(string filePath)
         {
-            if (_latestResults == null || _latestResults.Count == 0)
+            if (_latestResults == null || !_latestResults.Any())
             {
-                MessageBox.Show("Không có hóa đơn nào để xuất chi tiết!", "Thông báo");
+                AppendLog("⚠️ Không có dữ liệu chi tiết để xuất Excel.");
                 return;
             }
 
-            Cursor current = Cursor.Current;
             try
             {
-                Cursor.Current = Cursors.WaitCursor;
-                AppendLog($"👉 Bắt đầu tải chi tiết {_latestResults.Count} hóa đơn...");
-
+                AppendLog($"👉 Bắt đầu lấy chi tiết {_latestResults.Count} hóa đơn cho file Excel...");
                 var detailsList = new List<Dictionary<string, string>>();
 
+                // --- PHẦN CODE ĐƯỢC BỔ SUNG: LẤY DỮ LIỆU CHI TIẾT ---
                 foreach (var invoice in _latestResults)
                 {
                     if (string.IsNullOrEmpty(invoice?.Ma_so_thue) || invoice.So_hoa_don == null || invoice.Ky_hieu_ma_so == null)
@@ -653,34 +705,25 @@ namespace E_Tax
                     try
                     {
                         string url = $"query/invoices/detail?nbmst={Uri.EscapeDataString(invoice.Ma_so_thue)}" +
-                                    $"&khhdon={Uri.EscapeDataString(invoice.Ky_hieu_hoa_don)}" +
-                                    $"&shdon={invoice.So_hoa_don}&khmshdon={invoice.Ky_hieu_ma_so}";
-                        AppendLog($"👉 Đang gọi API chi tiết: {url}");
+                                     $"&khhdon={Uri.EscapeDataString(invoice.Ky_hieu_hoa_don)}" +
+                                     $"&shdon={invoice.So_hoa_don}&khmshdon={invoice.Ky_hieu_ma_so}";
 
                         using var req = new HttpRequestMessage(HttpMethod.Get, url);
                         req.Headers.UserAgent.ParseAdd(BrowserUserAgent);
                         req.Headers.Add("Accept", "application/json");
-                        req.Headers.Add("Referer", "https://hoadondientu.gdt.gov.vn/");
-                        req.Headers.Add("Origin", "https://hoadondientu.gdt.gov.vn");
-
                         if (!string.IsNullOrEmpty(jwtToken))
                         {
                             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
-                            AppendLog("🔐 Đã thêm JWT token vào header Authorization");
                         }
 
                         var response = await client.SendAsync(req);
-                        string json = await response.Content.ReadAsStringAsync();
-
-                        AppendLog($"HTTP Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                        AppendLog("Response:\r\n" + (json.Length > 2000 ? json.Substring(0, 2000) + "..." : json));
-
                         if (!response.IsSuccessStatusCode)
                         {
                             AppendLog($"⚠️ Chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don} trả lỗi {(int)response.StatusCode}");
                             continue;
                         }
 
+                        string json = await response.Content.ReadAsStringAsync();
                         using var doc = JsonDocument.Parse(json);
                         JsonElement dataEl = doc.RootElement;
                         if (doc.RootElement.TryGetProperty("data", out var tmp)) dataEl = tmp;
@@ -690,120 +733,56 @@ namespace E_Tax
                         {
                             foreach (var prop in dataEl.EnumerateObject())
                             {
-                                map[prop.Name] = prop.Value.ValueKind switch
-                                {
-                                    JsonValueKind.String => prop.Value.GetString(),
-                                    JsonValueKind.Number => prop.Value.GetRawText(),
-                                    JsonValueKind.True => "true",
-                                    JsonValueKind.False => "false",
-                                    JsonValueKind.Null => null,
-                                    _ => prop.Value.GetRawText()
-                                };
+                                map[prop.Name] = prop.Value.ToString();
                             }
                         }
 
-                        if (!map.ContainsKey("id") && !string.IsNullOrEmpty(invoice.Id))
-                            map["id"] = invoice.Id;
-
-                        if (map.Count > 0)
-                            detailsList.Add(map);
+                        if (map.Any()) detailsList.Add(map);
                     }
                     catch (Exception ex)
                     {
                         AppendLog($"❌ Lỗi lấy chi tiết hóa đơn {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}: {ex.Message}");
                     }
-
                     await Task.Delay(200);
                 }
+                // ----------------------------------------------------
 
-                if (detailsList.Count == 0)
-                {
-                    MessageBox.Show("Không có chi tiết hóa đơn nào để xuất!", "Thông báo");
-                    return;
-                }
+                if (!detailsList.Any()) return;
 
                 using (var package = new ExcelPackage())
                 {
                     var ws = package.Workbook.Worksheets.Add("ChiTietHoaDon");
-
-                    // Thêm tiêu đề chung
-                    ws.Cells[1, 1].Value = "CHI TIẾT HÓA ĐƠN";
-                    ws.Cells[1, 1, 1, ws.Dimension.Columns].Merge = true;
-                    ws.Cells[1, 1].Style.Font.Size = 16;
-                    ws.Cells[1, 1].Style.Font.Bold = true;
-                    ws.Cells[1, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                    ws.Cells[2, 1].Value = $"Ngày xuất: {DateTime.Now:dd/MM/yyyy HH:mm} - Người xuất: {Environment.UserName}";
-                    ws.Cells[2, 1, 2, ws.Dimension.Columns].Merge = true;
-                    ws.Cells[2, 1].Style.Font.Italic = true;
-
-                    // Tiêu đề cột
                     var allKeys = detailsList.SelectMany(d => d.Keys).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                    for (int i = 0; i < allKeys.Count; i++)
-                        ws.Cells[4, i + 1].Value = allKeys[i].ToUpper();
 
-                    // Định dạng tiêu đề
-                    using (var headerRange = ws.Cells[4, 1, 4, allKeys.Count])
+                    // --- PHẦN CODE ĐƯỢC BỔ SUNG: ĐIỀN DỮ LIỆU VÀO EXCEL ---
+                    // Tiêu đề
+                    for (int i = 0; i < allKeys.Count; i++)
                     {
-                        headerRange.Style.Font.Name = "Calibri";
-                        headerRange.Style.Font.Size = 12;
-                        headerRange.Style.Font.Bold = true;
-                        headerRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        headerRange.Style.Fill.Gradient.Color1.SetColor(Color.LightGreen);
-                        headerRange.Style.Fill.Gradient.Color2.SetColor(Color.White);
-                        headerRange.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                        headerRange.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-                        headerRange.Style.Border.Top.Style = ExcelBorderStyle.Medium;
-                        headerRange.Style.Border.Bottom.Style = ExcelBorderStyle.Medium;
-                        headerRange.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-                        headerRange.Style.Border.Right.Style = ExcelBorderStyle.Thin;
+                        ws.Cells[1, i + 1].Value = allKeys[i].ToUpper();
+                        ws.Cells[1, i + 1].Style.Font.Bold = true;
                     }
 
                     // Dữ liệu
-                    int row = 5;
-                    foreach (var detail in detailsList)
+                    for (int r = 0; r < detailsList.Count; r++)
                     {
+                        var detail = detailsList[r];
                         for (int c = 0; c < allKeys.Count; c++)
                         {
-                            detail.TryGetValue(allKeys[c], out var v);
-                            ws.Cells[row, c + 1].Value = v;
-
-                            // Định dạng số tiền nếu có
-                            if (allKeys[c].Contains("tien") || allKeys[c].Contains("thanh toan"))
-                                ws.Cells[row, c + 1].Style.Numberformat.Format = "#,##0.00 VNĐ";
+                            detail.TryGetValue(allKeys[c], out var value);
+                            ws.Cells[r + 2, c + 1].Value = value;
                         }
-
-                        // Màu xen kẽ
-                        if ((row - 5) % 2 == 0)
-                        {
-                            ws.Cells[row, 1, row, allKeys.Count].Style.Fill.PatternType = ExcelFillStyle.Solid;
-                            ws.Cells[row, 1, row, allKeys.Count].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(240, 240, 240));
-                        }
-
-                        row++;
                     }
-
-                    // Định dạng viền cho toàn bộ bảng
-                    using (var dataRange = ws.Cells[4, 1, row - 1, allKeys.Count])
-                    {
-                        dataRange.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-                        dataRange.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-                        dataRange.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-                        dataRange.Style.Border.Right.Style = ExcelBorderStyle.Thin;
-                    }
-
-                    // Tự động điều chỉnh độ rộng cột
-                    ws.Cells[4, 1, row - 1, allKeys.Count].AutoFitColumns();
-                    for (int col = 1; col <= allKeys.Count; col++)
-                        ws.Column(col).Width = Math.Min(ws.Column(col).Width, 25); // Giới hạn tối đa 25
+                    ws.Cells[ws.Dimension.Address].AutoFitColumns();
+                    // -----------------------------------------------------
 
                     await package.SaveAsAsync(new FileInfo(filePath));
                 }
-
-                MessageBox.Show($"✅ Đã lưu chi tiết hóa đơn tại:\n{filePath}", "Hoàn tất");
+                AppendLog($"✅ Đã tạo file Excel chi tiết tại: {filePath}");
             }
-            finally
+            catch (Exception ex)
             {
-                Cursor.Current = current;
+                AppendLog($"❌ Lỗi khi tạo file Excel chi tiết: {ex.Message}");
+                throw;
             }
         }
 
@@ -925,102 +904,130 @@ namespace E_Tax
                 return;
             }
 
-            using var fbd = new FolderBrowserDialog();
-            fbd.Description = "Chọn thư mục để lưu và giải nén các hóa đơn gốc";
+            using var fbd = new FolderBrowserDialog
+            {
+                Description = "Chọn thư mục để lưu và giải nén dữ liệu hóa đơn"
+            };
             if (fbd.ShowDialog() != DialogResult.OK) return;
 
-            Cursor current = Cursor.Current;
-            int successCount = 0;
-            int failedCount = 0;
+            // Vô hiệu hóa các nút và hiển thị progress bar
+            btnSearch.Enabled = false;
+            btnSaveOriginal.Enabled = false;
+            downloadProgressBar.Visible = true;
+            lblDownloadStatus.Visible = true;
+            downloadProgressBar.Maximum = _latestResults.Count + 4; // +4 cho các bước
+            downloadProgressBar.Value = 0;
+
+            string tempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
+            Directory.CreateDirectory(tempDirectory);
+
             try
             {
-                Cursor.Current = Cursors.WaitCursor;
-                AppendLog($"🚀 Bắt đầu quá trình tải {_latestResults.Count} hóa đơn gốc...");
+                // --- GIAI ĐOẠN 1: TỔNG HỢP DỮ LIỆU (Giữ nguyên) ---
+                lblDownloadStatus.Text = "Bước 1: Đang tạo file Excel danh sách...";
+                await ExportSearchResultsToExcelAsync(_latestResults, Path.Combine(tempDirectory, "DanhSachHoaDon.xlsx"));
+                downloadProgressBar.PerformStep();
 
-                // --- PHẦN TẢI FILE (GIỮ NGUYÊN) ---
-                foreach (var invoice in _latestResults)
+                lblDownloadStatus.Text = "Bước 2: Đang tạo file Excel chi tiết...";
+                await ExportInvoiceDetailsToExcelAsync(Path.Combine(tempDirectory, "ChiTietHoaDon.xlsx"));
+                downloadProgressBar.PerformStep();
+
+                int successCount = 0;
+                for (int i = 0; i < _latestResults.Count; i++)
                 {
-                    bool success = await DownloadSingleInvoiceZipAsync(invoice, fbd.SelectedPath);
-                    if (success)
+                    lblDownloadStatus.Text = $"Bước 3: Đang tải hóa đơn gốc ({i + 1}/{_latestResults.Count})...";
+                    if (await DownloadSingleInvoiceZipAsync(_latestResults[i], tempDirectory))
                     {
                         successCount++;
                     }
-                    else
-                    {
-                        failedCount++;
-                    }
-                    await Task.Delay(250);
+                    downloadProgressBar.PerformStep();
+                    await Task.Delay(100);
                 }
 
-                // --- PHẦN GIẢI NÉN MỚI ---
-                if (successCount > 0)
-                {
-                    AppendLog("⚙️ Hoàn tất tải file. Bắt đầu quá trình giải nén...");
-                    // Chạy giải nén trên một luồng khác để không làm treo UI
-                    await Task.Run(() => UnzipFilesInDirectory(fbd.SelectedPath));
-                    AppendLog("✅ Quá trình giải nén đã hoàn tất.");
-                }
+                // --- GIAI ĐOẠN 2: NÉN VÀ GIẢI NÉN (Cập nhật) ---
+                lblDownloadStatus.Text = "Bước 4: Đang tổng hợp dữ liệu...";
+                string tempZipPath = Path.Combine(Path.GetTempPath(), $"Temp_HoaDon_TongHop_{Guid.NewGuid()}.zip");
+                ZipFile.CreateFromDirectory(tempDirectory, tempZipPath);
 
-                // Cập nhật thông báo cuối cùng
-                string summaryMessage = $"Hoàn tất! \n\n" +
-                                        $"✅ Tải thành công: {successCount} hóa đơn.\n" +
-                                        $"❌ Tải thất bại: {failedCount} hóa đơn.\n\n" +
-                                        $"Các file đã được lưu và tự động giải nén tại:\n{fbd.SelectedPath}";
-                MessageBox.Show(summaryMessage, "Hoàn tất");
+                string finalExtractionPath = Path.Combine(fbd.SelectedPath, Path.GetFileNameWithoutExtension(tempZipPath).Replace("Temp_", ""));
+                Directory.CreateDirectory(finalExtractionPath);
+
+                lblDownloadStatus.Text = "Bước 5: Đang giải nén file tổng hợp...";
+                ZipFile.ExtractToDirectory(tempZipPath, finalExtractionPath, true);
+                downloadProgressBar.PerformStep();
+
+                // === BƯỚC MỚI: GIẢI NÉN CÁC FILE ZIP CON ===
+                await Task.Run(() => UnzipInnerArchives(finalExtractionPath));
+                downloadProgressBar.PerformStep();
+                // ==========================================
+
+                MessageBox.Show($"✅ Hoàn tất! \n\nĐã lưu và giải nén thành công {successCount} hóa đơn và 2 file báo cáo vào thư mục:\n\n{finalExtractionPath}",
+                                "Thành Công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình tải và giải nén: {ex.Message}");
-                MessageBox.Show("❌ Đã xảy ra lỗi không xác định. Vui lòng kiểm tra log.", "Lỗi");
+                MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                Cursor.Current = current;
+                // Dọn dẹp
+                try
+                {
+                    if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
+                    foreach (var tempZip in Directory.GetFiles(Path.GetTempPath(), "Temp_HoaDon_TongHop_*.zip"))
+                    {
+                        File.Delete(tempZip);
+                    }
+                }
+                catch { /* Bỏ qua lỗi dọn dẹp */ }
+
+                // Bật lại các nút và ẩn progress bar
+                btnSearch.Enabled = true;
+                btnSaveOriginal.Enabled = true;
+                downloadProgressBar.Visible = false;
+                lblDownloadStatus.Visible = false;
+                lblDownloadStatus.Text = "";
             }
         }
 
-        /// <summary>
-        /// Tự động giải nén tất cả các file .zip trong một thư mục và sau đó xóa file zip gốc.
-        /// </summary>
-        /// <param name="directoryPath">Đường dẫn đến thư mục chứa các file .zip</param>
-        private void UnzipFilesInDirectory(string directoryPath)
+        private void UnzipInnerArchives(string directoryPath)
         {
             try
             {
-                string[] zipFiles = Directory.GetFiles(directoryPath, "*.zip");
+                AppendLog($"⚙️ Bắt đầu tìm và giải nén các file hóa đơn con...");
+                string[] zipFiles = Directory.GetFiles(directoryPath, "HD_*.zip"); // Chỉ tìm các file zip hóa đơn
 
                 if (!zipFiles.Any())
                 {
-                    AppendLog("ℹ️ Không tìm thấy file .zip nào để giải nén.");
+                    AppendLog("ℹ️ Không tìm thấy file zip hóa đơn con nào để giải nén.");
                     return;
                 }
-
-                AppendLog($"⚙️ Tìm thấy {zipFiles.Length} file .zip. Bắt đầu giải nén và dọn dẹp...");
 
                 foreach (var zipFilePath in zipFiles)
                 {
                     try
                     {
+                        // Tạo thư mục giải nén từ tên file zip (ví dụ: "HD_C25TQH_28")
                         string destinationPath = Path.Combine(directoryPath, Path.GetFileNameWithoutExtension(zipFilePath));
                         Directory.CreateDirectory(destinationPath);
-                        ZipFile.ExtractToDirectory(zipFilePath, destinationPath, true);
-                        AppendLog($"✅ Đã giải nén thành công: '{Path.GetFileName(zipFilePath)}'");
 
-                        // ---- THAY ĐỔI DUY NHẤT LÀ DÒNG NÀY ----
-                        // Sau khi giải nén thành công, tiến hành xóa file .zip gốc.
+                        // Giải nén và ghi đè nếu tồn tại
+                        ZipFile.ExtractToDirectory(zipFilePath, destinationPath, true);
+                        AppendLog($"   => Đã giải nén: {Path.GetFileName(zipFilePath)}");
+
+                        // Xóa file .zip con sau khi giải nén xong
                         File.Delete(zipFilePath);
-                        AppendLog($"🗑️ Đã xóa file zip: '{Path.GetFileName(zipFilePath)}'");
-                        // ----------------------------------------
                     }
                     catch (Exception ex)
                     {
-                        AppendLog($"❌ Lỗi khi xử lý file '{Path.GetFileName(zipFilePath)}': {ex.Message}");
+                        AppendLog($"❌ Lỗi khi giải nén file con '{Path.GetFileName(zipFilePath)}': {ex.Message}");
                     }
                 }
+                AppendLog("✅ Hoàn tất giải nén các file hóa đơn con.");
             }
             catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình giải nén: {ex.Message}");
+                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình giải nén file con: {ex.Message}");
             }
         }
 
