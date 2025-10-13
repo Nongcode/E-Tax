@@ -29,16 +29,28 @@ namespace E_Tax
         /// Khởi tạo các control trên form.
         /// </summary>
         private void InitializeComponent()
-        {
+        {           
+
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             txtUser = new TextBox();
             txtPass = new TextBox();
             txtCaptcha = new TextBox();
             btnRefreshCaptcha = new Button();
             btnLogin = new Button();
-            btnSearch = new Button();
             btnSaveOriginal = new Button();
             panelLogin = new Panel();
+            panelSearch = new Panel();
+            gbInvoiceType = new GroupBox();
+            rbBought = new RadioButton();
+            rbSold = new RadioButton();
+            //txtResult = new TextBox();
+            downloadProgressBar = new ProgressBar();
+            lblDownloadStatus = new Label();
+            dtpToDate = new DateTimePicker();
+            dtpFromDate = new DateTimePicker();
+            label2 = new Label();
+            label1 = new Label();
+            pictureBox2 = new PictureBox();
             pictureBox1 = new PictureBox();
             panel3 = new Panel();
             panelActivation = new Panel();
@@ -50,23 +62,14 @@ namespace E_Tax
             panel2 = new Panel();
             panel1 = new Panel();
             picCaptcha = new PictureBox();
-            panelSearch = new Panel();
-            searchProgressBar = new ProgressBar();
-            downloadProgressBar = new ProgressBar();
-            lblDownloadStatus = new Label();
-            dtpToDate = new DateTimePicker();
-            dtpFromDate = new DateTimePicker();
-            label2 = new Label();
-            label1 = new Label();
-            pictureBox2 = new PictureBox();
             lblVersion = new Label();
-            txtResult = new TextBox();
             panelLogin.SuspendLayout();
+            panelSearch.SuspendLayout();
+            gbInvoiceType.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             panelActivation.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).BeginInit();
-            panelSearch.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             SuspendLayout();
             // 
             // txtUser
@@ -77,7 +80,7 @@ namespace E_Tax
             txtUser.Location = new Point(60, 151);
             txtUser.Multiline = true;
             txtUser.Name = "txtUser";
-            txtUser.PlaceholderText = "Nhập tên đăng nhập ...";
+            txtUser.PlaceholderText = "Nhập tài khoản...";
             txtUser.Size = new Size(344, 34);
             txtUser.TabIndex = 3;
             // 
@@ -102,7 +105,7 @@ namespace E_Tax
             txtCaptcha.Location = new Point(61, 261);
             txtCaptcha.Multiline = true;
             txtCaptcha.Name = "txtCaptcha";
-            txtCaptcha.PlaceholderText = "Nhập mã Capcha...";
+            txtCaptcha.PlaceholderText = "Nhập mã bên dưới...";
             txtCaptcha.Size = new Size(356, 30);
             txtCaptcha.TabIndex = 5;
             // 
@@ -134,25 +137,17 @@ namespace E_Tax
             btnLogin.UseVisualStyleBackColor = false;
             btnLogin.Click += btnLogin_Click;
             // 
-            // btnSearch
-            // 
-            btnSearch.BackColor = SystemColors.GradientInactiveCaption;
-            btnSearch.Location = new Point(54, 311);
-            btnSearch.Name = "btnSearch";
-            btnSearch.Size = new Size(350, 48);
-            btnSearch.TabIndex = 10;
-            btnSearch.Text = "Tìm kiếm hóa đơn";
-            btnSearch.UseVisualStyleBackColor = false;
-            btnSearch.Click += btnSearch_Click;
-            // 
             // btnSaveOriginal
             // 
-            btnSaveOriginal.BackColor = SystemColors.GradientInactiveCaption;
-            btnSaveOriginal.Location = new Point(54, 407);
+            btnSaveOriginal.BackColor = Color.FromArgb(0, 117, 214);
+            btnSaveOriginal.FlatStyle = FlatStyle.Flat;
+            btnSaveOriginal.Font = new Font("Segoe UI", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btnSaveOriginal.ForeColor = Color.White;
+            btnSaveOriginal.Location = new Point(54, 383);
             btnSaveOriginal.Name = "btnSaveOriginal";
-            btnSaveOriginal.Size = new Size(350, 44);
+            btnSaveOriginal.Size = new Size(350, 54);
             btnSaveOriginal.TabIndex = 2;
-            btnSaveOriginal.Text = "Lưu Hóa đơn Tổng Hợp";
+            btnSaveOriginal.Text = "TẢI VÀ XỬ LÝ HÓA ĐƠN";
             btnSaveOriginal.UseVisualStyleBackColor = false;
             btnSaveOriginal.Click += btnSaveOriginal_Click;
             // 
@@ -173,6 +168,139 @@ namespace E_Tax
             panelLogin.Name = "panelLogin";
             panelLogin.Size = new Size(471, 649);
             panelLogin.TabIndex = 0;
+            // 
+            // panelSearch
+            // 
+            panelSearch.Controls.Add(gbInvoiceType);
+            //panelSearch.Controls.Add(txtResult);
+            panelSearch.Controls.Add(downloadProgressBar);
+            panelSearch.Controls.Add(lblDownloadStatus);
+            panelSearch.Controls.Add(dtpToDate);
+            panelSearch.Controls.Add(dtpFromDate);
+            panelSearch.Controls.Add(label2);
+            panelSearch.Controls.Add(label1);
+            panelSearch.Controls.Add(pictureBox2);
+            panelSearch.Controls.Add(btnSaveOriginal);
+            panelSearch.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            panelSearch.ForeColor = Color.FromArgb(0, 117, 214);
+            panelSearch.Location = new Point(10, 29);
+            panelSearch.Name = "panelSearch";
+            panelSearch.Size = new Size(462, 655);
+            panelSearch.TabIndex = 1;
+            // 
+            // gbInvoiceType
+            // 
+            gbInvoiceType.Controls.Add(rbBought);
+            gbInvoiceType.Controls.Add(rbSold);
+            gbInvoiceType.Font = new Font("Segoe UI", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            gbInvoiceType.Location = new Point(54, 280);
+            gbInvoiceType.Name = "gbInvoiceType";
+            gbInvoiceType.Size = new Size(350, 80);
+            gbInvoiceType.TabIndex = 29;
+            gbInvoiceType.TabStop = false;
+            gbInvoiceType.Text = "Chọn loại hóa đơn";
+            // 
+            // rbBought
+            // 
+            rbBought.AutoSize = true;
+            rbBought.Font = new Font("Segoe UI", 11.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            rbBought.Location = new Point(190, 35);
+            rbBought.Name = "rbBought";
+            rbBought.Size = new Size(146, 24);
+            rbBought.TabIndex = 1;
+            rbBought.Text = "Hóa đơn mua vào";
+            rbBought.UseVisualStyleBackColor = true;
+            // 
+            // rbSold
+            // 
+            rbSold.AutoSize = true;
+            rbSold.Checked = true;
+            rbSold.Font = new Font("Segoe UI", 11.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            rbSold.Location = new Point(20, 35);
+            rbSold.Name = "rbSold";
+            rbSold.Size = new Size(131, 24);
+            rbSold.TabIndex = 0;
+            rbSold.TabStop = true;
+            rbSold.Text = "Hóa đơn bán ra";
+            rbSold.UseVisualStyleBackColor = true;
+            // 
+            // txtResult
+            // 
+            //txtResult.Dock = DockStyle.Bottom;
+            //txtResult.Location = new Point(0, 558);
+            //txtResult.Multiline = true;
+            //txtResult.Name = "txtResult";
+            //txtResult.ReadOnly = true;
+            //txtResult.ScrollBars = ScrollBars.Vertical;
+            //txtResult.Size = new Size(462, 97);
+            //txtResult.TabIndex = 29;
+            // 
+            // downloadProgressBar
+            // 
+            downloadProgressBar.Location = new Point(54, 443);
+            downloadProgressBar.Name = "downloadProgressBar";
+            downloadProgressBar.Size = new Size(350, 23);
+            downloadProgressBar.TabIndex = 27;
+            downloadProgressBar.Visible = false;
+            // 
+            // lblDownloadStatus
+            // 
+            lblDownloadStatus.AutoSize = true;
+            lblDownloadStatus.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            lblDownloadStatus.Location = new Point(54, 469);
+            lblDownloadStatus.Name = "lblDownloadStatus";
+            lblDownloadStatus.Size = new Size(80, 15);
+            lblDownloadStatus.TabIndex = 28;
+            lblDownloadStatus.Text = "Đang tải 0/0...";
+            lblDownloadStatus.Visible = false;
+            // 
+            // dtpToDate
+            // 
+            dtpToDate.CustomFormat = "dd/MM/yyyy";
+            dtpToDate.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            dtpToDate.Format = DateTimePickerFormat.Custom;
+            dtpToDate.Location = new Point(123, 240);
+            dtpToDate.Name = "dtpToDate";
+            dtpToDate.Size = new Size(281, 27);
+            dtpToDate.TabIndex = 25;
+            // 
+            // dtpFromDate
+            // 
+            dtpFromDate.CustomFormat = "dd/MM/yyyy";
+            dtpFromDate.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            dtpFromDate.Format = DateTimePickerFormat.Custom;
+            dtpFromDate.Location = new Point(123, 160);
+            dtpFromDate.Name = "dtpFromDate";
+            dtpFromDate.Size = new Size(281, 27);
+            dtpFromDate.TabIndex = 24;
+            // 
+            // label2
+            // 
+            label2.AutoSize = true;
+            label2.Location = new Point(20, 246);
+            label2.Name = "label2";
+            label2.Size = new Size(77, 21);
+            label2.TabIndex = 23;
+            label2.Text = "Đến ngày";
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(31, 168);
+            label1.Name = "label1";
+            label1.Size = new Size(66, 21);
+            label1.TabIndex = 22;
+            label1.Text = "Từ ngày";
+            // 
+            // pictureBox2
+            // 
+            pictureBox2.Image = (Image)resources.GetObject("pictureBox2.Image");
+            pictureBox2.Location = new Point(161, 16);
+            pictureBox2.Name = "pictureBox2";
+            pictureBox2.Size = new Size(134, 107);
+            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBox2.TabIndex = 21;
+            pictureBox2.TabStop = false;
             // 
             // pictureBox1
             // 
@@ -242,7 +370,6 @@ namespace E_Tax
             txtActivationKey.Location = new Point(64, 42);
             txtActivationKey.Multiline = true;
             txtActivationKey.Name = "txtActivationKey";
-            txtActivationKey.PlaceholderText = "Nhập mã kích hoạt";
             txtActivationKey.Size = new Size(232, 23);
             txtActivationKey.TabIndex = 1;
             // 
@@ -282,103 +409,6 @@ namespace E_Tax
             picCaptcha.TabIndex = 6;
             picCaptcha.TabStop = false;
             // 
-            // panelSearch
-            // 
-            panelSearch.Controls.Add(txtResult);
-            panelSearch.Controls.Add(searchProgressBar);
-            panelSearch.Controls.Add(downloadProgressBar);
-            panelSearch.Controls.Add(lblDownloadStatus);
-            panelSearch.Controls.Add(dtpToDate);
-            panelSearch.Controls.Add(dtpFromDate);
-            panelSearch.Controls.Add(label2);
-            panelSearch.Controls.Add(label1);
-            panelSearch.Controls.Add(pictureBox2);
-            panelSearch.Controls.Add(btnSearch);
-            panelSearch.Controls.Add(btnSaveOriginal);
-            panelSearch.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            panelSearch.ForeColor = Color.FromArgb(0, 117, 214);
-            panelSearch.Location = new Point(10, 29);
-            panelSearch.Name = "panelSearch";
-            panelSearch.Size = new Size(462, 655);
-            panelSearch.TabIndex = 1;
-            // 
-            // searchProgressBar
-            // 
-            searchProgressBar.Location = new Point(54, 360);
-            searchProgressBar.MarqueeAnimationSpeed = 30;
-            searchProgressBar.Name = "searchProgressBar";
-            searchProgressBar.Size = new Size(350, 15);
-            searchProgressBar.Style = ProgressBarStyle.Marquee;
-            searchProgressBar.TabIndex = 26;
-            searchProgressBar.Visible = false;
-            // 
-            // downloadProgressBar
-            // 
-            downloadProgressBar.Location = new Point(54, 457);
-            downloadProgressBar.Name = "downloadProgressBar";
-            downloadProgressBar.Size = new Size(350, 23);
-            downloadProgressBar.TabIndex = 27;
-            downloadProgressBar.Visible = false;
-            // 
-            // lblDownloadStatus
-            // 
-            lblDownloadStatus.AutoSize = true;
-            lblDownloadStatus.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblDownloadStatus.Location = new Point(54, 493);
-            lblDownloadStatus.Name = "lblDownloadStatus";
-            lblDownloadStatus.Size = new Size(80, 15);
-            lblDownloadStatus.TabIndex = 28;
-            lblDownloadStatus.Text = "Đang tải 0/0...";
-            lblDownloadStatus.Visible = false;
-            // 
-            // dtpToDate
-            // 
-            dtpToDate.CustomFormat = "dd/MM/yyyy";
-            dtpToDate.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            dtpToDate.Format = DateTimePickerFormat.Custom;
-            dtpToDate.Location = new Point(123, 240);
-            dtpToDate.Name = "dtpToDate";
-            dtpToDate.Size = new Size(281, 27);
-            dtpToDate.TabIndex = 25;
-            // 
-            // dtpFromDate
-            // 
-            dtpFromDate.CustomFormat = "dd/MM/yyyy";
-            dtpFromDate.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            dtpFromDate.Format = DateTimePickerFormat.Custom;
-            dtpFromDate.Location = new Point(123, 160);
-            dtpFromDate.Name = "dtpFromDate";
-            dtpFromDate.Size = new Size(281, 27);
-            dtpFromDate.TabIndex = 24;
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Location = new Point(20, 246);
-            label2.Name = "label2";
-            label2.Size = new Size(77, 21);
-            label2.TabIndex = 23;
-            label2.Text = "Đến ngày";
-            // 
-            // label1
-            // 
-            label1.AutoSize = true;
-            label1.Location = new Point(31, 168);
-            label1.Name = "label1";
-            label1.Size = new Size(66, 21);
-            label1.TabIndex = 22;
-            label1.Text = "Từ ngày";
-            // 
-            // pictureBox2
-            // 
-            pictureBox2.Image = (Image)resources.GetObject("pictureBox2.Image");
-            pictureBox2.Location = new Point(161, 16);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(134, 107);
-            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox2.TabIndex = 21;
-            pictureBox2.TabStop = false;
-            // 
             // lblVersion
             // 
             lblVersion.AutoSize = true;
@@ -389,17 +419,26 @@ namespace E_Tax
             lblVersion.Size = new Size(286, 21);
             lblVersion.TabIndex = 17;
             lblVersion.Text = "Phiên bản dùng thử trong vòng 1 tháng";
-            // 
-            // txtResult
-            // 
-            txtResult.Dock = DockStyle.Bottom;
-            txtResult.Location = new Point(0, 558);
-            txtResult.Multiline = true;
-            txtResult.Name = "txtResult";
-            txtResult.ReadOnly = true;
-            txtResult.ScrollBars = ScrollBars.Vertical;
-            txtResult.Size = new Size(462, 97);
-            txtResult.TabIndex = 29;
+
+            lblStatusMessage = new System.Windows.Forms.Label();
+            statusTimer = new System.Windows.Forms.Timer();
+            //txtResult = new System.Windows.Forms.TextBox();
+
+
+            lblStatusMessage.Font = new System.Drawing.Font("Segoe UI", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            lblStatusMessage.Location = new System.Drawing.Point(54, 359);
+            lblStatusMessage.Name = "lblStatusMessage";
+            lblStatusMessage.Size = new System.Drawing.Size(350, 21);
+            lblStatusMessage.TabIndex = 30;
+            lblStatusMessage.Text = "Status message here";
+            lblStatusMessage.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            lblStatusMessage.Visible = false;
+
+
+            statusTimer.Interval = 2000; // Thông báo sẽ hiển thị trong 2 giây
+            statusTimer.Tick += new System.EventHandler(this.statusTimer_Tick);
+
+
             // 
             // Form1
             // 
@@ -414,13 +453,15 @@ namespace E_Tax
             Load += Form1_Load;
             panelLogin.ResumeLayout(false);
             panelLogin.PerformLayout();
+            panelSearch.ResumeLayout(false);
+            panelSearch.PerformLayout();
+            gbInvoiceType.ResumeLayout(false);
+            gbInvoiceType.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             panelActivation.ResumeLayout(false);
             panelActivation.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).EndInit();
-            panelSearch.ResumeLayout(false);
-            panelSearch.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -443,6 +484,11 @@ namespace E_Tax
         private System.Windows.Forms.ProgressBar searchProgressBar;
         private System.Windows.Forms.ProgressBar downloadProgressBar;
         private System.Windows.Forms.Label lblDownloadStatus;
-        private TextBox txtResult;
+        //private TextBox txtResult;
+        private GroupBox gbInvoiceType;
+        private RadioButton rbBought;
+        private RadioButton rbSold;
+        private System.Windows.Forms.Label lblStatusMessage;
+        private System.Windows.Forms.Timer statusTimer;
     }
 }

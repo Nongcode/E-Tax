@@ -18,6 +18,7 @@ using System.IO.Compression;
 
 namespace E_Tax
 {
+    public enum InvoiceType { Sold, Bought };
     public partial class Form1 : Form, IDisposable
     {
         private readonly CookieContainer cookieContainer = new CookieContainer();
@@ -30,7 +31,7 @@ namespace E_Tax
         private bool disposed = false;
 
         public Form1()
-        {
+        {          
             InitializeComponent();
             ExcelPackage.License.SetNonCommercialPersonal("Your Name");
             var handler = new HttpClientHandler()
@@ -63,21 +64,21 @@ namespace E_Tax
         private void AppendLog(string message)
         {
             // Kiểm tra xem có cần "nhờ" luồng giao diện viết hộ không
-            if (txtResult.InvokeRequired)
-            {
-                // Nếu có, chúng ta gửi yêu cầu (Invoke) đến luồng giao diện
-                // để nó thực hiện hành động viết chữ.
-                txtResult.Invoke(new Action(() =>
-                {
-                    txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
-                }));
-            }
-            else
-            {
-                // Nếu không cần, nghĩa là chúng ta đang ở trên luồng giao diện rồi,
-                // nên có thể tự viết trực tiếp.
-                txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
-            }
+            //if (txtResult.InvokeRequired)
+            //{
+            //    // Nếu có, chúng ta gửi yêu cầu (Invoke) đến luồng giao diện
+            //    // để nó thực hiện hành động viết chữ.
+            //    txtResult.Invoke(new Action(() =>
+            //    {
+            //        txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            //    }));
+            //}
+            //else
+            //{
+            //    // Nếu không cần, nghĩa là chúng ta đang ở trên luồng giao diện rồi,
+            //    // nên có thể tự viết trực tiếp.
+            //    txtResult.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\r\n");
+            //}
         }
 
         private async void Form1_Load(object sender, EventArgs e)
@@ -361,140 +362,53 @@ namespace E_Tax
             }
         }
 
-        private async void btnSearch_Click(object sender, EventArgs e)
-        {
-            if (string.IsNullOrEmpty(jwtToken))
-            {
-                MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            DateTime fromDate = dtpFromDate.Value.Date;
-            DateTime toDate = dtpToDate.Value.Date;
-
-            // === BƯỚC KIỂM TRA MỚI ===
-            // Kiểm tra xem "Đến ngày" có vượt quá "Từ ngày" + 1 tháng không.
-            if (toDate > fromDate.AddMonths(1))
-            {
-                MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng. Vui lòng chọn lại.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return; // Dừng lại không thực hiện tìm kiếm
-            }
-            // ==========================
-
-            if (fromDate > toDate)
-            {
-                MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            txtResult.Clear();
-            btnSearch.Enabled = false;
-            btnSaveOriginal.Enabled = false;
-            searchProgressBar.Visible = true;
-
-            try
-            {
-                AppendLog("🔍 Bắt đầu truy vấn dữ liệu hoá đơn...");
-                // Điều chỉnh lại toDate để bao gồm cả ngày cuối cùng
-                DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1);
-                string query = Timef(fromDate, preciseToDate);
-                AppendLog($"➡️ URL Query được tạo: {query}");
-
-                string result = await GetProductsAsync(query);
-                AppendLog($"⬅️ Dữ liệu thô nhận từ server:\n{result}");
-
-                if (result.StartsWith("❌"))
-                {
-                    // Trích xuất thông báo lỗi từ JSON nếu có
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(result.Substring(result.IndexOf('{')));
-                        if (doc.RootElement.TryGetProperty("message", out var messageElement))
-                        {
-                            MessageBox.Show(messageElement.GetString(), "Lỗi từ API", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        }
-                    }
-                    catch
-                    {
-                        MessageBox.Show(result, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    return;
-                }
-
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var searchResponse = JsonSerializer.Deserialize<SearchResponse>(result, options);
-
-                if (searchResponse?.Datas == null || !searchResponse.Datas.Any())
-                {
-                    AppendLog("⚠️ Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.");
-                    MessageBox.Show("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo");
-                    _latestResults.Clear();
-                    return;
-                }
-
-                _latestResults = searchResponse.Datas;
-                AppendLog($"✅ Đã lấy {_latestResults.Count} kết quả.");
-                MessageBox.Show($"Tìm thấy {_latestResults.Count} hóa đơn.", "Hoàn tất");
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"🐞 LỖI NGHIÊM TRỌNG: {ex.ToString()}");
-                MessageBox.Show($"Đã xảy ra lỗi: {ex.Message}", "Lỗi");
-            }
-            finally
-            {
-                btnSearch.Enabled = true;
-                btnSaveOriginal.Enabled = true;
-                searchProgressBar.Visible = false;
-            }
-        }
-
-        private async Task<string> GetProductsAsync(string queryString)
+        private async Task<string> GetProductsAsync(string endpoint, string queryString)
         {
             try
             {
-                string baseUrl = "query/invoices/sold";
-                string fullUrl = string.IsNullOrWhiteSpace(queryString) ? baseUrl : $"{baseUrl}?{queryString}";
+                string fullUrl = $"{endpoint}?{queryString}";
                 AppendLog($"👉 Đang gọi API: {fullUrl}");
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, fullUrl);
                 req.Headers.UserAgent.ParseAdd(BrowserUserAgent);
                 req.Headers.Add("Accept", "application/json");
-                req.Headers.Add("Referer", "https://hoadondientu.gdt.gov.vn/");
-                req.Headers.Add("Origin", "https://hoadondientu.gdt.gov.vn");
 
                 if (!string.IsNullOrEmpty(jwtToken))
                 {
                     req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
-                    AppendLog("🔐 Đã thêm JWT token vào header Authorization");
                 }
 
                 var response = await client.SendAsync(req);
                 string text = await response.Content.ReadAsStringAsync();
-
                 AppendLog($"HTTP Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                AppendLog("Response:\r\n" + (text.Length > 2000 ? text.Substring(0, 2000) + "..." : text));
 
-                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                if (!response.IsSuccessStatusCode)
                 {
-                    AppendLog("⚠️ Token hết hạn, vui lòng đăng nhập lại.");
-                    await LoadCaptchaAsync();
-                    return "❌ Vui lòng đăng nhập lại.";
+                    // Trả về chuỗi lỗi có chứa cả nội dung JSON
+                    return $"❌ Lỗi khi gọi API: {text}";
                 }
 
-                response.EnsureSuccessStatusCode();
                 return text;
             }
             catch (Exception ex)
             {
-                return $"❌ Lỗi khi gọi API sản phẩm: {ex.Message}";
+                return $"❌ Lỗi hệ thống: {ex.Message}";
             }
         }
 
-        private string Timef(DateTime from, DateTime to)
+        private string Timef(DateTime from, DateTime to, InvoiceType type)
         {
-            return $"sort=tdlap:desc,khmshdon:asc,shdon:desc" +
-                   $"&search=tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
+            // Tạo chuỗi tìm kiếm cơ bản với khoảng thời gian
+            string baseSearch = $"tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
+
+            // Nếu là hóa đơn mua vào, thêm điều kiện ttxly==5
+            if (type == InvoiceType.Bought)
+            {
+                baseSearch += ";ttxly==5";
+            }
+
+            // Trả về chuỗi query hoàn chỉnh, bổ sung tham số 'size' để lấy nhiều kết quả hơn
+            return $"size=50&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={baseSearch}";
         }
 
         public class SearchResult
@@ -786,56 +700,6 @@ namespace E_Tax
             }
         }
 
-        private async Task<bool> DownloadExportExcelAsync(DateTime fromDate, DateTime toDate, string savePath)
-        {
-            try
-            {
-                string query = Timef(fromDate, toDate); // Sử dụng hàm Timef hiện có
-                string url = $"query/invoices/export-excel?{query}";
-                AppendLog($"📦 Đang gọi API export Excel: {url}");
-
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.UserAgent.ParseAdd(BrowserUserAgent);
-                req.Headers.Add("Accept", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/zip, application/json");
-                req.Headers.Add("Referer", "https://hoadondientu.gdt.gov.vn/");
-                req.Headers.Add("Origin", "https://hoadondientu.gdt.gov.vn");
-
-                if (!string.IsNullOrEmpty(jwtToken))
-                {
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
-                }
-
-                var response = await client.SendAsync(req);
-
-                AppendLog($"HTTP Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-                AppendLog($"Content-Type: {response.Content.Headers.ContentType?.MediaType ?? "unknown"}");
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    string errorText = await response.Content.ReadAsStringAsync();
-                    AppendLog($"❌ Lỗi export: {response.StatusCode} - {errorText}");
-                    return false;
-                }
-
-                // Lưu file dựa trên Content-Type
-                string contentType = response.Content.Headers.ContentType?.MediaType?.ToLower() ?? "";
-                string extension = contentType.Contains("zip") ? ".zip" : (contentType.Contains("spreadsheetml.sheet") ? ".xlsx" : ".bin");
-                string fileName = $"DanhSachHoaDon_{fromDate:ddMMyyyy}_{toDate:ddMMyyyy}{extension}";
-                string fullPath = Path.Combine(savePath, fileName);
-
-                byte[] bytes = await response.Content.ReadAsByteArrayAsync();
-                await File.WriteAllBytesAsync(fullPath, bytes);
-
-                AppendLog($"✅ Đã lưu file export: {fileName} (kích thước: {bytes.Length} bytes)");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"⚠️ Lỗi tải export Excel: {ex.Message}");
-                return false;
-            }
-        }
-
         private async Task<bool> DownloadSingleInvoiceZipAsync(SearchResult invoice, string savePath)
         {
             // Kiểm tra các thông tin cần thiết trước khi gọi API
@@ -895,47 +759,138 @@ namespace E_Tax
                 return false;
             }
         }
+        /// <summary>
+        /// Tải file Excel danh sách hóa đơn trực tiếp từ API.
+        /// </summary>
+        /// <param name="queryString">Chuỗi query đã được tạo bởi hàm Timef</param>
+        /// <param name="savePath">Đường dẫn đầy đủ để lưu file Excel (bao gồm cả tên file)</param>
+        /// <returns>True nếu tải thành công</returns>
+        private async Task<bool> DownloadInvoiceListExcelAsync(string queryString, string savePath)
+        {
+            try
+            {
+                string url = $"query/invoices/export-excel?{queryString}";
+                AppendLog($"📦 Đang gọi API tải file Excel danh sách: {url}");
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.UserAgent.ParseAdd(BrowserUserAgent);
+                // Header Accept quan trọng để server biết bạn muốn nhận file Excel
+                req.Headers.Add("Accept", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+                if (!string.IsNullOrEmpty(jwtToken))
+                {
+                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
+                }
+
+                var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorText = await response.Content.ReadAsStringAsync();
+                    AppendLog($"❌ Lỗi khi tải file Excel danh sách: {response.StatusCode} - {errorText}");
+                    return false;
+                }
+
+                using (var fileStream = new FileStream(savePath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await response.Content.CopyToAsync(fileStream);
+                }
+
+                AppendLog($"✅ Đã tải thành công file Excel danh sách.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"⚠️ Lỗi hệ thống khi tải file Excel danh sách: {ex.Message}");
+                return false;
+            }
+        }
 
         private async Task SaveOriginalInvoicesAsync()
         {
-            if (_latestResults == null || !_latestResults.Any())
+            // === GIAI ĐOẠN 1: KIỂM TRA ĐẦU VÀO VÀ TÌM KIẾM HÓA ĐƠN ===
+            if (string.IsNullOrEmpty(jwtToken))
             {
-                MessageBox.Show("Không có hóa đơn nào để lưu!", "Thông báo");
+                MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            using var fbd = new FolderBrowserDialog
-            {
-                Description = "Chọn thư mục để lưu và giải nén dữ liệu hóa đơn"
-            };
-            if (fbd.ShowDialog() != DialogResult.OK) return;
+            DateTime fromDate = dtpFromDate.Value.Date;
+            DateTime toDate = dtpToDate.Value.Date;
 
-            // Vô hiệu hóa các nút và hiển thị progress bar
-            btnSearch.Enabled = false;
+            if (toDate > fromDate.AddMonths(1))
+            {
+                MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (fromDate > toDate)
+            {
+                MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             btnSaveOriginal.Enabled = false;
             downloadProgressBar.Visible = true;
             lblDownloadStatus.Visible = true;
-            downloadProgressBar.Maximum = _latestResults.Count + 4; // +4 cho các bước
-            downloadProgressBar.Value = 0;
+            //txtResult.Clear();
 
             string tempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
-            Directory.CreateDirectory(tempDirectory);
 
             try
             {
-                // --- GIAI ĐOẠN 1: TỔNG HỢP DỮ LIỆU (Giữ nguyên) ---
-                lblDownloadStatus.Text = "Bước 1: Đang tạo file Excel danh sách...";
-                await ExportSearchResultsToExcelAsync(_latestResults, Path.Combine(tempDirectory, "DanhSachHoaDon.xlsx"));
+                lblDownloadStatus.Text = "Bước 1: Đang tìm kiếm hóa đơn...";
+                downloadProgressBar.Style = ProgressBarStyle.Marquee;
+            
+                string endpoint = "query/invoices/sold";
+
+                InvoiceType type = rbSold.Checked ? InvoiceType.Sold : InvoiceType.Bought;
+                DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1);
+                string query = Timef(fromDate, preciseToDate, type);
+
+                string result = await GetProductsAsync(endpoint, query);
+
+                if (result.StartsWith("❌"))
+                {
+                    AppendLog(result);
+                    MessageBox.Show("Không thể lấy danh sách hóa đơn. Vui lòng xem log để biết chi tiết.", "Lỗi từ API", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var searchResponse = JsonSerializer.Deserialize<SearchResponse>(result, options);
+                _latestResults = searchResponse?.Datas ?? new List<SearchResult>();
+
+                if (!_latestResults.Any())
+                {
+                    ShowStatusMessage("Không tìm thấy hóa đơn nào.", Color.OrangeRed);
+                    return;
+                }
+
+                ShowStatusMessage($"Tìm thấy {_latestResults.Count} hóa đơn. Bắt đầu tải...", Color.Green);
+
+                // === GIAI ĐOẠN 2: TẢI VỀ VÀ XỬ LÝ ===
+                downloadProgressBar.Style = ProgressBarStyle.Blocks;
+                downloadProgressBar.Maximum = _latestResults.Count + 4;
+                downloadProgressBar.Value = 0;
+
+                Directory.CreateDirectory(tempDirectory);
+
+                lblDownloadStatus.Text = "Bước 2: Đang tải file Excel danh sách...";
+                // =========================================================================================
+                // == THAY ĐỔI: Gọi hàm mới để tải file Excel trực tiếp từ API ==
+                string listExcelPath = Path.Combine(tempDirectory, "DanhSachHoaDon.xlsx");
+                await DownloadInvoiceListExcelAsync(query, listExcelPath);
+                // =========================================================================================
                 downloadProgressBar.PerformStep();
 
-                lblDownloadStatus.Text = "Bước 2: Đang tạo file Excel chi tiết...";
+                lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
                 await ExportInvoiceDetailsToExcelAsync(Path.Combine(tempDirectory, "ChiTietHoaDon.xlsx"));
                 downloadProgressBar.PerformStep();
 
                 int successCount = 0;
                 for (int i = 0; i < _latestResults.Count; i++)
                 {
-                    lblDownloadStatus.Text = $"Bước 3: Đang tải hóa đơn gốc ({i + 1}/{_latestResults.Count})...";
+                    lblDownloadStatus.Text = $"Bước 4: Đang tải hóa đơn gốc ({i + 1}/{_latestResults.Count})...";
                     if (await DownloadSingleInvoiceZipAsync(_latestResults[i], tempDirectory))
                     {
                         successCount++;
@@ -944,33 +899,31 @@ namespace E_Tax
                     await Task.Delay(100);
                 }
 
-                // --- GIAI ĐOẠN 2: NÉN VÀ GIẢI NÉN (Cập nhật) ---
-                lblDownloadStatus.Text = "Bước 4: Đang tổng hợp dữ liệu...";
+                lblDownloadStatus.Text = "Bước 5: Đang tổng hợp và giải nén...";
+                using var fbd = new FolderBrowserDialog { Description = "Chọn thư mục để lưu kết quả" };
+                if (fbd.ShowDialog() != DialogResult.OK) return;
+
                 string tempZipPath = Path.Combine(Path.GetTempPath(), $"Temp_HoaDon_TongHop_{Guid.NewGuid()}.zip");
                 ZipFile.CreateFromDirectory(tempDirectory, tempZipPath);
 
                 string finalExtractionPath = Path.Combine(fbd.SelectedPath, Path.GetFileNameWithoutExtension(tempZipPath).Replace("Temp_", ""));
                 Directory.CreateDirectory(finalExtractionPath);
 
-                lblDownloadStatus.Text = "Bước 5: Đang giải nén file tổng hợp...";
                 ZipFile.ExtractToDirectory(tempZipPath, finalExtractionPath, true);
                 downloadProgressBar.PerformStep();
 
-                // === BƯỚC MỚI: GIẢI NÉN CÁC FILE ZIP CON ===
                 await Task.Run(() => UnzipInnerArchives(finalExtractionPath));
                 downloadProgressBar.PerformStep();
-                // ==========================================
 
-                MessageBox.Show($"✅ Hoàn tất! \n\nĐã lưu và giải nén thành công {successCount} hóa đơn và 2 file báo cáo vào thư mục:\n\n{finalExtractionPath}",
-                                "Thành Công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show($"✅ Hoàn tất! \n\nĐã lưu và giải nén thành công {successCount} hóa đơn và 2 file báo cáo vào thư mục:\n\n{finalExtractionPath}", "Thành Công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                AppendLog($"🐞 LỖI NGHIÊM TRỌNG: {ex.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                // Dọn dẹp
                 try
                 {
                     if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
@@ -979,10 +932,11 @@ namespace E_Tax
                         File.Delete(tempZip);
                     }
                 }
-                catch { /* Bỏ qua lỗi dọn dẹp */ }
+                catch (Exception ex)
+                {
+                    AppendLog($"⚠️ Không thể dọn dẹp file tạm: {ex.Message}");
+                }
 
-                // Bật lại các nút và ẩn progress bar
-                btnSearch.Enabled = true;
                 btnSaveOriginal.Enabled = true;
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
@@ -1031,49 +985,6 @@ namespace E_Tax
             }
         }
 
-        private async void btnExportList_Click(object sender, EventArgs e)
-        {
-            if (_latestResults == null || _latestResults.Count == 0)
-            {
-                MessageBox.Show("Không có dữ liệu để xuất danh sách!", "Thông báo");
-                return;
-            }
-
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            Cursor current = Cursor.Current;
-            try
-            {
-                Cursor.Current = Cursors.WaitCursor;
-
-                // Tính khoảng thời gian từ dữ liệu tìm kiếm
-                DateTime fromDate = _latestResults.Min(r => DateTime.Parse(r.Ngay_lap ?? "2025-01-01"));
-                DateTime toDate = _latestResults.Max(r => DateTime.Parse(r.Ngay_lap ?? "2025-12-31"));
-
-                // Gọi API export
-                bool success = await DownloadExportExcelAsync(fromDate, toDate, desktop);
-                if (success)
-                {
-                    MessageBox.Show($"✅ Đã xuất danh sách hóa đơn thành công!\nVị trí: {desktop}", "Hoàn tất");
-                }
-                else
-                {
-                    MessageBox.Show("❌ Không thể xuất danh sách. Kiểm tra log.", "Lỗi");
-                }
-            }
-            finally
-            {
-                Cursor.Current = current;
-            }
-        }
-
-        private async void btnExportDetails_Click(object sender, EventArgs e)
-        {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            string filePath = Path.Combine(desktop, $"ChiTietHoaDon_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
-
-            await ExportInvoiceDetailsToExcelAsync(filePath);
-        }
-
         private async void btnSaveOriginal_Click(object sender, EventArgs e)
         {
             await SaveOriginalInvoicesAsync();
@@ -1092,8 +1003,9 @@ namespace E_Tax
                     break;
 
                 case LicenseStatus.ValidTrial:
-                    int daysLeft = LicenseManager.GetDaysRemaining();
-                    this.Text = $"E-Tax (Bản dùng thử - Còn lại {daysLeft} ngày)";
+                    // === THAY ĐỔI: Bỏ số ngày còn lại ===
+                    this.Text = "E-Tax (Bản dùng thử)";
+                    // ==================================
                     panelActivation.Visible = false;
                     panelLogin.Enabled = true;
                     break;
@@ -1102,7 +1014,7 @@ namespace E_Tax
                     this.Text = "E-Tax (Bản dùng thử đã hết hạn)";
                     panelActivation.Visible = true;
                     panelLogin.Enabled = false;
-                    MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm để tiếp tục sử dụng.", "Hết hạn dùng thử", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm.", "Hết hạn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
             }
         }
@@ -1128,6 +1040,21 @@ namespace E_Tax
             }
         }
 
+        private void ShowStatusMessage(string message, Color color)
+        {
+            lblStatusMessage.Text = message;
+            lblStatusMessage.ForeColor = color;
+            lblStatusMessage.Visible = true;
 
+            // Khởi động lại timer để ẩn thông báo sau một khoảng thời gian
+            statusTimer.Stop();
+            statusTimer.Start();
+        }
+
+        private void statusTimer_Tick(object sender, EventArgs e)
+        {
+            lblStatusMessage.Visible = false;
+            statusTimer.Stop();
+        }
     }
 }
