@@ -23,6 +23,9 @@ namespace E_Tax
         private System.Windows.Forms.Panel panelLogin;
         private System.Windows.Forms.Panel panelSearch;
         private System.Windows.Forms.Label lblVersion;
+        private System.Windows.Forms.DataGridView dgvDetails;
+        private System.Windows.Forms.DataGridView dgvMua; // Lưới BK Mua
+        private System.Windows.Forms.DataGridView dgvBan; // Lưới BK Bán
 
         /// <summary>
         /// Khởi tạo các control trên form.
@@ -93,9 +96,30 @@ namespace E_Tax
             dataGridViewTextBoxColumn15 = new DataGridViewTextBoxColumn();
             dataGridViewTextBoxColumn16 = new DataGridViewTextBoxColumn();
             dataGridViewTextBoxColumn17 = new DataGridViewTextBoxColumn();
+            Tra_Cuu = new DataGridViewButtonColumn();
+            dataGridViewTextBoxColumn18 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn19 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn20 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn21 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn22 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn23 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn24 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn25 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn26 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn27 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn28 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn29 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn30 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn31 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn32 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn33 = new DataGridViewTextBoxColumn();
+            dataGridViewTextBoxColumn34 = new DataGridViewTextBoxColumn();
             tabChiTiet = new TabPage();
+            dgvDetails = new DataGridView();
             tabDkMua = new TabPage();
+            dgvMua = new DataGridView();
             tabBKBan = new TabPage();
+            dgvBan = new DataGridView();
             tabVATNop = new TabPage();
             tabGiamThue = new TabPage();
             gbNguoiBan = new GroupBox();
@@ -109,9 +133,6 @@ namespace E_Tax
             downloadProgressBar = new ProgressBar();
             lblDownloadStatus = new Label();
             pictureBox2 = new PictureBox();
-            dataGridViewTextBoxColumn18 = new DataGridViewTextBoxColumn();
-            dataGridViewTextBoxColumn19 = new DataGridViewTextBoxColumn();
-            dataGridViewTextBoxColumn20 = new DataGridViewTextBoxColumn();
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
@@ -128,6 +149,12 @@ namespace E_Tax
             tabControlMain.SuspendLayout();
             tabTongHop.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvMain).BeginInit();
+            tabChiTiet.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgvDetails).BeginInit();
+            tabDkMua.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgvMua).BeginInit();
+            tabBKBan.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgvBan).BeginInit();
             gbNguoiBan.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             SuspendLayout();
@@ -475,7 +502,7 @@ namespace E_Tax
             btnNenZip.Name = "btnNenZip";
             btnNenZip.Size = new Size(76, 30);
             btnNenZip.TabIndex = 9;
-            btnNenZip.Text = "Nén zip";
+            btnNenZip.Text = "Mở file zip";
             btnNenZip.UseVisualStyleBackColor = true;
             // 
             // btnCnKoPdf
@@ -609,7 +636,7 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn1, dataGridViewTextBoxColumn2, dataGridViewTextBoxColumn3, dataGridViewTextBoxColumn4, dataGridViewTextBoxColumn5, dataGridViewTextBoxColumn6, dataGridViewTextBoxColumn7, dataGridViewTextBoxColumn8, dataGridViewTextBoxColumn9, dataGridViewTextBoxColumn10, dataGridViewTextBoxColumn11, dataGridViewTextBoxColumn12, dataGridViewTextBoxColumn13, dataGridViewTextBoxColumn14, dataGridViewTextBoxColumn15, dataGridViewTextBoxColumn16, dataGridViewTextBoxColumn17 });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { dataGridViewTextBoxColumn18, dataGridViewTextBoxColumn19, dataGridViewTextBoxColumn20, dataGridViewTextBoxColumn21, dataGridViewTextBoxColumn22, dataGridViewTextBoxColumn23, dataGridViewTextBoxColumn24, dataGridViewTextBoxColumn25, dataGridViewTextBoxColumn26, dataGridViewTextBoxColumn27, dataGridViewTextBoxColumn28, dataGridViewTextBoxColumn29, dataGridViewTextBoxColumn30, dataGridViewTextBoxColumn31, dataGridViewTextBoxColumn32, dataGridViewTextBoxColumn33, dataGridViewTextBoxColumn34, Tra_Cuu });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
@@ -617,94 +644,169 @@ namespace E_Tax
             dgvMain.RowHeadersVisible = false;
             dgvMain.Size = new Size(936, 356);
             dgvMain.TabIndex = 0;
+            dgvMain.CellContentClick += dgvMain_CellContentClick;
             // 
             // dataGridViewTextBoxColumn1
             // 
             dataGridViewTextBoxColumn1.Name = "dataGridViewTextBoxColumn1";
-            dataGridViewTextBoxColumn1.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn2
             // 
             dataGridViewTextBoxColumn2.Name = "dataGridViewTextBoxColumn2";
-            dataGridViewTextBoxColumn2.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn3
             // 
             dataGridViewTextBoxColumn3.Name = "dataGridViewTextBoxColumn3";
-            dataGridViewTextBoxColumn3.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn4
             // 
             dataGridViewTextBoxColumn4.Name = "dataGridViewTextBoxColumn4";
-            dataGridViewTextBoxColumn4.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn5
             // 
             dataGridViewTextBoxColumn5.Name = "dataGridViewTextBoxColumn5";
-            dataGridViewTextBoxColumn5.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn6
             // 
             dataGridViewTextBoxColumn6.Name = "dataGridViewTextBoxColumn6";
-            dataGridViewTextBoxColumn6.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn7
             // 
             dataGridViewTextBoxColumn7.Name = "dataGridViewTextBoxColumn7";
-            dataGridViewTextBoxColumn7.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn8
             // 
             dataGridViewTextBoxColumn8.Name = "dataGridViewTextBoxColumn8";
-            dataGridViewTextBoxColumn8.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn9
             // 
             dataGridViewTextBoxColumn9.Name = "dataGridViewTextBoxColumn9";
-            dataGridViewTextBoxColumn9.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn10
             // 
             dataGridViewTextBoxColumn10.Name = "dataGridViewTextBoxColumn10";
-            dataGridViewTextBoxColumn10.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn11
             // 
             dataGridViewTextBoxColumn11.Name = "dataGridViewTextBoxColumn11";
-            dataGridViewTextBoxColumn11.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn12
             // 
             dataGridViewTextBoxColumn12.Name = "dataGridViewTextBoxColumn12";
-            dataGridViewTextBoxColumn12.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn13
             // 
             dataGridViewTextBoxColumn13.Name = "dataGridViewTextBoxColumn13";
-            dataGridViewTextBoxColumn13.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn14
             // 
             dataGridViewTextBoxColumn14.Name = "dataGridViewTextBoxColumn14";
-            dataGridViewTextBoxColumn14.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn15
             // 
             dataGridViewTextBoxColumn15.Name = "dataGridViewTextBoxColumn15";
-            dataGridViewTextBoxColumn15.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn16
             // 
             dataGridViewTextBoxColumn16.Name = "dataGridViewTextBoxColumn16";
-            dataGridViewTextBoxColumn16.ReadOnly = true;
             // 
             // dataGridViewTextBoxColumn17
             // 
             dataGridViewTextBoxColumn17.Name = "dataGridViewTextBoxColumn17";
-            dataGridViewTextBoxColumn17.ReadOnly = true;
+            // 
+            // Tra_Cuu
+            // 
+            Tra_Cuu.Name = "Tra_Cuu";
+            Tra_Cuu.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn18
+            // 
+            dataGridViewTextBoxColumn18.Name = "dataGridViewTextBoxColumn18";
+            dataGridViewTextBoxColumn18.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn19
+            // 
+            dataGridViewTextBoxColumn19.Name = "dataGridViewTextBoxColumn19";
+            dataGridViewTextBoxColumn19.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn20
+            // 
+            dataGridViewTextBoxColumn20.Name = "dataGridViewTextBoxColumn20";
+            dataGridViewTextBoxColumn20.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn21
+            // 
+            dataGridViewTextBoxColumn21.Name = "dataGridViewTextBoxColumn21";
+            dataGridViewTextBoxColumn21.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn22
+            // 
+            dataGridViewTextBoxColumn22.Name = "dataGridViewTextBoxColumn22";
+            dataGridViewTextBoxColumn22.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn23
+            // 
+            dataGridViewTextBoxColumn23.Name = "dataGridViewTextBoxColumn23";
+            dataGridViewTextBoxColumn23.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn24
+            // 
+            dataGridViewTextBoxColumn24.Name = "dataGridViewTextBoxColumn24";
+            dataGridViewTextBoxColumn24.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn25
+            // 
+            dataGridViewTextBoxColumn25.Name = "dataGridViewTextBoxColumn25";
+            dataGridViewTextBoxColumn25.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn26
+            // 
+            dataGridViewTextBoxColumn26.Name = "dataGridViewTextBoxColumn26";
+            dataGridViewTextBoxColumn26.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn27
+            // 
+            dataGridViewTextBoxColumn27.Name = "dataGridViewTextBoxColumn27";
+            dataGridViewTextBoxColumn27.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn28
+            // 
+            dataGridViewTextBoxColumn28.Name = "dataGridViewTextBoxColumn28";
+            dataGridViewTextBoxColumn28.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn29
+            // 
+            dataGridViewTextBoxColumn29.Name = "dataGridViewTextBoxColumn29";
+            dataGridViewTextBoxColumn29.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn30
+            // 
+            dataGridViewTextBoxColumn30.Name = "dataGridViewTextBoxColumn30";
+            dataGridViewTextBoxColumn30.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn31
+            // 
+            dataGridViewTextBoxColumn31.Name = "dataGridViewTextBoxColumn31";
+            dataGridViewTextBoxColumn31.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn32
+            // 
+            dataGridViewTextBoxColumn32.Name = "dataGridViewTextBoxColumn32";
+            dataGridViewTextBoxColumn32.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn33
+            // 
+            dataGridViewTextBoxColumn33.Name = "dataGridViewTextBoxColumn33";
+            dataGridViewTextBoxColumn33.ReadOnly = true;
+            // 
+            // dataGridViewTextBoxColumn34
+            // 
+            dataGridViewTextBoxColumn34.Name = "dataGridViewTextBoxColumn34";
+            dataGridViewTextBoxColumn34.ReadOnly = true;
             // 
             // tabChiTiet
             // 
+            tabChiTiet.Controls.Add(dgvDetails);
             tabChiTiet.Location = new Point(4, 24);
             tabChiTiet.Name = "tabChiTiet";
             tabChiTiet.Padding = new Padding(3);
@@ -713,23 +815,67 @@ namespace E_Tax
             tabChiTiet.Text = "Chi tiết";
             tabChiTiet.UseVisualStyleBackColor = true;
             // 
+            // dgvDetails
+            // 
+            dgvDetails.AllowUserToAddRows = false;
+            dgvDetails.AllowUserToDeleteRows = false;
+            dgvDetails.BackgroundColor = SystemColors.Window;
+            dgvDetails.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvDetails.Dock = DockStyle.Fill;
+            dgvDetails.Location = new Point(3, 3);
+            dgvDetails.Name = "dgvDetails";
+            dgvDetails.ReadOnly = true;
+            dgvDetails.RowHeadersVisible = false;
+            dgvDetails.Size = new Size(936, 356);
+            dgvDetails.TabIndex = 0;
+            // 
             // tabDkMua
             // 
+            tabDkMua.Controls.Add(dgvMua);
             tabDkMua.Location = new Point(4, 24);
             tabDkMua.Name = "tabDkMua";
             tabDkMua.Size = new Size(942, 362);
             tabDkMua.TabIndex = 2;
-            tabDkMua.Text = "Đk mua";
+            tabDkMua.Text = "Bk mua";
             tabDkMua.UseVisualStyleBackColor = true;
+            // 
+            // dgvMua
+            // 
+            dgvMua.AllowUserToAddRows = false;
+            dgvMua.AllowUserToDeleteRows = false;
+            dgvMua.BackgroundColor = SystemColors.Window;
+            dgvMua.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvMua.Dock = DockStyle.Fill;
+            dgvMua.Location = new Point(0, 0);
+            dgvMua.Name = "dgvMua";
+            dgvMua.ReadOnly = true;
+            dgvMua.RowHeadersVisible = false;
+            dgvMua.Size = new Size(942, 362);
+            dgvMua.TabIndex = 0;
             // 
             // tabBKBan
             // 
+            tabBKBan.Controls.Add(dgvBan);
             tabBKBan.Location = new Point(4, 24);
             tabBKBan.Name = "tabBKBan";
             tabBKBan.Size = new Size(942, 362);
             tabBKBan.TabIndex = 3;
             tabBKBan.Text = "BK bán";
             tabBKBan.UseVisualStyleBackColor = true;
+            // 
+            // dgvBan
+            // 
+            dgvBan.AllowUserToAddRows = false;
+            dgvBan.AllowUserToDeleteRows = false;
+            dgvBan.BackgroundColor = SystemColors.Window;
+            dgvBan.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            dgvBan.Dock = DockStyle.Fill;
+            dgvBan.Location = new Point(0, 0);
+            dgvBan.Name = "dgvBan";
+            dgvBan.ReadOnly = true;
+            dgvBan.RowHeadersVisible = false;
+            dgvBan.Size = new Size(942, 362);
+            dgvBan.TabIndex = 0;
             // 
             // tabVATNop
             // 
@@ -835,6 +981,7 @@ namespace E_Tax
             btnRightSearch.TabIndex = 6;
             btnRightSearch.Text = "Tìm kiếm";
             btnRightSearch.UseVisualStyleBackColor = true;
+            btnRightSearch.Click += btnRightSearch_Click;
             // 
             // downloadProgressBar
             // 
@@ -865,18 +1012,6 @@ namespace E_Tax
             pictureBox2.TabIndex = 21;
             pictureBox2.TabStop = false;
             pictureBox2.Visible = false;
-            // 
-            // dataGridViewTextBoxColumn18
-            // 
-            dataGridViewTextBoxColumn18.Name = "dataGridViewTextBoxColumn18";
-            // 
-            // dataGridViewTextBoxColumn19
-            // 
-            dataGridViewTextBoxColumn19.Name = "dataGridViewTextBoxColumn19";
-            // 
-            // dataGridViewTextBoxColumn20
-            // 
-            dataGridViewTextBoxColumn20.Name = "dataGridViewTextBoxColumn20";
             // 
             // lblVersion
             // 
@@ -935,6 +1070,12 @@ namespace E_Tax
             tabControlMain.ResumeLayout(false);
             tabTongHop.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvMain).EndInit();
+            tabChiTiet.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgvDetails).EndInit();
+            tabDkMua.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgvMua).EndInit();
+            tabBKBan.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgvBan).EndInit();
             gbNguoiBan.ResumeLayout(false);
             gbNguoiBan.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
@@ -1003,6 +1144,7 @@ namespace E_Tax
         private TabPage tabBKBan;
         private TabPage tabVATNop;
         private TabPage tabGiamThue;
+
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn1;
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn2;
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn3;
@@ -1023,5 +1165,20 @@ namespace E_Tax
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn18;
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn19;
         private DataGridViewTextBoxColumn dataGridViewTextBoxColumn20;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn21;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn22;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn23;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn24;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn25;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn26;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn27;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn28;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn29;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn30;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn31;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn32;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn33;
+        private DataGridViewTextBoxColumn dataGridViewTextBoxColumn34;
+        private DataGridViewButtonColumn Tra_Cuu;
     }
 }

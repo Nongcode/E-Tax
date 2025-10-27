@@ -30,11 +30,12 @@ namespace E_Tax
         private readonly string BrowserUserAgent =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
         private bool disposed = false;
+        private readonly DetailGridManager _detailGridManager;
 
         public Form1()
-        {          
+        {
             InitializeComponent();
-            ExcelPackage.License.SetNonCommercialPersonal("Your Name");
+
             var handler = new HttpClientHandler()
             {
                 CookieContainer = cookieContainer,
@@ -45,6 +46,19 @@ namespace E_Tax
             {
                 BaseAddress = new Uri("https://hoadondientu.gdt.gov.vn:30000/")
             };
+
+            _detailGridManager = new DetailGridManager(
+                 client,
+                 dgvDetails,
+                 dgvMua, 
+                 dgvBan,        // DataGridView cho tab chi tiết
+                 downloadProgressBar, // ProgressBar dùng chung
+                 lblDownloadStatus,   // Label trạng thái dùng chung
+                 AppendLog,           // Hàm ghi log của Form1
+                 BrowserUserAgent     // UserAgent
+             );
+            ExcelPackage.License.SetNonCommercialPersonal("Your Name");
+            
             panelLogin.Visible = true;
             panelSearch.Visible = false;
         }
@@ -228,6 +242,8 @@ namespace E_Tax
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
 
+                    _detailGridManager.SetJwtToken(jwtToken);
+
                     // (Tùy chọn) Xóa các giá trị đăng nhập để tránh lưu lại
                     txtUser.Clear();
                     txtPass.Clear();
@@ -397,74 +413,7 @@ namespace E_Tax
             return $"size=50&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={baseSearch}";
         }
 
-        public class SearchResult
-        {
-            [JsonPropertyName("id")]
-            public string Id { get; set; }
-
-            [JsonPropertyName("nbmst")]
-            public string Ma_so_thue { get; set; }
-
-            [JsonPropertyName("khmshdon")]
-            public int? Ky_hieu_ma_so { get; set; }
-
-            [JsonPropertyName("khhdon")]
-            public string Ky_hieu_hoa_don { get; set; }
-
-            [JsonPropertyName("shdon")]
-            public int? So_hoa_don { get; set; }
-
-            [JsonPropertyName("tdlap")]
-            public string Ngay_lap { get; set; }
-
-            [JsonPropertyName("nbten")]
-            public string Thong_tin_hoa_don { get; set; }
-
-            [JsonPropertyName("tgtcthue")]
-            public decimal? Tong_tien_chua_thue { get; set; }
-
-            [JsonPropertyName("tgtthue")]
-            public decimal? Tong_tien_thue { get; set; }
-
-            [JsonPropertyName("ttcktmai")]
-            public decimal? Tong_tien_chiet_khau { get; set; }
-
-            [JsonPropertyName("thttlphi")]
-            public List<decimal?> Tong_tien_phi { get; set; }
-
-            [JsonPropertyName("tgtttbso")]
-            public decimal? Tong_tien_thanh_toan { get; set; }
-
-            [JsonPropertyName("dvtte")]
-            public string Don_vi_tien_te { get; set; }
-
-            [JsonPropertyName("tthai")]
-            public int? Trang_thai_hoa_don { get; set; }
-
-            [JsonPropertyName("kqcht")]
-            public string Ket_qua_kiem_tra_hoa_don { get; set; }
-
-            [JsonPropertyName("shdgoc")]
-            public string Hoa_don_lien_quan { get; set; }
-
-            [JsonPropertyName("nmdchi")]
-            public string Thong_tin_lien_quan { get; set; }
-        }
-
-        public class SearchResponse
-        {
-            [JsonPropertyName("datas")]
-            public List<SearchResult> Datas { get; set; }
-
-            [JsonPropertyName("total")]
-            public int Total { get; set; }
-
-            [JsonPropertyName("state")]
-            public string State { get; set; }
-
-            [JsonPropertyName("time")]
-            public int Time { get; set; }
-        }
+        
 
         public async Task ExportSearchResultsToExcelAsync(List<SearchResult> results, string filePath)
         {
@@ -1328,12 +1277,6 @@ namespace E_Tax
         /// <summary>
         /// Xử lý sự kiện click nút Tìm kiếm bên trái.
         /// </summary>
-        /// <summary>
-        /// Xử lý sự kiện click nút Tìm kiếm bên trái (Phiên bản nâng cấp).
-        /// </summary>
-        /// <summary>
-        /// Xử lý sự kiện click nút Tìm kiếm bên trái (Phiên bản nâng cấp + lưu query string).
-        /// </summary>
         private async void btnLeftSearch_Click(object sender, EventArgs e)
         {
             // --- KIỂM TRA ĐĂNG NHẬP ---
@@ -1343,12 +1286,10 @@ namespace E_Tax
                 return;
             }
 
-            // --- LẤY THÔNG TIN TÌM KIẾM ---
+            // --- LẤY THÔNG TIN TÌM KIẾM & VALIDATE ---
             DateTime fromDate = dtpFromDate.Value.Date;
             DateTime toDate = dtpToDate.Value.Date;
-            DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1);
-
-            // --- VALIDATE NGÀY THÁNG ---
+            DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1); // Lấy đến cuối ngày 'Đến ngày'
             if (toDate > fromDate.AddMonths(1))
             {
                 MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1360,23 +1301,29 @@ namespace E_Tax
                 return;
             }
 
-            // --- QUẢN LÝ TRẠNG THÁI UI ---
+            // --- QUẢN LÝ TRẠNG THÁI UI (Bắt đầu) ---
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
+            this.Cursor = Cursors.WaitCursor; // Đổi con trỏ chờ cho cả form
+            downloadProgressBar.Value = 0; // Reset progress bar
+            downloadProgressBar.Maximum = 100; // Đặt tạm Maximum
             downloadProgressBar.Visible = true;
-            downloadProgressBar.Style = ProgressBarStyle.Marquee;
+            downloadProgressBar.Style = ProgressBarStyle.Marquee; // Marquee khi tìm kiếm danh sách
             lblDownloadStatus.Text = "Đang tìm kiếm hóa đơn...";
             lblDownloadStatus.Visible = true;
             dgvMain.DataSource = null;
+            dgvDetails.DataSource = null; // Xóa lưới chi tiết
+            dgvMua.DataSource = null;     // Xóa lưới mua
+            dgvBan.DataSource = null;     // Xóa lưới bán
             _latestResults.Clear();
-            _lastSuccessfulQueryString = ""; // Xóa query cũ trước khi tìm kiếm mới
+            _lastSuccessfulQueryString = "";
 
-            // --- THỰC HIỆN TÌM KIẾM ---
+            // --- THỰC HIỆN TÌM KIẾM DANH SÁCH ---
             List<SearchResult> searchResults = new List<SearchResult>();
             bool searchSoldSuccess = true;
             bool searchBoughtSuccess = true;
-            string currentQuerySold = ""; // Lưu tạm query để dùng lại nếu thành công
-            string currentQueryBought = ""; // Lưu tạm query để dùng lại nếu thành công
+            string currentQuerySold = "";
+            string currentQueryBought = "";
 
             try
             {
@@ -1385,9 +1332,8 @@ namespace E_Tax
                 {
                     lblDownloadStatus.Text = "Đang tìm hóa đơn bán ra...";
                     AppendLog("🔍 Bắt đầu tìm hóa đơn bán ra...");
-                    currentQuerySold = Timef(fromDate, preciseToDate, InvoiceType.Sold); // Tạo và lưu tạm query
+                    currentQuerySold = Timef(fromDate, preciseToDate, InvoiceType.Sold);
                     string resultSold = await GetProductsAsync("query/invoices/sold", currentQuerySold);
-
                     if (resultSold.StartsWith("❌"))
                     {
                         AppendLog(resultSold);
@@ -1400,7 +1346,7 @@ namespace E_Tax
                         var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, options);
                         if (responseSold?.Datas != null)
                         {
-                            responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra");
+                            responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra"); // Gán loại hóa đơn
                             searchResults.AddRange(responseSold.Datas);
                             AppendLog($"✅ Tìm thấy {responseSold.Datas.Count} hóa đơn bán ra.");
                         }
@@ -1410,13 +1356,12 @@ namespace E_Tax
                 // --- Tìm hóa đơn mua vào ---
                 if (rbBought.Checked || rbAllInvoices.Checked)
                 {
-                    if (searchSoldSuccess) // Chỉ tìm nếu lần trước thành công (nếu có)
+                    if (searchSoldSuccess) // Chỉ tìm nếu lần trước thành công
                     {
                         lblDownloadStatus.Text = "Đang tìm hóa đơn mua vào...";
                         AppendLog("🔍 Bắt đầu tìm hóa đơn mua vào...");
-                        currentQueryBought = Timef(fromDate, preciseToDate, InvoiceType.Bought); // Tạo và lưu tạm query
+                        currentQueryBought = Timef(fromDate, preciseToDate, InvoiceType.Bought);
                         string resultBought = await GetProductsAsync("query/invoices/purchase", currentQueryBought);
-
                         if (resultBought.StartsWith("❌"))
                         {
                             AppendLog(resultBought);
@@ -1429,119 +1374,117 @@ namespace E_Tax
                             var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, options);
                             if (responseBought?.Datas != null)
                             {
-                                responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào");
+                                responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào"); // Gán loại hóa đơn
                                 searchResults.AddRange(responseBought.Datas);
                                 AppendLog($"✅ Tìm thấy {responseBought.Datas.Count} hóa đơn mua vào.");
                             }
                         }
                     }
-                    else { searchBoughtSuccess = false; }
+                    else { searchBoughtSuccess = false; } // Đánh dấu lỗi nếu tìm bán bị lỗi
                 }
 
-                // --- HIỂN THỊ KẾT QUẢ VÀ LƯU QUERY STRING ---
+                // --- XỬ LÝ KẾT QUẢ TÌM KIẾM DANH SÁCH ---
                 if (searchSoldSuccess && searchBoughtSuccess)
                 {
+                    // Sắp xếp lại kết quả tổng hợp (ví dụ: theo ngày giảm dần)
                     _latestResults = searchResults.OrderByDescending(r => r.Ngay_lap).ThenBy(r => r.So_hoa_don).ToList();
 
-                    // <<< THAY ĐỔI: LƯU QUERY STRING SAU KHI TÌM THÀNH CÔNG >>>
-                    if (rbSold.Checked)
-                    {
-                        _lastSuccessfulQueryString = currentQuerySold; // Dùng query đã lưu tạm
-                    }
-                    else if (rbBought.Checked)
-                    {
-                        _lastSuccessfulQueryString = currentQueryBought; // Dùng query đã lưu tạm
-                    }
-                    else
-                    { // rbAllInvoices.Checked
-                        // Lấy query Bán làm mặc định cho nút tải danh sách khi chọn "Tất cả"
-                        _lastSuccessfulQueryString = currentQuerySold;
-                        AppendLog("ℹ️ Đã chọn 'Tất cả HĐ', file Excel danh sách (API) sẽ dựa trên query HĐ Bán.");
-                    }
-                    // Chỉ lưu nếu có kết quả
-                    if (_latestResults.Any())
-                    {
-                        AppendLog($"💾 Đã lưu query string cho lần export sau: {_lastSuccessfulQueryString}");
-                    }
-                    else
-                    {
-                        _lastSuccessfulQueryString = ""; // Xóa nếu không có kết quả
-                    }
-                    // ==========================================================
+                    // Lưu query string thành công cuối cùng
+                    if (rbSold.Checked) { _lastSuccessfulQueryString = currentQuerySold; }
+                    else if (rbBought.Checked) { _lastSuccessfulQueryString = currentQueryBought; }
+                    else { _lastSuccessfulQueryString = currentQuerySold; AppendLog("ℹ️ Lưu query HĐ Bán cho export khi chọn 'Tất cả'."); }
+                    if (!_latestResults.Any()) { _lastSuccessfulQueryString = ""; } // Xóa nếu không có kết quả
+                    else { AppendLog($"💾 Đã lưu query string: {_lastSuccessfulQueryString}"); }
+
 
                     if (_latestResults.Any())
                     {
-                        // ... (Code hiển thị dữ liệu lên dgvMain giữ nguyên) ...
-                        AppendLog($"📊 Tổng cộng {_latestResults.Count} hóa đơn. Đang hiển thị lên DataGridView...");
+                        AppendLog($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn. Đang xử lý...");
                         lblDownloadStatus.Text = $"Đang hiển thị {_latestResults.Count} hóa đơn...";
+                        downloadProgressBar.Style = ProgressBarStyle.Blocks; // Đổi style
 
+                        // Gán DataSource cho lưới chính
                         dgvMain.DataSource = _latestResults;
-                        dgvMain.SuspendLayout();
-                        downloadProgressBar.Style = ProgressBarStyle.Blocks;
-                        downloadProgressBar.Maximum = dgvMain.Rows.Count;
-                        downloadProgressBar.Value = 0;
 
-                        for (int i = 0; i < dgvMain.Rows.Count; i++)
+                        // Cập nhật STT và định dạng ngày cho lưới chính
+                        dgvMain.SuspendLayout(); // Tạm dừng vẽ
+                        try
                         {
-                            dgvMain.Rows[i].Cells["colDgvSTT"].Value = i + 1;
-
-                            if (_latestResults.Count > i && _latestResults[i] != null)
+                            for (int i = 0; i < dgvMain.Rows.Count; i++)
                             {
-                                dgvMain.Rows[i].Cells["colDgvLoaiHD"].Value = _latestResults[i].Thong_tin_lien_quan;
-                            }
+                                if (dgvMain.Columns.Contains("colDgvSTT")) dgvMain.Rows[i].Cells["colDgvSTT"].Value = i + 1;
+                                // Gán Loại HĐ dựa trên Thong_tin_lien_quan đã gán trước đó
+                                if (dgvMain.Columns.Contains("colDgvLoaiHD") && i < _latestResults.Count && _latestResults[i] != null)
+                                    dgvMain.Rows[i].Cells["colDgvLoaiHD"].Value = _latestResults[i].Thong_tin_lien_quan;
 
-                            var cellNgayLap = dgvMain.Rows[i].Cells["colDgvNgayLap"];
-                            if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
-                            {
-                                cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
-                            }
-
-                            if ((i + 1) % 10 == 0 || i == dgvMain.Rows.Count - 1)
-                            {
-                                downloadProgressBar.Value = Math.Min(i + 1, downloadProgressBar.Maximum);
-                                Application.DoEvents();
+                                // Định dạng ngày
+                                var cellNgayLap = dgvMain.Rows[i].Cells["colDgvNgayLap"];
+                                if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
+                                {
+                                    cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
+                                }
                             }
                         }
-                        dgvMain.ResumeLayout();
+                        finally
+                        {
+                            dgvMain.ResumeLayout(); // Bật lại vẽ
+                        }
+                        AppendLog("✅ Hiển thị xong lưới tổng hợp.");
 
-                        lblDownloadStatus.Text = $"Đã hiển thị {_latestResults.Count} hóa đơn.";
-                        AppendLog("✅ Hiển thị dữ liệu lên DataGridView thành công.");
+                        // !!! GỌI HÀM TẢI DỮ LIỆU CHI TIẾT !!!
+                        await _detailGridManager.PopulateDetailGridAsync(_latestResults);
+                        // Hàm này sẽ tự quản lý ProgressBar và StatusLabel tiếp theo
 
                     }
-                    else
+                    else // Không tìm thấy hóa đơn nào
                     {
                         lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                         MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         AppendLog("ℹ️ Không tìm thấy hóa đơn nào.");
+                        // Đảm bảo các lưới chi tiết trống
+                        dgvDetails.DataSource = null;
+                        dgvMua.DataSource = null;
+                        dgvBan.DataSource = null;
                     }
                 }
-                // Không cần else ở đây vì nếu searchSuccess=false thì _lastSuccessfulQueryString đã bị xóa/không gán
+                // Trường hợp tìm kiếm lỗi (searchSoldSuccess=false hoặc searchBoughtSuccess=false)
+                else
+                {
+                    // Đã có MessageBox báo lỗi API ở trên
+                    dgvMain.DataSource = null;
+                    dgvDetails.DataSource = null;
+                    dgvMua.DataSource = null;
+                    dgvBan.DataSource = null;
+                    AppendLog("❌ Tìm kiếm hóa đơn không thành công.");
+                }
             }
-            catch (JsonException jsonEx)
+            catch (JsonException jsonEx) // Lỗi Deserialize danh sách
             {
-                AppendLog($"❌ Lỗi phân tích JSON kết quả tìm kiếm: {jsonEx.Message}");
+                AppendLog($"❌ Lỗi phân tích JSON kết quả tìm kiếm: {jsonEx.ToString()}");
                 MessageBox.Show($"Lỗi xử lý dữ liệu trả về: {jsonEx.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 dgvMain.DataSource = null;
+                dgvDetails.DataSource = null;
+                dgvMua.DataSource = null;
+                dgvBan.DataSource = null;
             }
-            catch (Exception ex)
+            catch (Exception ex) // Lỗi chung khác
             {
                 AppendLog($"❌ Lỗi không mong muốn khi tìm kiếm: {ex.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 dgvMain.DataSource = null;
+                dgvDetails.DataSource = null;
+                dgvMua.DataSource = null;
+                dgvBan.DataSource = null;
             }
             finally
             {
-                // Nếu không có tìm kiếm nào thành công hoặc không có kết quả, đảm bảo query bị xóa
-                if (!searchSoldSuccess || !searchBoughtSuccess || !_latestResults.Any())
-                {
-                    _lastSuccessfulQueryString = "";
-                }
                 // --- KHÔI PHỤC TRẠNG THÁI UI ---
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
-                downloadProgressBar.Visible = false;
-                lblDownloadStatus.Visible = false;
-                lblDownloadStatus.Text = "";
+                // ProgressBar và StatusLabel sẽ được quản lý bởi PopulateDetailGridAsync
+                // Hoặc bị ẩn đi nếu không có kết quả / có lỗi ở trên
+                // Chỉ cần đảm bảo con trỏ chuột được reset
+                this.Cursor = Cursors.Default;
             }
         }
         private async Task<string> GetInvoiceDetailAsync(string nbmst, string khhdon, int? shdon, int? khmshdon)
@@ -1835,7 +1778,7 @@ namespace E_Tax
                                        headers[i].Equals("sluong", StringComparison.OrdinalIgnoreCase) ||
                                        headers[i].Equals("dgia", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        ws.Cells[currentRow, i + 1].Style.Numberformat.Format = "#,##0.##";
+                                        ws.Cells[currentRow, i + 1].Style.Numberformat.Format = "#,##0";
                                         ws.Cells[currentRow, i + 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
                                     }
                                 }
@@ -2202,5 +2145,320 @@ namespace E_Tax
                 }
             }
         }
+
+        private void btnRightSearch_Click(object sender, EventArgs e)
+        {
+            // 1. Lấy mã số thuế cần lọc từ TextBox, loại bỏ khoảng trắng thừa
+            string filterTaxCode = txtTimMST.Text.Trim();
+
+            // 2. Kiểm tra xem có dữ liệu gốc (_latestResults) để lọc không
+            if (_latestResults == null || !_latestResults.Any())
+            {
+                MessageBox.Show("Chưa có dữ liệu hóa đơn để lọc. Vui lòng nhấn nút 'Tìm kiếm' trước.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 3. Xử lý trường hợp ô lọc trống -> hiển thị lại toàn bộ dữ liệu gốc
+            if (string.IsNullOrEmpty(filterTaxCode))
+            {
+                AppendLog("🔍 Bộ lọc MST trống, hiển thị lại toàn bộ kết quả.");
+                dgvMain.DataSource = null; // Xóa nguồn cũ
+                dgvMain.DataSource = _latestResults; // Gán lại nguồn gốc
+                UpdateGridRowNumbers(); // Cập nhật lại STT
+                return; // Kết thúc
+            }
+
+            // 4. Áp dụng bộ lọc (dùng LINQ)
+            AppendLog($"🔍 Bắt đầu lọc theo MST: '{filterTaxCode}'");
+            var filteredResults = _latestResults
+                .Where(invoice => invoice.Ma_so_thue != null && // Đảm bảo MST không null
+                                  invoice.Ma_so_thue.Contains(filterTaxCode)) // Lọc theo Contains (tìm kiếm gần đúng)
+                                                                              // Hoặc dùng Equals nếu muốn tìm chính xác:
+                                                                              // invoice.Ma_so_thue.Equals(filterTaxCode, StringComparison.OrdinalIgnoreCase)) 
+                .ToList(); // Chuyển kết quả lọc thành List mới
+
+            // 5. Kiểm tra và hiển thị kết quả lọc
+            if (filteredResults.Any())
+            {
+                AppendLog($"✅ Tìm thấy {filteredResults.Count} hóa đơn khớp với MST.");
+                dgvMain.DataSource = null; // Xóa nguồn cũ
+                dgvMain.DataSource = filteredResults; // Hiển thị kết quả đã lọc
+                UpdateGridRowNumbers(); // Cập nhật STT cho kết quả lọc
+            }
+            else
+            {
+                AppendLog("ℹ️ Không tìm thấy hóa đơn nào khớp với MST.");
+                dgvMain.DataSource = null; // Xóa dữ liệu khỏi lưới
+                MessageBox.Show($"Không tìm thấy hóa đơn nào có Mã số thuế chứa '{filterTaxCode}'.", "Không có kết quả", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void UpdateGridRowNumbers()
+        {
+            if (dgvMain.DataSource == null) return; // Không làm gì nếu không có dữ liệu
+
+            dgvMain.SuspendLayout(); // Tạm dừng vẽ lại lưới để tăng tốc độ
+            for (int i = 0; i < dgvMain.Rows.Count; i++)
+            {
+                // Kiểm tra xem cột STT có tồn tại không trước khi gán
+                if (dgvMain.Columns.Contains("colDgvSTT"))
+                {
+                    dgvMain.Rows[i].Cells["colDgvSTT"].Value = i + 1;
+                }
+            }
+            dgvMain.ResumeLayout(); // Vẽ lại lưới
+        }
+
+        // Gắn sự kiện này vào DataGridView trong InitializeComponent nếu chưa có:
+        // this.dgvMain.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvMain_CellContentClick);
+
+        private async void dgvMain_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            // 1. Kiểm tra xem có phải click vào cột button "Tra cứu" không
+            if (e.RowIndex >= 0 && e.ColumnIndex == dgvMain.Columns["colDgvTraCuu"].Index)
+            {
+                // 2. Lấy thông tin hóa đơn từ dòng được click
+                SearchResult selectedInvoice = dgvMain.Rows[e.RowIndex].DataBoundItem as SearchResult;
+
+                if (selectedInvoice == null)
+                {
+                    MessageBox.Show("Không thể lấy dữ liệu hóa đơn.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 3. Kiểm tra các thông tin cần thiết
+                if (string.IsNullOrEmpty(selectedInvoice.Ma_so_thue) ||
+                    string.IsNullOrEmpty(selectedInvoice.Ky_hieu_hoa_don) ||
+                    !selectedInvoice.So_hoa_don.HasValue ||
+                    !selectedInvoice.Ky_hieu_ma_so.HasValue)
+                {
+                    MessageBox.Show("Hóa đơn thiếu thông tin cần thiết để tra cứu (MST/KHHĐ/SHĐ/KHMHS).", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // --- Hiển thị trạng thái đang xử lý ---
+                var cellButton = dgvMain.Rows[e.RowIndex].Cells[e.ColumnIndex] as DataGridViewButtonCell;
+                if (cellButton != null) cellButton.Value = "Đang..."; // Đổi text tạm thời
+                dgvMain.Cursor = Cursors.WaitCursor; // Đổi con trỏ chuột
+
+                try
+                {
+                    // 4. Gọi API lấy chi tiết hóa đơn
+                    AppendLog($"🔍 Đang lấy chi tiết HĐ {selectedInvoice.So_hoa_don} để tra cứu...");
+                    string jsonDetail = await GetInvoiceDetailAsync(
+                        selectedInvoice.Ma_so_thue,
+                        selectedInvoice.Ky_hieu_hoa_don,
+                        selectedInvoice.So_hoa_don,
+                        selectedInvoice.Ky_hieu_ma_so
+                    );
+
+                    if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
+                    {
+                        MessageBox.Show($"Lỗi khi lấy chi tiết hóa đơn:\n{jsonDetail}", "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    // 5. Phân tích JSON lấy mã tra cứu và nhà cung cấp
+                    string maTraCuu = ""; // Mã tra cứu thực tế
+                    string nhaCungCap = ""; // Ví dụ: "tvan_misa"
+                    string tenNB = selectedInvoice.Thong_tin_hoa_don; // Lấy từ SearchResult cho nhanh
+                    string mstNB = selectedInvoice.Ma_so_thue;
+                    string diaChiNB = ""; // Cần lấy từ JSON chi tiết nếu muốn hiển thị
+
+                    try
+                    {
+                        using (JsonDocument doc = JsonDocument.Parse(jsonDetail))
+                        {
+                            JsonElement root = doc.RootElement;
+                            // Lấy gốc dữ liệu (có thể nằm trong "data")
+                            if (root.TryGetProperty("data", out JsonElement dataEl) && dataEl.ValueKind == JsonValueKind.Object)
+                            {
+                                root = dataEl;
+                            }
+
+                            // --- Lấy Mã Tra Cứu ---
+                            // TH1: Ưu tiên trường "mhdon" nếu có
+                            if (root.TryGetProperty("mhdon", out JsonElement maElement) && maElement.ValueKind == JsonValueKind.String)
+                            {
+                                maTraCuu = maElement.GetString();
+                            }
+                            // TH2: Nếu không có "mhdon", thử lấy trường "id" (giả định)
+                            else if (root.TryGetProperty("id", out JsonElement idElement) && idElement.ValueKind == JsonValueKind.String)
+                            {
+                                maTraCuu = idElement.GetString(); // Hoặc trường nào phù hợp
+                            }
+                            // TH3: Lấy từ SearchResult nếu không tìm thấy trong chi tiết (ít chính xác hơn)
+                            else if (!string.IsNullOrEmpty(selectedInvoice.Id))
+                            {
+                                maTraCuu = selectedInvoice.Id; // Dùng tạm ID từ danh sách
+                                AppendLog("⚠️ Không tìm thấy mã tra cứu trong JSON chi tiết, dùng tạm ID từ danh sách.");
+                            }
+
+
+                            // --- Lấy Nhà Cung Cấp ---
+                            if (root.TryGetProperty("ngcnhat", out JsonElement nccElement) && nccElement.ValueKind == JsonValueKind.String)
+                            {
+                                nhaCungCap = nccElement.GetString()?.ToLower() ?? ""; // Chuyển về chữ thường để dễ so sánh
+                            }
+
+                            // --- (Tùy chọn) Lấy Địa Chỉ Người Bán ---
+                            if (root.TryGetProperty("nbdchi", out JsonElement dcElement) && dcElement.ValueKind == JsonValueKind.String)
+                            {
+                                diaChiNB = dcElement.GetString();
+                            }
+
+                        }
+                        AppendLog($"✅ Lấy chi tiết thành công: Mã TC='{maTraCuu}', NCC='{nhaCungCap}'");
+
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        AppendLog($"❌ Lỗi parse JSON chi tiết khi tra cứu: {jsonEx.Message}");
+                        MessageBox.Show("Lỗi đọc dữ liệu chi tiết hóa đơn.", "Lỗi JSON", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    // 6. Xây dựng Link tra cứu
+                    string linkTraCuu = BuildTraCuuLink(mstNB, nhaCungCap, maTraCuu);
+
+                    if (string.IsNullOrEmpty(linkTraCuu))
+                    {
+                        AppendLog($"⚠️ Không thể tạo link tra cứu cho NCC: '{nhaCungCap}'");
+                        MessageBox.Show($"Không hỗ trợ tạo link tra cứu tự động cho nhà cung cấp '{nhaCungCap}'.\nBạn có thể tự truy cập trang tra cứu của họ.", "Chưa hỗ trợ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        // Vẫn có thể hiển thị form chỉ với mã tra cứu
+                        linkTraCuu = "(Không thể tạo tự động)";
+                    }
+
+                    // 7. Hiển thị Form tra cứu
+                    using (var traCuuForm = new TraCuuForm(maTraCuu, linkTraCuu, tenNB, mstNB, diaChiNB))
+                    {
+                        traCuuForm.ShowDialog(this); // Hiển thị form popup
+                    }
+                }
+                catch (Exception ex) // Bắt lỗi chung
+                {
+                    AppendLog($"❌ Lỗi không mong muốn khi xử lý tra cứu: {ex.ToString()}");
+                    MessageBox.Show($"Đã xảy ra lỗi: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally
+                {
+                    // --- Khôi phục trạng thái UI ---
+                    if (cellButton != null) cellButton.Value = "Tải"; // Trả lại text gốc
+                    dgvMain.Cursor = Cursors.Default; // Trả lại con trỏ chuột
+                }
+            }
+        }
+
+        // Hàm trợ giúp để xây dựng link tra cứu
+        private string BuildTraCuuLink(string mst, string nhaCungCap, string maTraCuu)
+        {
+            if (string.IsNullOrEmpty(mst) || string.IsNullOrEmpty(nhaCungCap)) // Mã tra cứu có thể trống tùy nhà cung cấp
+            {
+                return null;
+            }
+
+            // Chuyển về chữ thường để so sánh không phân biệt hoa thường
+            string nccLower = nhaCungCap.ToLower();
+
+            // --- DANH SÁCH CÁC MẪU URL TRA CỨU ---
+            // (Cần bổ sung và kiểm tra lại các URL này)
+            switch (nccLower)
+            {
+                case "tvan_misa":
+                    // Misa có thể có nhiều tên miền, đây là một ví dụ
+                    return $"https://{mst}.meinvoice.vn"; // Thường Misa tra cứu không cần mã trực tiếp trên URL chính
+                                                          // Hoặc nếu có trang tra cứu cụ thể:
+                                                          // return $"https://tracuu.meinvoice.vn/?mst={mst}&code={maTraCuu}"; // Ví dụ
+
+                case "tvan_bkav":
+                    return $"https://{mst}.bkav.com/TraCuu"; // Ví dụ, cần kiểm tra
+
+                case "tvan_vnpt": // Tên này không chuẩn, thường là tvan_buuchinhvt hoặc tương tự
+                case "tvan_buuchinhvt":
+                    // VNPT cũng có nhiều hệ thống, đây là ví dụ theo ảnh của bạn
+                    return $"https://{mst}-tt78.vnpt-invoice.com.vn"; // VNPT thường cũng không cần mã trên URL
+                                                                      // Hoặc trang tra cứu chung:
+                                                                      // return $"https://portal.vnpt-invoice.com.vn/Invoice/lookup"; // Ví dụ
+
+                case "tvan_viettel":
+                    return $"https://{mst}.viettel-einvoice.vn"; // Ví dụ
+                                                                 // return $"https://tracuu.viettel-einvoice.vn"; // Trang tra cứu chung
+
+                case "tvan_thaison":
+                    return $"https://{mst}.einvoice.vn/tracuu"; // Ví dụ
+
+                default:
+                    return null;
+            }
+        }
+    }
+
+    public class SearchResult
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("nbmst")]
+        public string Ma_so_thue { get; set; }
+
+        [JsonPropertyName("khmshdon")]
+        public int? Ky_hieu_ma_so { get; set; }
+
+        [JsonPropertyName("khhdon")]
+        public string Ky_hieu_hoa_don { get; set; }
+
+        [JsonPropertyName("shdon")]
+        public int? So_hoa_don { get; set; }
+
+        [JsonPropertyName("tdlap")]
+        public string Ngay_lap { get; set; }
+
+        [JsonPropertyName("nbten")]
+        public string Thong_tin_hoa_don { get; set; }
+
+        [JsonPropertyName("tgtcthue")]
+        public decimal? Tong_tien_chua_thue { get; set; }
+
+        [JsonPropertyName("tgtthue")]
+        public decimal? Tong_tien_thue { get; set; }
+
+        [JsonPropertyName("ttcktmai")]
+        public decimal? Tong_tien_chiet_khau { get; set; }
+
+        [JsonPropertyName("thttlphi")]
+        public List<decimal?> Tong_tien_phi { get; set; }
+
+        [JsonPropertyName("tgtttbso")]
+        public decimal? Tong_tien_thanh_toan { get; set; }
+
+        [JsonPropertyName("dvtte")]
+        public string Don_vi_tien_te { get; set; }
+
+        [JsonPropertyName("tthai")]
+        public int? Trang_thai_hoa_don { get; set; }
+
+        [JsonPropertyName("kqcht")]
+        public string Ket_qua_kiem_tra_hoa_don { get; set; }
+
+        [JsonPropertyName("shdgoc")]
+        public string Hoa_don_lien_quan { get; set; }
+
+        [JsonPropertyName("nmdchi")]
+        public string Thong_tin_lien_quan { get; set; }
+    }
+
+    public class SearchResponse
+    {
+        [JsonPropertyName("datas")]
+        public List<SearchResult> Datas { get; set; }
+
+        [JsonPropertyName("total")]
+        public int Total { get; set; }
+
+        [JsonPropertyName("state")]
+        public string State { get; set; }
+
+        [JsonPropertyName("time")]
+        public int Time { get; set; }
     }
 }
