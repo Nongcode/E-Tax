@@ -31,6 +31,8 @@ namespace E_Tax
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36";
         private bool disposed = false;
         private readonly DetailGridManager _detailGridManager;
+        private Dictionary<string, string> _invoiceNotes = new Dictionary<string, string>();
+        private string _notesFilePath = Path.Combine(Application.StartupPath, "notes.json");
 
         public Form1()
         {
@@ -40,7 +42,7 @@ namespace E_Tax
             dgvMain.DataError += DataGridView_DataError;
             dgvDetails.DataError += DataGridView_DataError;
             dgvMua.DataError += DataGridView_DataError;
-            dgvBan.DataError += DataGridView_DataError;       
+            dgvBan.DataError += DataGridView_DataError;
             dgvGiamThue.DataError += DataGridView_DataError;
 
             var handler = new HttpClientHandler()
@@ -57,7 +59,7 @@ namespace E_Tax
             _detailGridManager = new DetailGridManager(
                  client,
                  dgvDetails,
-                 dgvMua, 
+                 dgvMua,
                  dgvBan,
                  dgvVatNop,
                  downloadProgressBar, // ProgressBar dùng chung
@@ -66,7 +68,7 @@ namespace E_Tax
                  BrowserUserAgent     // UserAgent
              );
             ExcelPackage.License.SetNonCommercialPersonal("Your Name");
-            
+
             panelLogin.Visible = true;
             panelSearch.Visible = false;
         }
@@ -92,7 +94,8 @@ namespace E_Tax
         private async void Form1_Load(object sender, EventArgs e)
         {
             CheckForLicense();
-
+            LoadNotesFromFile();
+            dgvMain.AutoGenerateColumns = false;
             await LoadCaptchaAsync();
 
         }
@@ -421,7 +424,7 @@ namespace E_Tax
             return $"size=50&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={baseSearch}";
         }
 
-        
+
 
         public async Task ExportSearchResultsToExcelAsync(List<SearchResult> results, string filePath)
         {
@@ -1323,7 +1326,7 @@ namespace E_Tax
             dgvDetails.DataSource = null; // Xóa lưới chi tiết
             dgvMua.DataSource = null;     // Xóa lưới mua
             dgvBan.DataSource = null;     // Xóa lưới bán
-            dgvVatNop.DataSource = null;   
+            dgvVatNop.DataSource = null;
             dgvGiamThue.DataSource = null;
             _latestResults.Clear();
             _lastSuccessfulQueryString = "";
@@ -2564,6 +2567,253 @@ namespace E_Tax
                                       // if(e.Context == DataGridViewDataErrorContexts.Formatting) {
                                       //    dgv.Rows[e.RowIndex].Cells[e.ColumnIndex].Value = 0; // Hoặc null tùy kiểu cột
                                       // }
+        }
+
+        private async void btnCnKoPdf_Click(object sender, EventArgs e)
+        {
+            if (dgvMain.CurrentRow == null)
+            {
+                MessageBox.Show("Vui lòng chọn một hóa đơn từ danh sách để in PDF.", "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // --- LẤY DỮ LIỆU TỪ DÒNG ĐƯỢC CHỌN ---
+            SearchResult selectedInvoice = dgvMain.CurrentRow.DataBoundItem as SearchResult;
+
+            if (selectedInvoice == null)
+            {
+                MessageBox.Show("Không thể lấy dữ liệu hóa đơn từ dòng đã chọn.", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog("⚠️ Lỗi: Không thể ép kiểu DataBoundItem thành SearchResult tại btnCnKoPdf_Click."); // Sửa tên hàm trong log
+                return;
+            }
+
+            // --- KIỂM TRA THÔNG TIN HÓA ĐƠN CẦN THIẾT ---
+            if (string.IsNullOrEmpty(selectedInvoice.Ma_so_thue) ||
+                string.IsNullOrEmpty(selectedInvoice.Ky_hieu_hoa_don) ||
+                !selectedInvoice.So_hoa_don.HasValue ||
+                !selectedInvoice.Ky_hieu_ma_so.HasValue)
+            {
+                MessageBox.Show("Hóa đơn được chọn thiếu thông tin cần thiết (MST, Ký hiệu, Số HĐ, KH Mẫu số).", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                AppendLog($"⚠️ Hóa đơn ID {selectedInvoice.Id} thiếu thông tin để tải ZIP.");
+                return;
+            }
+
+            // --- QUẢN LÝ UI --- (SỬA TÊN NÚT)
+            btnCnKoPdf.Enabled = false;       // <-- Đã sửa
+            btnCnKoPdf.Text = "Đang tải...";  // <-- Đã sửa
+            downloadProgressBar.Visible = true;
+            downloadProgressBar.Style = ProgressBarStyle.Marquee;
+            lblDownloadStatus.Text = $"Đang tải HĐ {selectedInvoice.So_hoa_don}...";
+            lblDownloadStatus.Visible = true;
+
+            string tempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Print_{Guid.NewGuid()}"); // Thư mục tạm duy nhất
+            string extractPath = Path.Combine(tempDirectory, "extracted");
+            string zipFilePath = Path.Combine(tempDirectory, $"HD_{selectedInvoice.Ky_hieu_hoa_don}_{selectedInvoice.So_hoa_don}.zip");
+
+            try
+            {
+                Directory.CreateDirectory(tempDirectory); // Tạo thư mục tạm
+                Directory.CreateDirectory(extractPath);   // Tạo thư mục con để giải nén
+
+                AppendLog($"🖨️ Bắt đầu tải ZIP để IN: {selectedInvoice.Ky_hieu_hoa_don} - {selectedInvoice.So_hoa_don}"); // Cập nhật log
+
+                // --- TẢI FILE ZIP ---
+                bool downloadSuccess = await DownloadSingleInvoiceZipAsync(selectedInvoice, tempDirectory);
+
+                if (!downloadSuccess)
+                {
+                    MessageBox.Show("Không thể tải được file ZIP chứa hóa đơn.", "Lỗi tải file", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (!File.Exists(zipFilePath))
+                {
+                    MessageBox.Show($"File ZIP dự kiến ({Path.GetFileName(zipFilePath)}) không tồn tại sau khi tải.", "Lỗi tải file", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppendLog($"⚠️ File ZIP không tồn tại tại đường dẫn: {zipFilePath}");
+                    return;
+                }
+
+                // --- GIẢI NÉN ---
+                lblDownloadStatus.Text = "Đang giải nén file...";
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        ZipFile.ExtractToDirectory(zipFilePath, extractPath, true); // Giải nén và ghi đè
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"❌ Lỗi giải nén ZIP (Task): {ex.ToString()}");
+                        throw new Exception($"Lỗi khi giải nén file ZIP: {ex.Message}", ex);
+                    }
+                });
+
+                AppendLog($"⚙️ Đã giải nén file: {zipFilePath} vào {extractPath}");
+
+                // --- TÌM VÀ IN FILE PDF --- (THAY THẾ CODE LƯU BẰNG CODE IN)
+                lblDownloadStatus.Text = "Đang tìm file PDF...";
+                string[] pdfFiles = Directory.GetFiles(extractPath, "*.pdf", SearchOption.AllDirectories);
+                string pdfPath = null;
+
+                if (pdfFiles.Length > 0)
+                {
+                    pdfPath = pdfFiles[0]; // Lấy file PDF đầu tiên tìm thấy
+                    AppendLog($"✅ Tìm thấy file PDF: {pdfPath}. Đang gửi đến máy in...");
+                    lblDownloadStatus.Text = "Đang gửi file đến máy in...";
+
+                    try
+                    {
+                        // Tạo một tiến trình mới để in file
+                        System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(pdfPath)
+                        {
+                            Verb = "print", // Sử dụng động từ "print" của Windows
+                            UseShellExecute = true,
+                            CreateNoWindow = true // Không hiển thị cửa sổ của phần mềm PDF
+                        };
+                        System.Diagnostics.Process.Start(psi);
+
+                        AppendLog($"✅ Đã gửi lệnh in cho file: {pdfPath}");
+                        MessageBox.Show($"Đã gửi hóa đơn (file PDF) đến máy in mặc định của bạn.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception exPrint)
+                    {
+                        // Bắt lỗi nếu không thể tự động in (ví dụ: không có phần mềm đọc PDF)
+                        AppendLog($"⚠️ Lỗi khi tự động in: {exPrint.Message}");
+                        MessageBox.Show($"Không thể tự động gửi lệnh in. Lỗi: {exPrint.Message}\n\nFile PDF đã được lưu tạm tại:\n{pdfPath}\n(File này sẽ bị xóa khi đóng chương trình)", "Lỗi In", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+                else
+                {
+                    // Không tìm thấy file PDF nào
+                    AppendLog("⚠️ Không tìm thấy file PDF trong file ZIP.");
+                    MessageBox.Show("Không tìm thấy file PDF nào trong file ZIP của hóa đơn này. Không thể in.", "Không tìm thấy PDF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                // --- KẾT THÚC PHẦN THAY THẾ ---
+            }
+            catch (Exception ex) // Bắt các lỗi tổng quát (bao gồm cả lỗi giải nén)
+            {
+                AppendLog($"❌ Lỗi không mong muốn trong btnCnKoPdf_Click: {ex.ToString()}"); // Sửa tên hàm trong log
+                MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // --- KHÔI PHỤC UI --- (SỬA TÊN NÚT)
+                btnCnKoPdf.Enabled = true;     // <-- Đã sửa
+                btnCnKoPdf.Text = "In PDF"; // <-- Đã sửa (bạn có thể đổi Text này thành "In HĐ" nếu muốn)
+                downloadProgressBar.Visible = false;
+                lblDownloadStatus.Visible = false;
+                lblDownloadStatus.Text = "";
+
+                // --- DỌN DẸP THƯ MỤC TẠM ---
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                    {
+                        Directory.Delete(tempDirectory, true);
+                        AppendLog($"🧹 Đã dọn dẹp thư mục tạm: {tempDirectory}");
+                    }
+                }
+                catch (Exception exClean)
+                {
+                    AppendLog($"⚠️ Không thể dọn dẹp thư mục tạm PDF: {exClean.Message}");
+                }
+            }
+        }
+
+        private void LoadNotesFromFile()
+        {
+            try
+            {
+                if (File.Exists(_notesFilePath))
+                {
+                    AppendLog($"Đang tải ghi chú từ file: {_notesFilePath}");
+                    string json = File.ReadAllText(_notesFilePath);
+                    _invoiceNotes = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
+                    AppendLog($"✅ Đã tải {_invoiceNotes.Count} ghi chú.");
+                }
+                else
+                {
+                    _invoiceNotes = new Dictionary<string, string>(); // Khởi tạo nếu file không tồn tại
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi khi tải file ghi chú: {ex.Message}");
+                _invoiceNotes = new Dictionary<string, string>(); // Dùng bộ nhớ trống nếu lỗi
+            }
+        }
+
+        // Hàm này dùng để LƯU ghi chú ra file
+        private void SaveNotesToFile()
+        {
+            try
+            {
+                AppendLog("Đang lưu ghi chú ra file...");
+                string json = JsonSerializer.Serialize(_invoiceNotes, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_notesFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi khi lưu file ghi chú: {ex.Message}");
+                MessageBox.Show($"Không thể lưu file ghi chú: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void dgvMain_SelectionChanged(object sender, EventArgs e)
+        {
+            if (dgvMain.CurrentRow != null && dgvMain.CurrentRow.DataBoundItem is SearchResult selectedInvoice)
+            {
+                // 1. Lấy ID của hóa đơn
+                string invoiceId = selectedInvoice.Id;
+
+                // 2. Tìm ghi chú cho ID này trong bộ nhớ
+                if (_invoiceNotes.TryGetValue(invoiceId, out string note))
+                {
+                    // 3a. Nếu tìm thấy, hiển thị nó
+                    txtGhiChu.Text = note; // <-- THAY TÊN NẾU CẦN
+                }
+                else
+                {
+                    // 3b. Nếu không, xóa trắng ô
+                    txtGhiChu.Text = ""; // <-- THAY TÊN NẾU CẦN
+                }
+            }
+            else
+            {
+                txtGhiChu.Text = "";
+            }
+        }
+
+        private void btnMoGhiChu_Click(object sender, EventArgs e)
+        {
+            // 1. Lấy hóa đơn đang được chọn
+            if (dgvMain.CurrentRow == null || !(dgvMain.CurrentRow.DataBoundItem is SearchResult selectedInvoice))
+            {
+                MessageBox.Show("Vui lòng chọn một hóa đơn để ghi chú.", "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 2. Lấy ID của hóa đơn và nội dung ghi chú
+            string invoiceId = selectedInvoice.Id;
+            string noteText = txtGhiChu.Text; // <-- THAY TÊN NẾU CẦN
+
+            // 3. Lưu vào bộ nhớ (Dictionary)
+            // Nếu đã có ghi chú cũ, nó sẽ bị ghi đè. Nếu chưa có, nó sẽ được thêm mới.
+            _invoiceNotes[invoiceId] = noteText;
+            SaveNotesToFile();
+
+            MessageBox.Show("Đã lưu ghi chú thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            AppendLog($"✅ Đã lưu ghi chú cho HĐ ID: {invoiceId}");
+        }
+
+        private void pictureBox3_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void rbAllInvoices_CheckedChanged(object sender, EventArgs e)
+        {
+
         }
     }
 

@@ -40,7 +40,6 @@ namespace E_Tax
         private DataGridViewTextBoxColumn colDgvTienChuaThue;
         private DataGridViewTextBoxColumn colDgvTienThue;
         private DataGridViewTextBoxColumn colDgvTongTien;
-        // (Thêm các cột khác nếu có)
         private DataGridViewButtonColumn colDgvTraCuu;
 
         /// <summary>
@@ -69,7 +68,6 @@ namespace E_Tax
             picCaptcha = new PictureBox();
             panelSearch = new Panel();
             mainSplitContainer = new SplitContainer();
-            pictureBox3 = new PictureBox();
             lblKyBaoCao = new Label();
             txtThang = new TextBox();
             lblNam = new Label();
@@ -92,7 +90,18 @@ namespace E_Tax
             tabControlMain = new TabControl();
             tabTongHop = new TabPage();
             dgvMain = new DataGridView();
+            colDgvSTT = new DataGridViewTextBoxColumn();
+            colDgvLoaiHD = new DataGridViewTextBoxColumn();
             colDgvTraCuu = new DataGridViewButtonColumn();
+            colDgvMST = new DataGridViewTextBoxColumn();
+            colDgvKHMauSo = new DataGridViewTextBoxColumn();
+            colDgvKHHoaDon = new DataGridViewTextBoxColumn();
+            colDgvSoHoaDon = new DataGridViewTextBoxColumn();
+            colDgvNgayLap = new DataGridViewTextBoxColumn();
+            colDgvThongTinHD = new DataGridViewTextBoxColumn();
+            colDgvTienChuaThue = new DataGridViewTextBoxColumn();
+            colDgvTienThue = new DataGridViewTextBoxColumn();
+            colDgvTongTien = new DataGridViewTextBoxColumn();
             tabChiTiet = new TabPage();
             dgvDetails = new DataGridView();
             tabDkMua = new TabPage();
@@ -125,7 +134,6 @@ namespace E_Tax
             ((System.ComponentModel.ISupportInitialize)mainSplitContainer).BeginInit();
             mainSplitContainer.Panel1.SuspendLayout();
             mainSplitContainer.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).BeginInit();
             gbInvoiceType.SuspendLayout();
             tabControlMain.SuspendLayout();
             tabTongHop.SuspendLayout();
@@ -135,11 +143,11 @@ namespace E_Tax
             tabDkMua.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvMua).BeginInit();
             tabBKBan.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)dgvVatNop).BeginInit();
-            tabVATNop.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)dgvGiamThue).BeginInit();
-            tabGiamThue.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvBan).BeginInit();
+            tabVATNop.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgvVatNop).BeginInit();
+            tabGiamThue.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)dgvGiamThue).BeginInit();
             gbNguoiBan.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             SuspendLayout();
@@ -355,7 +363,6 @@ namespace E_Tax
             // 
             // mainSplitContainer.Panel1
             // 
-            mainSplitContainer.Panel1.Controls.Add(pictureBox3);
             mainSplitContainer.Panel1.Controls.Add(lblKyBaoCao);
             mainSplitContainer.Panel1.Controls.Add(txtThang);
             mainSplitContainer.Panel1.Controls.Add(lblNam);
@@ -381,61 +388,54 @@ namespace E_Tax
             mainSplitContainer.SplitterDistance = 650;
             mainSplitContainer.TabIndex = 30;
             // 
-            // pictureBox3
-            // 
-            pictureBox3.Image = (Image)resources.GetObject("pictureBox3.Image");
-            pictureBox3.Location = new Point(499, 10);
-            pictureBox3.Name = "pictureBox3";
-            pictureBox3.Size = new Size(76, 81);
-            pictureBox3.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox3.TabIndex = 40;
-            pictureBox3.TabStop = false;
-            // 
             // lblKyBaoCao
             // 
             lblKyBaoCao.AutoSize = true;
-            lblKyBaoCao.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            lblKyBaoCao.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            lblKyBaoCao.ForeColor = Color.FromArgb(0, 117, 214);
             lblKyBaoCao.Location = new Point(12, 16);
             lblKyBaoCao.Name = "lblKyBaoCao";
-            lblKyBaoCao.Size = new Size(73, 17);
+            lblKyBaoCao.Size = new Size(80, 20);
             lblKyBaoCao.TabIndex = 30;
             lblKyBaoCao.Text = "Kỳ báo cáo";
             // 
             // txtThang
             // 
-            txtThang.Location = new Point(12, 40);
+            txtThang.Location = new Point(17, 47);
             txtThang.Name = "txtThang";
             txtThang.PlaceholderText = "Tháng ";
-            txtThang.Size = new Size(75, 23);
+            txtThang.Size = new Size(88, 23);
             txtThang.TabIndex = 31;
             txtThang.Leave += txtMonthYear_Leave;
             // 
             // lblNam
             // 
             lblNam.AutoSize = true;
-            lblNam.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblNam.Location = new Point(119, 16);
+            lblNam.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            lblNam.ForeColor = Color.FromArgb(0, 117, 214);
+            lblNam.Location = new Point(146, 16);
             lblNam.Name = "lblNam";
-            lblNam.Size = new Size(36, 17);
+            lblNam.Size = new Size(41, 20);
             lblNam.TabIndex = 34;
             lblNam.Text = "Năm";
             // 
             // txtNam
             // 
-            txtNam.Location = new Point(119, 40);
+            txtNam.Location = new Point(149, 47);
             txtNam.Name = "txtNam";
             txtNam.PlaceholderText = "Năm";
-            txtNam.Size = new Size(77, 23);
+            txtNam.Size = new Size(97, 23);
             txtNam.TabIndex = 33;
             txtNam.Leave += txtMonthYear_Leave;
             // 
             // label1
             // 
             label1.AutoSize = true;
-            label1.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label1.Location = new Point(12, 74);
+            label1.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            label1.ForeColor = Color.FromArgb(0, 117, 214);
+            label1.Location = new Point(339, 16);
             label1.Name = "label1";
-            label1.Size = new Size(55, 17);
+            label1.Size = new Size(61, 20);
             label1.TabIndex = 22;
             label1.Text = "Từ ngày";
             // 
@@ -444,18 +444,19 @@ namespace E_Tax
             dtpFromDate.CustomFormat = "dd/MM/yyyy";
             dtpFromDate.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             dtpFromDate.Format = DateTimePickerFormat.Custom;
-            dtpFromDate.Location = new Point(12, 94);
+            dtpFromDate.Location = new Point(340, 47);
             dtpFromDate.Name = "dtpFromDate";
-            dtpFromDate.Size = new Size(103, 23);
+            dtpFromDate.Size = new Size(121, 23);
             dtpFromDate.TabIndex = 24;
             // 
             // label2
             // 
             label2.AutoSize = true;
-            label2.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            label2.Location = new Point(133, 74);
+            label2.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            label2.ForeColor = Color.FromArgb(0, 117, 214);
+            label2.Location = new Point(505, 15);
             label2.Name = "label2";
-            label2.Size = new Size(63, 17);
+            label2.Size = new Size(70, 20);
             label2.TabIndex = 23;
             label2.Text = "Đến ngày";
             // 
@@ -464,51 +465,56 @@ namespace E_Tax
             dtpToDate.CustomFormat = "dd/MM/yyyy";
             dtpToDate.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             dtpToDate.Format = DateTimePickerFormat.Custom;
-            dtpToDate.Location = new Point(133, 94);
+            dtpToDate.Location = new Point(505, 47);
             dtpToDate.Name = "dtpToDate";
-            dtpToDate.Size = new Size(96, 23);
+            dtpToDate.Size = new Size(121, 23);
             dtpToDate.TabIndex = 25;
             // 
             // btnTaiHDGoc
             // 
+            btnTaiHDGoc.BackColor = SystemColors.GradientActiveCaption;
             btnTaiHDGoc.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnTaiHDGoc.Location = new Point(508, 189);
+            btnTaiHDGoc.Location = new Point(506, 165);
             btnTaiHDGoc.Name = "btnTaiHDGoc";
             btnTaiHDGoc.Size = new Size(130, 30);
             btnTaiHDGoc.TabIndex = 10;
             btnTaiHDGoc.Text = "Tải tất cả HĐ Gốc";
-            btnTaiHDGoc.UseVisualStyleBackColor = true;
+            btnTaiHDGoc.UseVisualStyleBackColor = false;
             btnTaiHDGoc.Click += btnTaiHDGoc_Click;
             // 
             // btnNenZip
             // 
+            btnNenZip.BackColor = SystemColors.GradientActiveCaption;
             btnNenZip.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnNenZip.Location = new Point(341, 189);
+            btnNenZip.Location = new Point(111, 166);
             btnNenZip.Name = "btnNenZip";
             btnNenZip.Size = new Size(76, 30);
             btnNenZip.TabIndex = 9;
             btnNenZip.Text = "Mở file zip";
-            btnNenZip.UseVisualStyleBackColor = true;
+            btnNenZip.UseVisualStyleBackColor = false;
             // 
             // btnCnKoPdf
             // 
+            btnCnKoPdf.BackColor = SystemColors.GradientActiveCaption;
             btnCnKoPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnCnKoPdf.Location = new Point(423, 189);
+            btnCnKoPdf.Location = new Point(193, 165);
             btnCnKoPdf.Name = "btnCnKoPdf";
             btnCnKoPdf.Size = new Size(76, 30);
             btnCnKoPdf.TabIndex = 8;
             btnCnKoPdf.Text = "In pdf";
-            btnCnKoPdf.UseVisualStyleBackColor = true;
+            btnCnKoPdf.UseVisualStyleBackColor = false;
+            btnCnKoPdf.Click += btnCnKoPdf_Click;
             // 
             // btnXemHD
             // 
+            btnXemHD.BackColor = SystemColors.GradientActiveCaption;
             btnXemHD.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnXemHD.Location = new Point(16, 189);
+            btnXemHD.Location = new Point(8, 166);
             btnXemHD.Name = "btnXemHD";
-            btnXemHD.Size = new Size(95, 30);
+            btnXemHD.Size = new Size(97, 30);
             btnXemHD.TabIndex = 7;
             btnXemHD.Text = "Xem HĐ";
-            btnXemHD.UseVisualStyleBackColor = true;
+            btnXemHD.UseVisualStyleBackColor = false;
             btnXemHD.Click += btnXemHD_Click;
             // 
             // gbInvoiceType
@@ -517,9 +523,9 @@ namespace E_Tax
             gbInvoiceType.Controls.Add(rbBought);
             gbInvoiceType.Controls.Add(rbSold);
             gbInvoiceType.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            gbInvoiceType.Location = new Point(16, 123);
+            gbInvoiceType.Location = new Point(12, 85);
             gbInvoiceType.Name = "gbInvoiceType";
-            gbInvoiceType.Size = new Size(430, 60);
+            gbInvoiceType.Size = new Size(522, 60);
             gbInvoiceType.TabIndex = 29;
             gbInvoiceType.TabStop = false;
             gbInvoiceType.Text = "Chọn loại hóa đơn";
@@ -528,18 +534,19 @@ namespace E_Tax
             // 
             rbAllInvoices.AutoSize = true;
             rbAllInvoices.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            rbAllInvoices.Location = new Point(290, 25);
+            rbAllInvoices.Location = new Point(374, 25);
             rbAllInvoices.Name = "rbAllInvoices";
             rbAllInvoices.Size = new Size(104, 19);
             rbAllInvoices.TabIndex = 2;
             rbAllInvoices.Text = "Tất cả hoá đơn";
             rbAllInvoices.UseVisualStyleBackColor = true;
+            rbAllInvoices.CheckedChanged += rbAllInvoices_CheckedChanged;
             // 
             // rbBought
             // 
             rbBought.AutoSize = true;
             rbBought.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            rbBought.Location = new Point(155, 25);
+            rbBought.Location = new Point(198, 24);
             rbBought.Name = "rbBought";
             rbBought.Size = new Size(120, 19);
             rbBought.TabIndex = 1;
@@ -561,32 +568,35 @@ namespace E_Tax
             // 
             // btnLeftSearch
             // 
-            btnLeftSearch.Location = new Point(452, 134);
+            btnLeftSearch.BackColor = SystemColors.ScrollBar;
+            btnLeftSearch.Location = new Point(540, 91);
             btnLeftSearch.Name = "btnLeftSearch";
-            btnLeftSearch.Size = new Size(96, 49);
+            btnLeftSearch.Size = new Size(96, 54);
             btnLeftSearch.TabIndex = 35;
             btnLeftSearch.Text = "Tìm kiếm";
-            btnLeftSearch.UseVisualStyleBackColor = true;
+            btnLeftSearch.UseVisualStyleBackColor = false;
             btnLeftSearch.Click += btnLeftSearch_Click;
             // 
             // btnExportChiTiet
             // 
-            btnExportChiTiet.Location = new Point(113, 189);
+            btnExportChiTiet.BackColor = SystemColors.GradientActiveCaption;
+            btnExportChiTiet.Location = new Point(278, 165);
             btnExportChiTiet.Name = "btnExportChiTiet";
             btnExportChiTiet.Size = new Size(102, 30);
             btnExportChiTiet.TabIndex = 36;
             btnExportChiTiet.Text = "Tải chi tiết HĐ";
-            btnExportChiTiet.UseVisualStyleBackColor = true;
+            btnExportChiTiet.UseVisualStyleBackColor = false;
             btnExportChiTiet.Click += btnExportChiTiet_Click;
             // 
             // btnExportDS
             // 
-            btnExportDS.Location = new Point(221, 189);
+            btnExportDS.BackColor = SystemColors.GradientActiveCaption;
+            btnExportDS.Location = new Point(386, 166);
             btnExportDS.Name = "btnExportDS";
             btnExportDS.Size = new Size(114, 30);
             btnExportDS.TabIndex = 37;
             btnExportDS.Text = "Tải danh sách HĐ";
-            btnExportDS.UseVisualStyleBackColor = true;
+            btnExportDS.UseVisualStyleBackColor = false;
             btnExportDS.Click += btnExportDS_Click;
             // 
             // tabControlMain
@@ -598,19 +608,20 @@ namespace E_Tax
             tabControlMain.Controls.Add(tabBKBan);
             tabControlMain.Controls.Add(tabVATNop);
             tabControlMain.Controls.Add(tabGiamThue);
-            tabControlMain.Location = new Point(12, 225);
+            tabControlMain.ItemSize = new Size(300, 30);
+            tabControlMain.Location = new Point(3, 231);
             tabControlMain.Name = "tabControlMain";
             tabControlMain.SelectedIndex = 0;
-            tabControlMain.Size = new Size(950, 390);
+            tabControlMain.Size = new Size(950, 412);
             tabControlMain.TabIndex = 38;
             // 
             // tabTongHop
             // 
             tabTongHop.Controls.Add(dgvMain);
-            tabTongHop.Location = new Point(4, 24);
+            tabTongHop.Location = new Point(4, 34);
             tabTongHop.Name = "tabTongHop";
             tabTongHop.Padding = new Padding(3);
-            tabTongHop.Size = new Size(942, 362);
+            tabTongHop.Size = new Size(942, 374);
             tabTongHop.TabIndex = 0;
             tabTongHop.Text = "Tổng hợp";
             tabTongHop.UseVisualStyleBackColor = true;
@@ -621,141 +632,117 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.AutoGenerateColumns = false;
-
-            colDgvSTT = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này ở đầu file Designer
-            colDgvSTT.Name = "colDgvSTT";
-            colDgvSTT.HeaderText = "STT";
-            colDgvSTT.Width = 40;
-            colDgvSTT.ReadOnly = true;
-            colDgvSTT.Frozen = true; // Cố định cột STT
-
-            // Cột Loại HĐ (Không liên kết dữ liệu)
-            colDgvLoaiHD = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvLoaiHD.Name = "colDgvLoaiHD";
-            colDgvLoaiHD.HeaderText = "Loại HĐ";
-            colDgvLoaiHD.Width = 60;
-            colDgvLoaiHD.ReadOnly = true;
-
-            // Cột Mã số thuế
-            colDgvMST = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvMST.Name = "colDgvMST";
-            colDgvMST.HeaderText = "Mã số thuế";
-            colDgvMST.DataPropertyName = "Ma_so_thue"; // *** QUAN TRỌNG: Liên kết với thuộc tính SearchResult ***
-            colDgvMST.Width = 100;
-            colDgvMST.ReadOnly = true;
-
-            // Cột Button Tra cứu
-            colDgvTraCuu = new DataGridViewButtonColumn(); // Giả sử bạn khai báo biến này
-            colDgvTraCuu.Name = "colDgvTraCuu"; // *** Đặt tên cột này để code cũ hoạt động ***
-            colDgvTraCuu.HeaderText = "Tra cứu";
-            colDgvTraCuu.Text = "Tải"; // Chữ hiển thị trên nút
-            colDgvTraCuu.UseColumnTextForButtonValue = true; // Luôn hiển thị chữ "Tải"
-            colDgvTraCuu.Width = 90;
-            colDgvTraCuu.ReadOnly = false; // Button thì không nên ReadOnly
-
-            // Cột Ký hiệu mẫu số
-            colDgvKHMauSo = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvKHMauSo.Name = "colDgvKHMauSo";
-            colDgvKHMauSo.HeaderText = "KH Mẫu số";
-            colDgvKHMauSo.DataPropertyName = "Ky_hieu_ma_so"; // *** Liên kết ***
-            colDgvKHMauSo.Width = 60;
-            colDgvKHMauSo.ReadOnly = true;
-
-            // Cột Ký hiệu hóa đơn
-            colDgvKHHoaDon = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvKHHoaDon.Name = "colDgvKHHoaDon";
-            colDgvKHHoaDon.HeaderText = "Ký hiệu HĐ";
-            colDgvKHHoaDon.DataPropertyName = "Ky_hieu_hoa_don"; // *** Liên kết ***
-            colDgvKHHoaDon.Width = 80;
-            colDgvKHHoaDon.ReadOnly = true;
-
-            // Cột Số hóa đơn
-            colDgvSoHoaDon = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvSoHoaDon.Name = "colDgvSoHoaDon";
-            colDgvSoHoaDon.HeaderText = "Số HĐ";
-            colDgvSoHoaDon.DataPropertyName = "So_hoa_don"; // *** Liên kết ***
-            colDgvSoHoaDon.Width = 80;
-            colDgvSoHoaDon.ReadOnly = true;
-
-            // Cột Ngày lập
-            colDgvNgayLap = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvNgayLap.Name = "colDgvNgayLap"; // *** Đặt tên cột này để code cũ hoạt động ***
-            colDgvNgayLap.HeaderText = "Ngày lập";
-            colDgvNgayLap.DataPropertyName = "Ngay_lap"; // *** Liên kết ***
-            colDgvNgayLap.Width = 90;
-            colDgvNgayLap.ReadOnly = true;
-            // colDgvNgayLap.DefaultCellStyle.Format = "dd/MM/yyyy"; // Có thể định dạng ở đây hoặc trong code Form1.cs
-
-            // Cột Thông tin hóa đơn (Tên người bán/mua)
-            colDgvThongTinHD = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvThongTinHD.Name = "colDgvThongTinHD";
-            colDgvThongTinHD.HeaderText = "Thông tin HĐ";
-            colDgvThongTinHD.DataPropertyName = "Thong_tin_hoa_don"; // *** Liên kết ***
-            colDgvThongTinHD.Width = 250;
-            colDgvThongTinHD.ReadOnly = true;
-
-            // --- Thêm các cột tiền tệ (ví dụ) ---
-            colDgvTienChuaThue = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvTienChuaThue.Name = "colDgvTienChuaThue";
-            colDgvTienChuaThue.HeaderText = "Tiền chưa thuế";
-            colDgvTienChuaThue.DataPropertyName = "Tong_tien_chua_thue"; // *** Liên kết ***
-            colDgvTienChuaThue.Width = 110;
-            colDgvTienChuaThue.ReadOnly = true;
-            colDgvTienChuaThue.DefaultCellStyle.Format = "#,##0"; // Định dạng số
-            colDgvTienChuaThue.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight; // Căn phải
-
-            colDgvTienThue = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvTienThue.Name = "colDgvTienThue";
-            colDgvTienThue.HeaderText = "Tiền thuế";
-            colDgvTienThue.DataPropertyName = "Tong_tien_thue"; // *** Liên kết ***
-            colDgvTienThue.Width = 100;
-            colDgvTienThue.ReadOnly = true;
-            colDgvTienThue.DefaultCellStyle.Format = "#,##0";
-            colDgvTienThue.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-
-            colDgvTongTien = new DataGridViewTextBoxColumn(); // Giả sử bạn khai báo biến này
-            colDgvTongTien.Name = "colDgvTongTien";
-            colDgvTongTien.HeaderText = "Tổng tiền TT";
-            colDgvTongTien.DataPropertyName = "Tong_tien_thanh_toan"; // *** Liên kết ***
-            colDgvTongTien.Width = 120;
-            colDgvTongTien.ReadOnly = true;
-            colDgvTongTien.DefaultCellStyle.Format = "#,##0";
-            colDgvTongTien.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
-
-
-            // *** THAY ĐỔI DÒNG NÀY: Sử dụng các biến cột đã cấu hình ***
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] {
-                colDgvSTT,              // Cột STT
-                colDgvLoaiHD,           // Cột Loại HĐ
-                colDgvMST,              // Cột MST
-                colDgvTraCuu,            // Cột Button Tra cứu
-                colDgvKHMauSo,          // Cột KH Mẫu số
-                colDgvKHHoaDon,         // Cột KH Hóa đơn
-                colDgvSoHoaDon,         // Cột Số HĐ
-                colDgvNgayLap,          // Cột Ngày lập
-                colDgvThongTinHD,       // Cột Thông tin HĐ
-                colDgvTienChuaThue,     // Cột Tiền chưa thuế
-                colDgvTienThue,         // Cột Tiền thuế
-                colDgvTongTien       // Cột Tổng tiền TT
-                
-            });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvLoaiHD, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
             dgvMain.ReadOnly = true;
             dgvMain.RowHeadersVisible = false;
-            dgvMain.Size = new Size(936, 356);
+            dgvMain.Size = new Size(936, 368);
             dgvMain.TabIndex = 0;
             dgvMain.CellContentClick += dgvMain_CellContentClick;
+            dgvMain.SelectionChanged += dgvMain_SelectionChanged;
+            // 
+            // colDgvSTT
+            // 
+            colDgvSTT.Frozen = true;
+            colDgvSTT.HeaderText = "STT";
+            colDgvSTT.Name = "colDgvSTT";
+            colDgvSTT.ReadOnly = true;
+            colDgvSTT.Width = 40;
+            // 
+            // colDgvLoaiHD
+            // 
+            colDgvLoaiHD.HeaderText = "Loại HĐ";
+            colDgvLoaiHD.Name = "colDgvLoaiHD";
+            colDgvLoaiHD.ReadOnly = true;
+            colDgvLoaiHD.Width = 60;
+            // 
+            // colDgvTraCuu
+            // 
+            colDgvTraCuu.HeaderText = "Tra cứu";
+            colDgvTraCuu.Name = "colDgvTraCuu";
+            colDgvTraCuu.ReadOnly = true;
+            colDgvTraCuu.Text = "Tải";
+            colDgvTraCuu.UseColumnTextForButtonValue = true;
+            colDgvTraCuu.Width = 90;
+            // 
+            // colDgvMST
+            // 
+            colDgvMST.DataPropertyName = "Ma_so_thue";
+            colDgvMST.HeaderText = "MST";
+            colDgvMST.Name = "colDgvMST";
+            colDgvMST.ReadOnly = true;
+            // 
+            // colDgvKHMauSo
+            // 
+            colDgvKHMauSo.DataPropertyName = "Ky_hieu_ma_so";
+            colDgvKHMauSo.HeaderText = "Ký hiệu Mẫu số";
+            colDgvKHMauSo.Name = "colDgvKHMauSo";
+            colDgvKHMauSo.ReadOnly = true;
+            colDgvKHMauSo.Width = 80;
+            // 
+            // colDgvKHHoaDon
+            // 
+            colDgvKHHoaDon.DataPropertyName = "Ky_hieu_hoa_don";
+            colDgvKHHoaDon.HeaderText = "Ký hiệu HĐ";
+            colDgvKHHoaDon.Name = "colDgvKHHoaDon";
+            colDgvKHHoaDon.ReadOnly = true;
+            colDgvKHHoaDon.Width = 80;
+            // 
+            // colDgvSoHoaDon
+            // 
+            colDgvSoHoaDon.DataPropertyName = "So_hoa_don";
+            colDgvSoHoaDon.HeaderText = "Số HĐ";
+            colDgvSoHoaDon.Name = "colDgvSoHoaDon";
+            colDgvSoHoaDon.ReadOnly = true;
+            colDgvSoHoaDon.Width = 80;
+            // 
+            // colDgvNgayLap
+            // 
+            colDgvNgayLap.DataPropertyName = "Ngay_lap";
+            colDgvNgayLap.HeaderText = "Ngày lập";
+            colDgvNgayLap.Name = "colDgvNgayLap";
+            colDgvNgayLap.ReadOnly = true;
+            // 
+            // colDgvThongTinHD
+            // 
+            colDgvThongTinHD.DataPropertyName = "Thong_tin_hoa_don";
+            colDgvThongTinHD.HeaderText = "Thông tin HĐ";
+            colDgvThongTinHD.Name = "colDgvThongTinHD";
+            colDgvThongTinHD.ReadOnly = true;
+            colDgvThongTinHD.Width = 200;
+            // 
+            // colDgvTienChuaThue
+            // 
+            colDgvTienChuaThue.DataPropertyName = "Tong_tien_chua_thue";
+            colDgvTienChuaThue.HeaderText = "Tiền chưa thuế";
+            colDgvTienChuaThue.Name = "colDgvTienChuaThue";
+            colDgvTienChuaThue.ReadOnly = true;
+            colDgvTienChuaThue.Width = 120;
+            // 
+            // colDgvTienThue
+            // 
+            colDgvTienThue.DataPropertyName = "Tong_tien_thue";
+            colDgvTienThue.HeaderText = "Tiền thuế";
+            colDgvTienThue.Name = "colDgvTienThue";
+            colDgvTienThue.ReadOnly = true;
+            // 
+            // colDgvTongTien
+            // 
+            colDgvTongTien.DataPropertyName = "Tong_tien_thanh_toan";
+            colDgvTongTien.HeaderText = "Tổng tiền";
+            colDgvTongTien.Name = "colDgvTongTien";
+            colDgvTongTien.ReadOnly = true;
+            colDgvTongTien.Width = 120;
             // 
             // tabChiTiet
             // 
             tabChiTiet.Controls.Add(dgvDetails);
-            tabChiTiet.Location = new Point(4, 24);
+            tabChiTiet.Location = new Point(4, 34);
             tabChiTiet.Name = "tabChiTiet";
             tabChiTiet.Padding = new Padding(3);
-            tabChiTiet.Size = new Size(942, 362);
+            tabChiTiet.Size = new Size(942, 374);
             tabChiTiet.TabIndex = 1;
             tabChiTiet.Text = "Chi tiết";
             tabChiTiet.UseVisualStyleBackColor = true;
@@ -771,15 +758,15 @@ namespace E_Tax
             dgvDetails.Name = "dgvDetails";
             dgvDetails.ReadOnly = true;
             dgvDetails.RowHeadersVisible = false;
-            dgvDetails.Size = new Size(936, 356);
+            dgvDetails.Size = new Size(936, 368);
             dgvDetails.TabIndex = 0;
             // 
             // tabDkMua
             // 
             tabDkMua.Controls.Add(dgvMua);
-            tabDkMua.Location = new Point(4, 24);
+            tabDkMua.Location = new Point(4, 34);
             tabDkMua.Name = "tabDkMua";
-            tabDkMua.Size = new Size(942, 362);
+            tabDkMua.Size = new Size(942, 374);
             tabDkMua.TabIndex = 2;
             tabDkMua.Text = "Bk mua";
             tabDkMua.UseVisualStyleBackColor = true;
@@ -795,15 +782,15 @@ namespace E_Tax
             dgvMua.Name = "dgvMua";
             dgvMua.ReadOnly = true;
             dgvMua.RowHeadersVisible = false;
-            dgvMua.Size = new Size(942, 362);
+            dgvMua.Size = new Size(942, 374);
             dgvMua.TabIndex = 0;
             // 
             // tabBKBan
             // 
             tabBKBan.Controls.Add(dgvBan);
-            tabBKBan.Location = new Point(4, 24);
+            tabBKBan.Location = new Point(4, 34);
             tabBKBan.Name = "tabBKBan";
-            tabBKBan.Size = new Size(942, 362);
+            tabBKBan.Size = new Size(942, 374);
             tabBKBan.TabIndex = 3;
             tabBKBan.Text = "BK bán";
             tabBKBan.UseVisualStyleBackColor = true;
@@ -819,19 +806,21 @@ namespace E_Tax
             dgvBan.Name = "dgvBan";
             dgvBan.ReadOnly = true;
             dgvBan.RowHeadersVisible = false;
-            dgvBan.Size = new Size(942, 362);
+            dgvBan.Size = new Size(942, 374);
             dgvBan.TabIndex = 0;
             // 
             // tabVATNop
             // 
             tabVATNop.Controls.Add(dgvVatNop);
-            tabVATNop.Location = new Point(4, 24);
+            tabVATNop.Location = new Point(4, 34);
             tabVATNop.Name = "tabVATNop";
-            tabVATNop.Size = new Size(942, 362);
+            tabVATNop.Size = new Size(942, 374);
             tabVATNop.TabIndex = 5;
             tabVATNop.Text = "Bảng kê Thuế";
             tabVATNop.UseVisualStyleBackColor = true;
-
+            // 
+            // dgvVatNop
+            // 
             dgvVatNop.AllowUserToAddRows = false;
             dgvVatNop.AllowUserToDeleteRows = false;
             dgvVatNop.BackgroundColor = SystemColors.Window;
@@ -841,20 +830,21 @@ namespace E_Tax
             dgvVatNop.Name = "dgvVatNop";
             dgvVatNop.ReadOnly = true;
             dgvVatNop.RowHeadersVisible = false;
-            dgvVatNop.Size = new Size(942, 362);
+            dgvVatNop.Size = new Size(942, 374);
             dgvVatNop.TabIndex = 0;
-
             // 
             // tabGiamThue
             // 
             tabGiamThue.Controls.Add(dgvGiamThue);
-            tabGiamThue.Location = new Point(4, 24);
+            tabGiamThue.Location = new Point(4, 34);
             tabGiamThue.Name = "tabGiamThue";
-            tabGiamThue.Size = new Size(942, 362);
+            tabGiamThue.Size = new Size(942, 374);
             tabGiamThue.TabIndex = 6;
             tabGiamThue.Text = "VAT nộp";
             tabGiamThue.UseVisualStyleBackColor = true;
-
+            // 
+            // dgvGiamThue
+            // 
             dgvGiamThue.AllowUserToAddRows = false;
             dgvGiamThue.AllowUserToDeleteRows = false;
             dgvGiamThue.BackgroundColor = SystemColors.Window;
@@ -864,9 +854,8 @@ namespace E_Tax
             dgvGiamThue.Name = "dgvGiamThue";
             dgvGiamThue.ReadOnly = true;
             dgvGiamThue.RowHeadersVisible = false;
-            dgvGiamThue.Size = new Size(942, 362);
+            dgvGiamThue.Size = new Size(942, 374);
             dgvGiamThue.TabIndex = 0;
-
             // 
             // gbNguoiBan
             // 
@@ -888,13 +877,14 @@ namespace E_Tax
             // 
             // btnKtraDNMuaLe
             // 
+            btnKtraDNMuaLe.BackColor = Color.LightGray;
             btnKtraDNMuaLe.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnKtraDNMuaLe.Location = new Point(15, 30);
             btnKtraDNMuaLe.Name = "btnKtraDNMuaLe";
             btnKtraDNMuaLe.Size = new Size(260, 30);
             btnKtraDNMuaLe.TabIndex = 0;
             btnKtraDNMuaLe.Text = "Ktra DN Mua Lẻ";
-            btnKtraDNMuaLe.UseVisualStyleBackColor = true;
+            btnKtraDNMuaLe.UseVisualStyleBackColor = false;
             // 
             // lblGhiChu
             // 
@@ -918,14 +908,16 @@ namespace E_Tax
             // 
             // btnMoGhiChu
             // 
+            btnMoGhiChu.BackColor = Color.LightGray;
             btnMoGhiChu.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnMoGhiChu.Location = new Point(230, 95);
             btnMoGhiChu.Name = "btnMoGhiChu";
-            btnMoGhiChu.Size = new Size(45, 60);
+            btnMoGhiChu.Size = new Size(54, 60);
             btnMoGhiChu.TabIndex = 3;
             btnMoGhiChu.Text = "Ghi chú";
             btnMoGhiChu.TextImageRelation = TextImageRelation.TextBeforeImage;
-            btnMoGhiChu.UseVisualStyleBackColor = true;
+            btnMoGhiChu.UseVisualStyleBackColor = false;
+            btnMoGhiChu.Click += btnMoGhiChu_Click;
             // 
             // lblTimMST
             // 
@@ -947,13 +939,14 @@ namespace E_Tax
             // 
             // btnRightSearch
             // 
+            btnRightSearch.BackColor = Color.LightGray;
             btnRightSearch.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             btnRightSearch.Location = new Point(190, 188);
             btnRightSearch.Name = "btnRightSearch";
             btnRightSearch.Size = new Size(85, 27);
             btnRightSearch.TabIndex = 6;
             btnRightSearch.Text = "Tìm kiếm";
-            btnRightSearch.UseVisualStyleBackColor = true;
+            btnRightSearch.UseVisualStyleBackColor = false;
             btnRightSearch.Click += btnRightSearch_Click;
             // 
             // downloadProgressBar
@@ -1016,7 +1009,7 @@ namespace E_Tax
             // Form1
             // 
             BackColor = Color.White;
-            ClientSize = new Size(984, 680);
+            ClientSize = new Size(984, 686);
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);
@@ -1037,7 +1030,6 @@ namespace E_Tax
             mainSplitContainer.Panel1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)mainSplitContainer).EndInit();
             mainSplitContainer.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)pictureBox3).EndInit();
             gbInvoiceType.ResumeLayout(false);
             gbInvoiceType.PerformLayout();
             tabControlMain.ResumeLayout(false);
@@ -1048,11 +1040,11 @@ namespace E_Tax
             tabDkMua.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvMua).EndInit();
             tabBKBan.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)dgvVatNop).EndInit();
-            tabVATNop.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)dgvGiamThue).EndInit();
-            tabGiamThue.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)dgvBan).EndInit();
+            tabVATNop.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgvVatNop).EndInit();
+            tabGiamThue.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)dgvGiamThue).EndInit();
             gbNguoiBan.ResumeLayout(false);
             gbNguoiBan.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
@@ -1112,7 +1104,6 @@ namespace E_Tax
         private System.Windows.Forms.Button btnCnKoPdf;
         private System.Windows.Forms.Button btnNenZip;
         private System.Windows.Forms.Button btnTaiHDGoc;
-        private PictureBox pictureBox3;
         private TabControl tabControlMain;
         private TabPage tabTongHop;
         private DataGridView dgvMain;
@@ -1121,5 +1112,10 @@ namespace E_Tax
         private TabPage tabBKBan;
         private TabPage tabVATNop;
         private TabPage tabGiamThue;
+
+        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1;
+        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle2;
+        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3;
+
     }
 }
