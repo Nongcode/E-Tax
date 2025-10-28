@@ -35,6 +35,13 @@ namespace E_Tax
         public Form1()
         {
             InitializeComponent();
+            ConfigureGiamThueGridColumns();
+            dgvVatNop.DataError += DataGridView_DataError;
+            dgvMain.DataError += DataGridView_DataError;
+            dgvDetails.DataError += DataGridView_DataError;
+            dgvMua.DataError += DataGridView_DataError;
+            dgvBan.DataError += DataGridView_DataError;       
+            dgvGiamThue.DataError += DataGridView_DataError;
 
             var handler = new HttpClientHandler()
             {
@@ -51,7 +58,8 @@ namespace E_Tax
                  client,
                  dgvDetails,
                  dgvMua, 
-                 dgvBan,        // DataGridView cho tab chi tiết
+                 dgvBan,
+                 dgvVatNop,
                  downloadProgressBar, // ProgressBar dùng chung
                  lblDownloadStatus,   // Label trạng thái dùng chung
                  AppendLog,           // Hàm ghi log của Form1
@@ -1315,6 +1323,8 @@ namespace E_Tax
             dgvDetails.DataSource = null; // Xóa lưới chi tiết
             dgvMua.DataSource = null;     // Xóa lưới mua
             dgvBan.DataSource = null;     // Xóa lưới bán
+            dgvVatNop.DataSource = null;   
+            dgvGiamThue.DataSource = null;
             _latestResults.Clear();
             _lastSuccessfulQueryString = "";
 
@@ -1430,10 +1440,13 @@ namespace E_Tax
                             dgvMain.ResumeLayout(); // Bật lại vẽ
                         }
                         AppendLog("✅ Hiển thị xong lưới tổng hợp.");
+                        AppendLog($"📊 Gán dữ liệu cho Bảng kê giảm thuế...");
+                        dgvGiamThue.DataSource = null;
+                        dgvGiamThue.DataSource = _latestResults; // Gán cùng list kết quả                                          
+                        AppendLog($"✅ Hiển thị xong Bảng kê giảm thuế.");
 
                         // !!! GỌI HÀM TẢI DỮ LIỆU CHI TIẾT !!!
                         await _detailGridManager.PopulateDetailGridAsync(_latestResults);
-                        // Hàm này sẽ tự quản lý ProgressBar và StatusLabel tiếp theo
 
                     }
                     else // Không tìm thấy hóa đơn nào
@@ -1445,6 +1458,8 @@ namespace E_Tax
                         dgvDetails.DataSource = null;
                         dgvMua.DataSource = null;
                         dgvBan.DataSource = null;
+                        dgvVatNop.DataSource = null;
+                        dgvGiamThue.DataSource = null;
                     }
                 }
                 // Trường hợp tìm kiếm lỗi (searchSoldSuccess=false hoặc searchBoughtSuccess=false)
@@ -1466,6 +1481,8 @@ namespace E_Tax
                 dgvDetails.DataSource = null;
                 dgvMua.DataSource = null;
                 dgvBan.DataSource = null;
+                dgvVatNop.DataSource = null;
+                dgvGiamThue.DataSource = null;
             }
             catch (Exception ex) // Lỗi chung khác
             {
@@ -1475,15 +1492,14 @@ namespace E_Tax
                 dgvDetails.DataSource = null;
                 dgvMua.DataSource = null;
                 dgvBan.DataSource = null;
+                dgvVatNop.DataSource = null;
+                dgvGiamThue.DataSource = null;
             }
             finally
             {
                 // --- KHÔI PHỤC TRẠNG THÁI UI ---
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
-                // ProgressBar và StatusLabel sẽ được quản lý bởi PopulateDetailGridAsync
-                // Hoặc bị ẩn đi nếu không có kết quả / có lỗi ở trên
-                // Chỉ cần đảm bảo con trỏ chuột được reset
                 this.Cursor = Cursors.Default;
             }
         }
@@ -1668,153 +1684,153 @@ namespace E_Tax
             }
         }
 
-        private async Task ExportSingleInvoiceDetailsToExcelAsync(string invoiceDetailJson, string filePath)
-        {
-            if (string.IsNullOrEmpty(invoiceDetailJson) || invoiceDetailJson.StartsWith("❌"))
-            {
-                AppendLog("⚠️ Dữ liệu chi tiết không hợp lệ để xuất Excel.");
-                throw new ArgumentException("Dữ liệu chi tiết hóa đơn không hợp lệ.");
-            }
+        //private async Task ExportSingleInvoiceDetailsToExcelAsync(string invoiceDetailJson, string filePath)
+        //{
+        //    if (string.IsNullOrEmpty(invoiceDetailJson) || invoiceDetailJson.StartsWith("❌"))
+        //    {
+        //        AppendLog("⚠️ Dữ liệu chi tiết không hợp lệ để xuất Excel.");
+        //        throw new ArgumentException("Dữ liệu chi tiết hóa đơn không hợp lệ.");
+        //    }
 
-            try
-            {
-                using var package = new ExcelPackage();
-                var ws = package.Workbook.Worksheets.Add("ChiTietHoaDon");
+        //    try
+        //    {
+        //        using var package = new ExcelPackage();
+        //        var ws = package.Workbook.Worksheets.Add("ChiTietHoaDon");
 
-                using var doc = JsonDocument.Parse(invoiceDetailJson);
-                JsonElement dataEl = doc.RootElement;
-                // Một số API trả về { "data": { ... } }, kiểm tra và lấy phần data nếu có
-                if (doc.RootElement.TryGetProperty("data", out var tmpData) && tmpData.ValueKind == JsonValueKind.Object)
-                {
-                    dataEl = tmpData;
-                }
+        //        using var doc = JsonDocument.Parse(invoiceDetailJson);
+        //        JsonElement dataEl = doc.RootElement;
+        //        // Một số API trả về { "data": { ... } }, kiểm tra và lấy phần data nếu có
+        //        if (doc.RootElement.TryGetProperty("data", out var tmpData) && tmpData.ValueKind == JsonValueKind.Object)
+        //        {
+        //            dataEl = tmpData;
+        //        }
 
-                int currentRow = 1; // Bắt đầu ghi từ dòng 1
+        //        int currentRow = 1; // Bắt đầu ghi từ dòng 1
 
-                // --- Ghi thông tin chung ---
-                ws.Cells[currentRow, 1].Value = "Thông tin chung hóa đơn";
-                ws.Cells[currentRow, 1, currentRow, 2].Merge = true;
-                ws.Cells[currentRow, 1].Style.Font.Bold = true;
-                currentRow++;
+        //        // --- Ghi thông tin chung ---
+        //        ws.Cells[currentRow, 1].Value = "Thông tin chung hóa đơn";
+        //        ws.Cells[currentRow, 1, currentRow, 2].Merge = true;
+        //        ws.Cells[currentRow, 1].Style.Font.Bold = true;
+        //        currentRow++;
 
-                // Lấy các cặp key-value không phải là mảng hoặc đối tượng con
-                foreach (var prop in dataEl.EnumerateObject().Where(p => p.Value.ValueKind != JsonValueKind.Object && p.Value.ValueKind != JsonValueKind.Array))
-                {
-                    ws.Cells[currentRow, 1].Value = prop.Name; // Tên trường
-                    ws.Cells[currentRow, 2].Value = prop.Value.ToString(); // Giá trị
-                    currentRow++;
-                }
-                currentRow++; // Thêm dòng trống
+        //        // Lấy các cặp key-value không phải là mảng hoặc đối tượng con
+        //        foreach (var prop in dataEl.EnumerateObject().Where(p => p.Value.ValueKind != JsonValueKind.Object && p.Value.ValueKind != JsonValueKind.Array))
+        //        {
+        //            ws.Cells[currentRow, 1].Value = prop.Name; // Tên trường
+        //            ws.Cells[currentRow, 2].Value = prop.Value.ToString(); // Giá trị
+        //            currentRow++;
+        //        }
+        //        currentRow++; // Thêm dòng trống
 
-                // --- Ghi chi tiết hàng hóa/dịch vụ (Tìm mảng hdhhdvu) ---
-                ws.Cells[currentRow, 1].Value = "Chi tiết hàng hóa/dịch vụ";
-                ws.Cells[currentRow, 1].Style.Font.Bold = true;
-                currentRow++;
+        //        // --- Ghi chi tiết hàng hóa/dịch vụ (Tìm mảng hdhhdvu) ---
+        //        ws.Cells[currentRow, 1].Value = "Chi tiết hàng hóa/dịch vụ";
+        //        ws.Cells[currentRow, 1].Style.Font.Bold = true;
+        //        currentRow++;
 
-                // Hàm đệ quy tìm mảng hdhhdvu
-                JsonElement? productArray = null;
-                void FindProductArray(JsonElement element)
-                {
-                    if (productArray.HasValue) return; // Đã tìm thấy thì dừng
+        //        // Hàm đệ quy tìm mảng hdhhdvu
+        //        JsonElement? productArray = null;
+        //        void FindProductArray(JsonElement element)
+        //        {
+        //            if (productArray.HasValue) return; // Đã tìm thấy thì dừng
 
-                    if (element.ValueKind == JsonValueKind.Object)
-                    {
-                        if (element.TryGetProperty("hdhhdvu", out var hdhhdvu) && hdhhdvu.ValueKind == JsonValueKind.Array)
-                        {
-                            productArray = hdhhdvu;
-                            return;
-                        }
-                        // Tìm sâu hơn trong các thuộc tính là object hoặc array
-                        foreach (var innerProp in element.EnumerateObject())
-                        {
-                            if (innerProp.Value.ValueKind == JsonValueKind.Object || innerProp.Value.ValueKind == JsonValueKind.Array)
-                            {
-                                FindProductArray(innerProp.Value);
-                            }
-                        }
-                    }
-                    else if (element.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var item in element.EnumerateArray())
-                        {
-                            FindProductArray(item);
-                        }
-                    }
-                }
+        //            if (element.ValueKind == JsonValueKind.Object)
+        //            {
+        //                if (element.TryGetProperty("hdhhdvu", out var hdhhdvu) && hdhhdvu.ValueKind == JsonValueKind.Array)
+        //                {
+        //                    productArray = hdhhdvu;
+        //                    return;
+        //                }
+        //                // Tìm sâu hơn trong các thuộc tính là object hoặc array
+        //                foreach (var innerProp in element.EnumerateObject())
+        //                {
+        //                    if (innerProp.Value.ValueKind == JsonValueKind.Object || innerProp.Value.ValueKind == JsonValueKind.Array)
+        //                    {
+        //                        FindProductArray(innerProp.Value);
+        //                    }
+        //                }
+        //            }
+        //            else if (element.ValueKind == JsonValueKind.Array)
+        //            {
+        //                foreach (var item in element.EnumerateArray())
+        //                {
+        //                    FindProductArray(item);
+        //                }
+        //            }
+        //        }
 
-                FindProductArray(dataEl); // Bắt đầu tìm kiếm từ gốc
+        //        FindProductArray(dataEl); // Bắt đầu tìm kiếm từ gốc
 
-                if (productArray.HasValue && productArray.Value.GetArrayLength() > 0)
-                {
-                    var products = productArray.Value.EnumerateArray().ToList();
+        //        if (productArray.HasValue && productArray.Value.GetArrayLength() > 0)
+        //        {
+        //            var products = productArray.Value.EnumerateArray().ToList();
 
-                    // Lấy danh sách tên cột từ item đầu tiên
-                    var headers = products.First().EnumerateObject().Select(p => p.Name).ToList();
+        //            // Lấy danh sách tên cột từ item đầu tiên
+        //            var headers = products.First().EnumerateObject().Select(p => p.Name).ToList();
 
-                    // Ghi Header
-                    for (int i = 0; i < headers.Count; i++)
-                    {
-                        ws.Cells[currentRow, i + 1].Value = headers[i];
-                        ws.Cells[currentRow, i + 1].Style.Font.Bold = true;
-                        ws.Cells[currentRow, i + 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
-                        ws.Cells[currentRow, i + 1].Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-                        ws.Cells[currentRow, i + 1].Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                    }
-                    currentRow++;
+        //            // Ghi Header
+        //            for (int i = 0; i < headers.Count; i++)
+        //            {
+        //                ws.Cells[currentRow, i + 1].Value = headers[i];
+        //                ws.Cells[currentRow, i + 1].Style.Font.Bold = true;
+        //                ws.Cells[currentRow, i + 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
+        //                ws.Cells[currentRow, i + 1].Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+        //                ws.Cells[currentRow, i + 1].Style.Border.BorderAround(ExcelBorderStyle.Thin);
+        //            }
+        //            currentRow++;
 
-                    // Ghi dữ liệu từng sản phẩm
-                    foreach (var product in products)
-                    {
-                        for (int i = 0; i < headers.Count; i++)
-                        {
-                            if (product.TryGetProperty(headers[i], out var propValue))
-                            {
-                                // Cố gắng chuyển đổi sang số để định dạng
-                                if (propValue.ValueKind == JsonValueKind.Number)
-                                {
-                                    ws.Cells[currentRow, i + 1].Value = propValue.GetDecimal();
-                                    // Định dạng các cột có thể là số tiền/số lượng
-                                    if (headers[i].Contains("tien", StringComparison.OrdinalIgnoreCase) ||
-                                       headers[i].Equals("sluong", StringComparison.OrdinalIgnoreCase) ||
-                                       headers[i].Equals("dgia", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        ws.Cells[currentRow, i + 1].Style.Numberformat.Format = "#,##0";
-                                        ws.Cells[currentRow, i + 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-                                    }
-                                }
-                                else
-                                {
-                                    ws.Cells[currentRow, i + 1].Value = propValue.ToString();
-                                }
-                            }
-                        }
-                        currentRow++;
-                    }
-                }
-                else
-                {
-                    ws.Cells[currentRow, 1].Value = "Không tìm thấy chi tiết hàng hóa/dịch vụ (mảng 'hdhhdvu').";
-                }
+        //            // Ghi dữ liệu từng sản phẩm
+        //            foreach (var product in products)
+        //            {
+        //                for (int i = 0; i < headers.Count; i++)
+        //                {
+        //                    if (product.TryGetProperty(headers[i], out var propValue))
+        //                    {
+        //                        // Cố gắng chuyển đổi sang số để định dạng
+        //                        if (propValue.ValueKind == JsonValueKind.Number)
+        //                        {
+        //                            ws.Cells[currentRow, i + 1].Value = propValue.GetDecimal();
+        //                            // Định dạng các cột có thể là số tiền/số lượng
+        //                            if (headers[i].Contains("tien", StringComparison.OrdinalIgnoreCase) ||
+        //                               headers[i].Equals("sluong", StringComparison.OrdinalIgnoreCase) ||
+        //                               headers[i].Equals("dgia", StringComparison.OrdinalIgnoreCase))
+        //                            {
+        //                                ws.Cells[currentRow, i + 1].Style.Numberformat.Format = "#,##0";
+        //                                ws.Cells[currentRow, i + 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        //                            }
+        //                        }
+        //                        else
+        //                        {
+        //                            ws.Cells[currentRow, i + 1].Value = propValue.ToString();
+        //                        }
+        //                    }
+        //                }
+        //                currentRow++;
+        //            }
+        //        }
+        //        else
+        //        {
+        //            ws.Cells[currentRow, 1].Value = "Không tìm thấy chi tiết hàng hóa/dịch vụ (mảng 'hdhhdvu').";
+        //        }
 
 
-                ws.Cells[ws.Dimension.Address].AutoFitColumns();
-                ws.Cells.Style.Font.Name = "Segoe UI";
-                ws.Cells.Style.Font.Size = 10;
+        //        ws.Cells[ws.Dimension.Address].AutoFitColumns();
+        //        ws.Cells.Style.Font.Name = "Segoe UI";
+        //        ws.Cells.Style.Font.Size = 10;
 
-                await package.SaveAsAsync(new FileInfo(filePath));
-                AppendLog($"✅ Đã tạo file Excel chi tiết đơn lẻ tại: {filePath}");
-            }
-            catch (JsonException jsonEx)
-            {
-                AppendLog($"❌ Lỗi phân tích JSON khi xuất chi tiết đơn lẻ: {jsonEx.Message}");
-                throw new Exception($"Lỗi đọc dữ liệu chi tiết hóa đơn: {jsonEx.Message}", jsonEx);
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Lỗi khi tạo file Excel chi tiết đơn lẻ: {ex.Message}");
-                throw; // Ném lại lỗi để nơi gọi xử lý
-            }
-        }
+        //        await package.SaveAsAsync(new FileInfo(filePath));
+        //        AppendLog($"✅ Đã tạo file Excel chi tiết đơn lẻ tại: {filePath}");
+        //    }
+        //    catch (JsonException jsonEx)
+        //    {
+        //        AppendLog($"❌ Lỗi phân tích JSON khi xuất chi tiết đơn lẻ: {jsonEx.Message}");
+        //        throw new Exception($"Lỗi đọc dữ liệu chi tiết hóa đơn: {jsonEx.Message}", jsonEx);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        AppendLog($"❌ Lỗi khi tạo file Excel chi tiết đơn lẻ: {ex.Message}");
+        //        throw; // Ném lại lỗi để nơi gọi xử lý
+        //    }
+        //} 
 
         /// <summary>
         /// Xử lý sự kiện click nút "Tải danh sách HĐ" (btnExportDS) - Nâng cấp: Tải trực tiếp từ API.
@@ -2390,6 +2406,164 @@ namespace E_Tax
                 default:
                     return null;
             }
+        }
+
+        private void ConfigureGiamThueGridColumns()
+        {
+            dgvGiamThue.AutoGenerateColumns = false;
+            dgvGiamThue.Columns.Clear();
+            dgvGiamThue.DefaultCellStyle.Font = new Font("Segoe UI", 9);
+            dgvGiamThue.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            dgvGiamThue.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+
+            // --- DÒNG MỚI THÊM ---
+            // Thêm cột Số hóa đơn (bind dữ liệu từ SearchResult.So_hoa_don)
+            AddTextColumnToGrid(dgvGiamThue, "colGiamThueKyHieuHoaDon", "Ký hiệu hóa đơn", nameof(SearchResult.Ky_hieu_hoa_don), 100, frozen: true, alignment: DataGridViewContentAlignment.MiddleCenter);
+            // --- KẾT THÚC DÒNG MỚI ---
+
+            // Thêm các cột tiền tệ (bind dữ liệu từ SearchResult)
+            AddNumericColumnToGrid(dgvGiamThue, "colGiamThueTienChuaThue", "Tổng tiền chưa thuế", nameof(SearchResult.Tong_tien_chua_thue), 150, "#,##0");
+            AddNumericColumnToGrid(dgvGiamThue, "colGiamThueTienThue", "Tổng tiền thuế", nameof(SearchResult.Tong_tien_thue), 140, "#,##0");
+            AddNumericColumnToGrid(dgvGiamThue, "colGiamThueTienCK", "Tổng tiền chiết khấu", nameof(SearchResult.Tong_tien_chiet_khau), 160, "#,##0");
+
+            // Thêm cột Tổng tiền phí (KHÔNG bind trực tiếp, sẽ dùng CellFormatting)
+            AddNumericColumnToGrid(dgvGiamThue, "colGiamThueTongPhi", "Tổng tiền phí", null, 140, "#,##0"); // DataPropertyName = null
+
+            AddNumericColumnToGrid(dgvGiamThue, "colGiamThueTongTT", "Tổng tiền thanh toán", nameof(SearchResult.Tong_tien_thanh_toan), 160, "#,##0");
+            AddTextColumnToGrid(dgvGiamThue, "colGiamThueDVT", "Đơn vị tiền tệ", nameof(SearchResult.Don_vi_tien_te), 100);
+
+            // Đăng ký sự kiện CellFormatting để tính tổng phí VÀ TẠO STT
+            dgvGiamThue.CellFormatting += DgvGiamThue_CellFormatting;
+        }
+
+        // --- Thêm 2 hàm trợ giúp này vào Form1 nếu chưa có ---
+        // Hàm trợ giúp thêm cột Text vào DataGridView cụ thể
+        private void AddTextColumnToGrid(DataGridView dgv, string name, string header, string dataProperty, int width, bool frozen = false, DataGridViewContentAlignment alignment = DataGridViewContentAlignment.MiddleLeft)
+        {
+            var column = new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = header,
+                DataPropertyName = dataProperty, // Có thể null nếu không bind
+                Width = width,
+                ReadOnly = true,
+                Frozen = frozen,
+                DefaultCellStyle = new DataGridViewCellStyle { Alignment = alignment }
+            };
+            dgv.Columns.Add(column);
+        }
+
+        // Hàm trợ giúp thêm cột Numeric vào DataGridView cụ thể
+        private void AddNumericColumnToGrid(DataGridView dgv, string name, string header, string dataProperty, int width, string format)
+        {
+            var column = new DataGridViewTextBoxColumn
+            {
+                Name = name,
+                HeaderText = header,
+                DataPropertyName = dataProperty, // Có thể null nếu không bind
+                Width = width,
+                ReadOnly = true,
+                DefaultCellStyle = new DataGridViewCellStyle { Format = format, Alignment = DataGridViewContentAlignment.MiddleRight }
+            };
+            dgv.Columns.Add(column);
+        }
+        // --------------------------------------------------------
+
+        /// <summary>
+        /// Xử lý sự kiện CellFormatting cho dgvGiamThue để tính và hiển thị Tổng tiền phí.
+        /// </summary>
+        /// <summary>
+        /// Xử lý sự kiện CellFormatting cho dgvGiamThue để TẠO STT, 
+        /// tính Tổng tiền phí và định dạng các giá trị null.
+        /// </summary>
+        private void DgvGiamThue_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+
+            // Lấy đối tượng SearchResult tương ứng với dòng hiện tại
+            if (!(dgvGiamThue.Rows[e.RowIndex].DataBoundItem is SearchResult invoice))
+            {
+                // Nếu không lấy được dữ liệu (ví dụ: hàng mới cuối lưới),
+                // thì dừng lại, không xử lý các cột dữ liệu khác
+                return;
+            }
+
+            // Lấy tên cột hiện tại
+            string colName = dgvGiamThue.Columns[e.ColumnIndex].Name;
+
+            try
+            {
+                switch (colName)
+                {
+                    // Xử lý các cột số cần định dạng #,##0 và xử lý giá trị null
+                    case "colGiamThueTienChuaThue":
+                        // Nếu giá trị là null, hiển thị "0" thay vì lỗi
+                        e.Value = invoice.Tong_tien_chua_thue?.ToString("#,##0") ?? "0";
+                        e.FormattingApplied = true;
+                        break;
+                    case "colGiamThueTienThue":
+                        e.Value = invoice.Tong_tien_thue?.ToString("#,##0") ?? "0";
+                        e.FormattingApplied = true;
+                        break;
+                    case "colGiamThueTienCK":
+                        e.Value = invoice.Tong_tien_chiet_khau?.ToString("#,##0") ?? "0";
+                        e.FormattingApplied = true;
+                        break;
+                    case "colGiamThueTongTT":
+                        e.Value = invoice.Tong_tien_thanh_toan?.ToString("#,##0") ?? "0";
+                        e.FormattingApplied = true;
+                        break;
+
+                    // Xử lý cột Tổng tiền phí (tính toán)
+                    case "colGiamThueTongPhi":
+                        // Tính tổng các giá trị trong List<decimal?> Tong_tien_phi
+                        decimal totalFee = invoice.Tong_tien_phi?.Sum(fee => fee ?? 0) ?? 0;
+                        e.Value = totalFee.ToString("#,##0"); // Định dạng luôn ở đây
+                        e.FormattingApplied = true;
+                        break;
+
+                    // Cột Số hóa đơn (colGiamThueSoHoaDon) đã được bind tự động
+                    // nên không cần xử lý ở đây, trừ khi bạn muốn xử lý null
+                    case "colGiamThueSoHoaDon":
+                        if (e.Value == null)
+                        {
+                            e.Value = "N/A"; // Hoặc "" (chuỗi rỗng)
+                            e.FormattingApplied = true;
+                        }
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Lỗi CellFormatting Grid: {dgvGiamThue.Name}, Col: {colName}, Row: {e.RowIndex}: {ex.Message}");
+                e.Value = "[Lỗi]"; // Hiển thị lỗi trên ô
+                e.FormattingApplied = true;
+            }
+        }
+        private void DataGridView_DataError(object sender, DataGridViewDataErrorEventArgs e)
+        {
+            // Lấy thông tin lưới, cột và dòng gây lỗi
+            DataGridView dgv = sender as DataGridView;
+            string gridName = dgv?.Name ?? "Unknown Grid";
+            string colName = (e.ColumnIndex >= 0 && e.ColumnIndex < dgv?.Columns.Count)
+                             ? dgv.Columns[e.ColumnIndex].Name : $"Index {e.ColumnIndex}"; // Lấy tên hoặc index
+            string errorValue = (e.RowIndex >= 0 && e.RowIndex < dgv?.Rows.Count &&
+                                 e.ColumnIndex >= 0 && e.ColumnIndex < dgv?.Columns.Count)
+                                 ? dgv.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "null" : "N/A"; // Lấy giá trị gây lỗi
+
+            string errorMsg = $"Lỗi DataError:\nGrid: {gridName}\nRow: {e.RowIndex}, Col: {e.ColumnIndex} ({colName})\nGiá trị lỗi: '{errorValue}'\nError: {e.Exception.Message}\nContext: {e.Context}";
+
+            // Ghi log lỗi (Quan trọng để debug)
+            AppendLog($"‼️ {errorMsg.Replace("\n", " | ")}"); // Ghi log trên 1 dòng
+
+            // Tùy chọn: Hiển thị lỗi chi tiết hơn (có thể comment dòng này đi nếu không muốn popup)
+            // MessageBox.Show(errorMsg, "Lỗi DataGridView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            // Quan trọng: Ngăn dialog mặc định hiển thị và giữ chương trình chạy
+            e.ThrowException = false; // Bỏ qua lỗi và không hiển thị dialog mặc định
+                                      // Bạn có thể đặt giá trị mặc định cho ô nếu muốn, ví dụ:
+                                      // if(e.Context == DataGridViewDataErrorContexts.Formatting) {
+                                      //    dgv.Rows[e.RowIndex].Cells[e.ColumnIndex].Value = 0; // Hoặc null tùy kiểu cột
+                                      // }
         }
     }
 

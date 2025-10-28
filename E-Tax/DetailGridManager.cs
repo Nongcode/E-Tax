@@ -11,10 +11,10 @@ using System.Windows.Forms;
 
 namespace E_Tax // Đảm bảo đúng namespace
 {
-    /// <summary>
-    /// Class đại diện cho một dòng dữ liệu chi tiết (sản phẩm/dịch vụ) trong hóa đơn
-    /// </summary>
-    public class InvoiceDetailItem
+    /// <summary>
+    /// Class đại diện cho một dòng dữ liệu chi tiết (sản phẩm/dịch vụ) trong hóa đơn
+    /// </summary>
+    public class InvoiceDetailItem
     {
         [System.ComponentModel.DisplayName("STT")]
         public int? STT { get; set; }
@@ -74,37 +74,42 @@ namespace E_Tax // Đảm bảo đúng namespace
         public string GhiChuSanPham { get; set; }
     }
 
-    /// <summary>
-    /// Class quản lý việc lấy và hiển thị dữ liệu chi tiết hóa đơn lên DataGridView
-    /// </summary>
-    public class DetailGridManager
+    /// <summary>
+    /// Class quản lý việc lấy và hiển thị dữ liệu chi tiết hóa đơn lên DataGridView
+    /// </summary>
+    public class DetailGridManager
     {
         private readonly HttpClient _client;
         private readonly DataGridView _dgvDetails;
-        private readonly DataGridView _dgvMua; // Lưới cho BK Mua
-        private readonly DataGridView _dgvBan; // Lưới cho BK Bán
+        private readonly DataGridView _dgvMua;
+        private readonly DataGridView _dgvBan;
+        private readonly DataGridView _dgvVatNop;
         private readonly ProgressBar _progressBar;
         private readonly Label _statusLabel;
         private readonly Action<string> _logAction;
         private readonly string _browserUserAgent;
         private string _jwtToken;
 
-        public DetailGridManager(HttpClient client, DataGridView dgvDetails, DataGridView dgvMua, DataGridView dgvBan, ProgressBar progressBar, Label statusLabel, Action<string> logAction, string userAgent)
+        public DetailGridManager(HttpClient client, DataGridView dgvDetails, DataGridView dgvMua,
+          DataGridView dgvBan, DataGridView dgvVatNop, ProgressBar progressBar, Label statusLabel,
+          Action<string> logAction, string userAgent)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _dgvDetails = dgvDetails ?? throw new ArgumentNullException(nameof(dgvDetails));
             _dgvMua = dgvMua ?? throw new ArgumentNullException(nameof(dgvMua));
             _dgvBan = dgvBan ?? throw new ArgumentNullException(nameof(dgvBan));
+            _dgvVatNop = dgvVatNop ?? throw new ArgumentNullException(nameof(dgvVatNop));
             _progressBar = progressBar ?? throw new ArgumentNullException(nameof(progressBar));
             _statusLabel = statusLabel ?? throw new ArgumentNullException(nameof(statusLabel));
             _logAction = logAction ?? throw new ArgumentNullException(nameof(logAction));
             _browserUserAgent = userAgent ?? throw new ArgumentNullException(nameof(userAgent));
 
-            // Gọi hàm cấu hình cột cho từng lưới ngay khi khởi tạo
-            ConfigureSpecificGridColumns(_dgvDetails);
-            ConfigureSpecificGridColumns(_dgvMua);
-            ConfigureSpecificGridColumns(_dgvBan);
-        }
+            // *** GỌI ĐÚNG HÀM CẤU HÌNH ***
+            ConfigureFullDetailGridColumns(_dgvDetails); // Dùng hàm đầy đủ
+            ConfigureFullDetailGridColumns(_dgvMua);     // Dùng hàm đầy đủ
+            ConfigureFullDetailGridColumns(_dgvBan);     // Dùng hàm đầy đủ
+            ConfigureVatNopGridColumns();               // Dùng hàm mới cho VAT
+        }
 
         public void SetJwtToken(string token)
         {
@@ -112,22 +117,22 @@ namespace E_Tax // Đảm bảo đúng namespace
             _logAction?.Invoke("🔑 Token đã được cập nhật cho DetailGridManager.");
         }
 
-        /// <summary>
-        /// Hàm chung để cấu hình các cột cho một lưới chi tiết cụ thể (Mua hoặc Bán)
-        /// </summary>
-        private void ConfigureSpecificGridColumns(DataGridView dgv) // Nhận dgv làm tham số
-        {
+        /// <summary>
+        /// Hàm chung để cấu hình các cột (ĐẦY ĐỦ) cho một lưới chi tiết (Details, Mua, Ban)
+        /// </summary>
+        private void ConfigureFullDetailGridColumns(DataGridView dgv) // <-- ĐÃ ĐỔI TÊN
+        {
             try
             {
-                // Sử dụng Invoke để đảm bảo an toàn thread khi cấu hình control từ constructor
-                if (dgv.InvokeRequired)
+                // Sử dụng Invoke để đảm bảo an toàn thread khi cấu hình control từ constructor
+                if (dgv.InvokeRequired)
                 {
-                    dgv.Invoke(new Action(() => ConfigureGridInternal(dgv)));
-                }
+                    dgv.Invoke(new Action(() => ConfigureFullDetailGridInternal(dgv))); // <-- ĐÃ ĐỔI TÊN
+                }
                 else
                 {
-                    ConfigureGridInternal(dgv);
-                }
+                    ConfigureFullDetailGridInternal(dgv); // <-- ĐÃ ĐỔI TÊN
+                }
             }
             catch (Exception ex)
             {
@@ -135,9 +140,9 @@ namespace E_Tax // Đảm bảo đúng namespace
             }
         }
 
-        // Hàm nội bộ để thực hiện cấu hình (tránh lặp code)
-        private void ConfigureGridInternal(DataGridView dgv)
-        {
+        // Hàm nội bộ để thực hiện cấu hình (tránh lặp code)
+        private void ConfigureFullDetailGridInternal(DataGridView dgv) // <-- ĐÃ ĐỔI TÊN
+        {
             dgv.AutoGenerateColumns = false;
             dgv.AllowUserToAddRows = false;
             dgv.ReadOnly = true;
@@ -148,9 +153,8 @@ namespace E_Tax // Đảm bảo đúng namespace
 
             dgv.Columns.Clear();
 
-            // Thêm các cột (Code giống hệt hàm ConfigureDetailGridColumns cũ)
-            // !!! QUAN TRỌNG: Gọi AddTextColumn/AddNumericColumn với dgv được truyền vào !!!
-            AddTextColumn(dgv, "colDetailSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
+            // Thêm TẤT CẢ các cột (19 cột)
+            AddTextColumn(dgv, "colDetailSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
             AddTextColumn(dgv, "colDetailKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
             AddTextColumn(dgv, "colDetailSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
             AddTextColumn(dgv, "colDetailNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
@@ -171,8 +175,68 @@ namespace E_Tax // Đảm bảo đúng namespace
             AddTextColumn(dgv, "colDetailGhiChuSP", "Ghi chú SP", nameof(InvoiceDetailItem.GhiChuSanPham), 150);
         }
 
-        // Hàm trợ giúp thêm cột Text - !!! SỬA: Nhận dgv làm tham số !!!
-        private void AddTextColumn(DataGridView dgv, string name, string header, string dataProperty, int width, bool frozen = false)
+        // *** BỘ HÀM MỚI CHO LƯỚI VAT NỘP ***
+
+        /// <summary>
+        /// Hàm CHUYÊN BIỆT để cấu hình các cột cho lưới VAT Nộp (_dgvVatNop)
+        /// </summary>
+        private void ConfigureVatNopGridColumns()
+        {
+            try
+            {
+                // Sử dụng Invoke để đảm bảo an toàn thread khi cấu hình control
+                if (_dgvVatNop.InvokeRequired)
+                {
+                    _dgvVatNop.Invoke(new Action(() => ConfigureVatNopGridInternal()));
+                }
+                else
+                {
+                    ConfigureVatNopGridInternal();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logAction?.Invoke($"❌ Lỗi khi cấu hình lưới {_dgvVatNop.Name}: {ex.Message}");
+            }
+        }
+
+        // Hàm nội bộ để thực hiện cấu hình dgvVatNop
+        private void ConfigureVatNopGridInternal()
+        {
+            DataGridView dgv = _dgvVatNop; // Chỉ làm việc với lưới VAT
+
+            dgv.AutoGenerateColumns = false;
+            dgv.AllowUserToAddRows = false;
+            dgv.ReadOnly = true;
+            dgv.RowHeadersVisible = false;
+            dgv.DefaultCellStyle.Font = new Font("Segoe UI", 9);
+            dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+            dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+
+            dgv.Columns.Clear();
+
+            // === CHỈ THÊM CÁC CỘT LIÊN QUAN THUẾ/TIỀN ===
+            // (Các hàm AddTextColumn/AddNumericColumn dùng chung)
+
+            // 1. Các cột nhận dạng (để biết thuế/tiền này của HĐ nào)
+            AddTextColumn(dgv, "colVatSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
+            AddTextColumn(dgv, "colVatKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
+            AddTextColumn(dgv, "colVatSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
+            AddTextColumn(dgv, "colVatNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
+            AddTextColumn(dgv, "colVatMSTNB", "MST NB", nameof(InvoiceDetailItem.MSTNguoiBan), 110);
+            AddTextColumn(dgv, "colVatTenSP", "Tên SP/DV", nameof(InvoiceDetailItem.TenSanPham), 300); // Tên SP/DV
+
+            // 2. Các cột tiền/thuế (trọng tâm)
+            AddNumericColumn(dgv, "colVatDoanhSo", "Doanh số", nameof(InvoiceDetailItem.DoanhSoChuaThue), 150, "#,##0");
+            AddTextColumn(dgv, "colVatThueSuat", "Thuế suất", nameof(InvoiceDetailItem.ThueSuat), 80);
+            AddNumericColumn(dgv, "colVatTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 150, "#,##0");
+        }
+
+        // *** HẾT PHẦN MỚI CHO VAT ***
+
+
+        // Hàm trợ giúp thêm cột Text - (Giữ nguyên, nhận dgv làm tham số)
+        private void AddTextColumn(DataGridView dgv, string name, string header, string dataProperty, int width, bool frozen = false)
         {
             var column = new DataGridViewTextBoxColumn
             {
@@ -184,10 +248,10 @@ namespace E_Tax // Đảm bảo đúng namespace
                 Frozen = frozen
             };
             dgv.Columns.Add(column); // Sử dụng dgv được truyền vào
-        }
+        }
 
-        // Hàm trợ giúp thêm cột Numeric - !!! SỬA: Nhận dgv làm tham số !!!
-        private void AddNumericColumn(DataGridView dgv, string name, string header, string dataProperty, int width, string format)
+        // Hàm trợ giúp thêm cột Numeric - (Giữ nguyên, nhận dgv làm tham số)
+        private void AddNumericColumn(DataGridView dgv, string name, string header, string dataProperty, int width, string format)
         {
             var column = new DataGridViewTextBoxColumn
             {
@@ -199,25 +263,26 @@ namespace E_Tax // Đảm bảo đúng namespace
                 DefaultCellStyle = new DataGridViewCellStyle { Format = format, Alignment = DataGridViewContentAlignment.MiddleRight }
             };
             dgv.Columns.Add(column); // Sử dụng dgv được truyền vào
-        }
+        }
 
 
         public async Task PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
         {
-            // Xóa dữ liệu cũ và hiển thị trạng thái chờ (cho cả 3 lưới)
-            MethodInvoker clearGridsAction = () => {
-                _dgvDetails.DataSource = null; // << THÊM LẠI: Xóa lưới Chi tiết
+            // Xóa dữ liệu cũ và hiển thị trạng thái chờ (cho cả 4 lưới)
+            MethodInvoker clearGridsAction = () => {
+                _dgvDetails.DataSource = null;
                 _dgvMua.DataSource = null;
                 _dgvBan.DataSource = null;
-                _statusLabel.Text = "Đang chuẩn bị tải chi tiết...";
+                _dgvVatNop.DataSource = null; // <- Thêm xóa lưới VAT
+                _statusLabel.Text = "Đang chuẩn bị tải chi tiết...";
                 _statusLabel.Visible = true;
                 _progressBar.Style = ProgressBarStyle.Blocks;
-                _progressBar.Maximum = invoiceHeaders?.Count ?? 0; // Đặt Maximum dựa trên số hóa đơn
+                _progressBar.Maximum = invoiceHeaders?.Count ?? 0;
                 _progressBar.Value = 0;
                 _progressBar.Visible = true;
             };
-            // Chọn một lưới để Invoke
-            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(clearGridsAction); else clearGridsAction();
+            // Chọn một lưới để Invoke
+            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(clearGridsAction); else clearGridsAction();
 
             if (invoiceHeaders == null || !invoiceHeaders.Any())
             {
@@ -236,12 +301,13 @@ namespace E_Tax // Đảm bảo đúng namespace
 
             _logAction?.Invoke($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {invoiceHeaders.Count} hóa đơn...");
 
-            // !!! TẠO 3 LIST !!!
-            var allDetailItems = new List<InvoiceDetailItem>();    // List tổng hợp
-            var boughtDetailItems = new List<InvoiceDetailItem>(); // List Mua
-            var soldDetailItems = new List<InvoiceDetailItem>();   // List Bán
-                                                                   // ==================
-            int currentInvoiceIndex = 0;
+            // !!! TẠO 4 LIST !!!
+            var allDetailItems = new List<InvoiceDetailItem>();    // List tổng hợp
+            var boughtDetailItems = new List<InvoiceDetailItem>(); // List Mua
+            var soldDetailItems = new List<InvoiceDetailItem>();   // List Bán
+            var vatDetailItems = new List<InvoiceDetailItem>(); // List Thuế (Giữ nguyên)
+
+            int currentInvoiceIndex = 0;
             int globalStt = 1;
 
             foreach (var invoiceHeader in invoiceHeaders)
@@ -252,11 +318,11 @@ namespace E_Tax // Đảm bảo đúng namespace
                 };
                 if (_statusLabel.InvokeRequired) _statusLabel.Invoke(updateStatusAction); else updateStatusAction();
 
-                // Kiểm tra thông tin header
-                if (invoiceHeader == null || string.IsNullOrEmpty(invoiceHeader.Ma_so_thue) ||
-                   string.IsNullOrEmpty(invoiceHeader.Ky_hieu_hoa_don) ||
-                   !invoiceHeader.So_hoa_don.HasValue ||
-                   !invoiceHeader.Ky_hieu_ma_so.HasValue)
+                // (Kiểm tra thông tin header... giữ nguyên)
+                if (invoiceHeader == null || string.IsNullOrEmpty(invoiceHeader.Ma_so_thue) ||
+         string.IsNullOrEmpty(invoiceHeader.Ky_hieu_hoa_don) ||
+         !invoiceHeader.So_hoa_don.HasValue ||
+         !invoiceHeader.Ky_hieu_ma_so.HasValue)
                 {
                     _logAction?.Invoke($"⚠️ (Detail Mgr) Bỏ qua HĐ {invoiceHeader?.Id} do thiếu thông tin.");
                     MethodInvoker stepProgress = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
@@ -266,14 +332,14 @@ namespace E_Tax // Đảm bảo đúng namespace
 
                 try
                 {
-                    // Lấy JSON chi tiết
-                    string jsonDetail = await GetInvoiceDetailInternalAsync(
-                        invoiceHeader.Ma_so_thue, invoiceHeader.Ky_hieu_hoa_don,
-                        invoiceHeader.So_hoa_don, invoiceHeader.Ky_hieu_ma_so
-                    );
+                    // (Lấy JSON chi tiết... giữ nguyên)
+                    string jsonDetail = await GetInvoiceDetailInternalAsync(
+            invoiceHeader.Ma_so_thue, invoiceHeader.Ky_hieu_hoa_don,
+            invoiceHeader.So_hoa_don, invoiceHeader.Ky_hieu_ma_so
+          );
 
-                    // Kiểm tra lỗi API
-                    if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
+                    // (Kiểm tra lỗi API... giữ nguyên)
+                    if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
                     {
                         _logAction?.Invoke($"❌ (Detail Mgr) Lỗi lấy chi tiết HĐ {invoiceHeader.So_hoa_don}: {jsonDetail}");
                         MethodInvoker stepProgress = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
@@ -281,27 +347,25 @@ namespace E_Tax // Đảm bảo đúng namespace
                         continue;
                     }
 
-                    // Parse JSON và xử lý sản phẩm
-                    using (JsonDocument doc = JsonDocument.Parse(jsonDetail))
+                    // (Parse JSON và xử lý sản phẩm... giữ nguyên)
+                    using (JsonDocument doc = JsonDocument.Parse(jsonDetail))
                     {
                         JsonElement root = doc.RootElement;
                         if (root.TryGetProperty("data", out JsonElement dataEl) && dataEl.ValueKind == JsonValueKind.Object) { root = dataEl; }
 
                         JsonElement? productArray = null;
-                        void FindProductArrayLocal(JsonElement element) 
+                        void FindProductArrayLocal(JsonElement element)
                         {
-                            if (productArray.HasValue) return; // Đã tìm thấy, dừng lại
+                            if (productArray.HasValue) return;
 
-                            if (element.ValueKind == JsonValueKind.Object)
+                            if (element.ValueKind == JsonValueKind.Object)
                             {
-                                // Thử tìm "hdhhdvu" ở cấp hiện tại
-                                if (element.TryGetProperty("hdhhdvu", out var hdhhdvu) && hdhhdvu.ValueKind == JsonValueKind.Array)
+                                if (element.TryGetProperty("hdhhdvu", out var hdhhdvu) && hdhhdvu.ValueKind == JsonValueKind.Array)
                                 {
                                     productArray = hdhhdvu;
                                     return;
                                 }
-                                // Nếu không thấy, tìm đệ quy vào các thuộc tính con
-                                foreach (var innerProp in element.EnumerateObject())
+                                foreach (var innerProp in element.EnumerateObject())
                                 {
                                     if (innerProp.Value.ValueKind == JsonValueKind.Object || innerProp.Value.ValueKind == JsonValueKind.Array)
                                     {
@@ -311,13 +375,12 @@ namespace E_Tax // Đảm bảo đúng namespace
                             }
                             else if (element.ValueKind == JsonValueKind.Array)
                             {
-                                // Tìm đệ quy trong các phần tử mảng
-                                foreach (var item in element.EnumerateArray())
+                                foreach (var item in element.EnumerateArray())
                                 {
                                     FindProductArrayLocal(item);
                                 }
                             }
-                        } // Hàm tìm 'hdhhdvu' giữ nguyên
+                        }
                         FindProductArrayLocal(root);
 
                         if (productArray.HasValue && productArray.Value.GetArrayLength() > 0)
@@ -326,10 +389,10 @@ namespace E_Tax // Đảm bảo đúng namespace
                             {
                                 if (product.ValueKind == JsonValueKind.Object)
                                 {
-                                    // Tạo đối tượng chi tiết
-                                    var detailItem = new InvoiceDetailItem
+                                    // (Tạo đối tượng chi tiết... giữ nguyên)
+                                    var detailItem = new InvoiceDetailItem
                                     {
-                                        STT = globalStt, // Dùng STT chung
+                                        STT = globalStt,
                                         KyHieuHD = GetString(root, "khhdon") ?? invoiceHeader.Ky_hieu_hoa_don,
                                         SoHD = GetInt(root, "shdon") ?? invoiceHeader.So_hoa_don,
                                         NgayHD = FormatNgayLap(GetString(root, "tdlap")) ?? invoiceHeader.Ngay_lap,
@@ -350,20 +413,21 @@ namespace E_Tax // Đảm bảo đúng namespace
                                         GhiChuSanPham = GetString(product, "ghichu")
                                     };
 
-                                    // !!! THÊM VÀO CẢ 3 LIST (nếu phù hợp) !!!
-                                    allDetailItems.Add(detailItem); // Luôn thêm vào list tổng hợp
+                                    // !!! THÊM VÀO CẢ 4 LIST (nếu phù hợp) !!!
+                                    allDetailItems.Add(detailItem);
 
                                     if (invoiceHeader.Thong_tin_lien_quan == "Mua vào")
                                     {
                                         boughtDetailItems.Add(detailItem);
                                     }
                                     else // Mặc định là "Bán ra"
-                                    {
+                                    {
                                         soldDetailItems.Add(detailItem);
                                     }
-                                    // =====================================
-                                    globalStt++; // Tăng STT sau khi dùng
-                                }
+                                        vatDetailItems.Add(detailItem);
+                                    // =====================================
+                                    globalStt++; // Tăng STT
+                                }
                             }
                         }
                         else { _logAction?.Invoke($"ℹ️ (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} không có sản phẩm (hdhhdvu)."); }
@@ -372,21 +436,22 @@ namespace E_Tax // Đảm bảo đúng namespace
                 catch (JsonException jsonEx) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi parse JSON HĐ {invoiceHeader.So_hoa_don}: {jsonEx.Message}"); }
                 catch (Exception ex) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi khác khi xử lý HĐ {invoiceHeader.So_hoa_don}: {ex.ToString()}"); }
 
-                // Cập nhật progress bar
-                MethodInvoker stepProgressFinal = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
+                // (Cập nhật progress bar... giữ nguyên)
+                MethodInvoker stepProgressFinal = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
                 if (_progressBar.InvokeRequired) _progressBar.Invoke(stepProgressFinal); else stepProgressFinal();
 
-                await Task.Delay(50); // Delay nhỏ
+                await Task.Delay(50);
             } // Kết thúc foreach
 
-            // !!! GÁN DATASOURCE CHO CẢ 3 LƯỚI !!!
-            MethodInvoker bindDataAction = () => {
+            // !!! GÁN DATASOURCE CHO CẢ 4 LƯỚI !!!
+            MethodInvoker bindDataAction = () => {
                 try
                 {
-                    _dgvDetails.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(allDetailItems); // << GÁN LIST TỔNG HỢP
+                    _dgvDetails.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(allDetailItems);
                     _dgvMua.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(boughtDetailItems);
                     _dgvBan.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(soldDetailItems);
-                    _logAction?.Invoke($"✅ (Detail Mgr) Đã tải: {allDetailItems.Count} dòng chi tiết tổng, {boughtDetailItems.Count} Mua, {soldDetailItems.Count} Bán.");
+                    _dgvVatNop.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(vatDetailItems); // <- Gán cho lưới VAT
+                    _logAction?.Invoke($"✅ (Detail Mgr) Đã tải: {allDetailItems.Count} dòng chi tiết tổng, {boughtDetailItems.Count} Mua, {soldDetailItems.Count} Bán, {vatDetailItems.Count} VAT.");
                 }
                 catch (Exception bindEx)
                 {
@@ -398,11 +463,13 @@ namespace E_Tax // Đảm bảo đúng namespace
                     _progressBar.Visible = false;
                 }
             };
-            // Chọn 1 lưới bất kỳ để Invoke
-            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(bindDataAction); else bindDataAction();
-            // ====================================
-        }
-        private async Task<string> GetInvoiceDetailInternalAsync(string nbmst, string khhdon, int? shdon, int? khmshdon)
+            // Chọn 1 lưới bất kỳ để Invoke
+            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(bindDataAction); else bindDataAction();
+            // ====================================
+        }
+
+        // (Hàm GetInvoiceDetailInternalAsync... giữ nguyên)
+        private async Task<string> GetInvoiceDetailInternalAsync(string nbmst, string khhdon, int? shdon, int? khmshdon)
         {
             if (string.IsNullOrEmpty(nbmst) || string.IsNullOrEmpty(khhdon) || !shdon.HasValue || !khmshdon.HasValue)
             {
@@ -412,10 +479,10 @@ namespace E_Tax // Đảm bảo đúng namespace
             try
             {
                 string url = $"query/invoices/detail?" +
-                             $"nbmst={Uri.EscapeDataString(nbmst)}&" +
-                             $"khhdon={Uri.EscapeDataString(khhdon)}&" +
-                             $"shdon={shdon.Value}&" +
-                             $"khmshdon={khmshdon.Value}";
+                      $"nbmst={Uri.EscapeDataString(nbmst)}&" +
+                      $"khhdon={Uri.EscapeDataString(khhdon)}&" +
+                      $"shdon={shdon.Value}&" +
+                      $"khmshdon={khmshdon.Value}";
 
                 using var req = new HttpRequestMessage(HttpMethod.Get, url);
                 req.Headers.UserAgent.ParseAdd(_browserUserAgent);
@@ -434,10 +501,11 @@ namespace E_Tax // Đảm bảo đúng namespace
             }
             catch (HttpRequestException httpEx) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi HTTP khi lấy chi tiết HĐ {shdon}: {httpEx.Message}"); return $"❌ Lỗi kết nối: {httpEx.Message}"; }
             catch (Exception ex) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi khác khi lấy chi tiết HĐ {shdon}: {ex.ToString()}"); return $"❌ Lỗi hệ thống: {ex.Message}"; } // Log full exception
-        }
+        }
 
 
-        private string GetString(JsonElement element, string propertyName)
+        // (Các hàm GetString, GetDecimal, GetInt, FormatNgayLap... giữ nguyên)
+        private string GetString(JsonElement element, string propertyName)
         {
             if (element.TryGetProperty(propertyName, out JsonElement prop) && prop.ValueKind == JsonValueKind.String) { return prop.GetString(); }
             else if (element.TryGetProperty(propertyName, out prop) && prop.ValueKind != JsonValueKind.Null && prop.ValueKind != JsonValueKind.Undefined) { return prop.ToString(); }
@@ -463,17 +531,17 @@ namespace E_Tax // Đảm bảo đúng namespace
         }
         private string FormatNgayLap(string ngayLapJson)
         {
-            // Thử parse theo nhiều định dạng phổ biến nếu cần
-            if (DateTime.TryParse(ngayLapJson, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
+            // Thử parse theo nhiều định dạng phổ biến nếu cần
+            if (DateTime.TryParse(ngayLapJson, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
             {
                 return dt.ToString("dd/MM/yyyy"); // Chỉ lấy ngày tháng năm
-            }
-            // Thử parse nếu có dạng yyyyMMddHHmmss
-            else if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
+            }
+            // Thử parse nếu có dạng yyyyMMddHHmmss
+            else if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
             {
                 return dt.ToString("dd/MM/yyyy");
             }
             return ngayLapJson; // Trả về gốc nếu không parse được
-        }
+        }
     }
 }
