@@ -2851,11 +2851,15 @@ namespace E_Tax
                         }
                         downloadProgressBar.PerformStep();
                     }
-                    MessageBox.Show($"Đã gửi {printSuccessCount}/{finalPdfPaths.Count} hóa đơn đến hộp thoại in.\n" +
-                                    $"Vui lòng kiểm tra các hộp thoại in xuất hiện.\n\n" +
-                                    (failedInvoicesInfo.Count > 0 ? $"Lưu ý: Có {failedInvoicesInfo.Count} hóa đơn gặp lỗi." : ""),
-                                    "Hoàn tất gửi lệnh in", MessageBoxButtons.OK,
-                                    failedInvoicesInfo.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                    //MessageBox.Show($"Đã gửi {printSuccessCount}/{finalPdfPaths.Count} hóa đơn đến hộp thoại in.\n" +
+                    //                $"Vui lòng kiểm tra các hộp thoại in xuất hiện.\n\n" +
+                    //                (failedInvoicesInfo.Count > 0 ? $"Lưu ý: Có {failedInvoicesInfo.Count} hóa đơn gặp lỗi." : ""),
+                    //                "Hoàn tất gửi lệnh in", MessageBoxButtons.OK,
+                    //                failedInvoicesInfo.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                    MessageBox.Show($"Đã gửi xử lý hóa đơn đến hộp thoại in.\n" +
+                                    $"Không tìm thấy máy in vật lý nào kết nối đến máy của bạn!",
+                                    "Hãy kết nối đến máy in của bạn", MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
                 }
                 else
                 {
