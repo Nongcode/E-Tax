@@ -16,6 +16,7 @@
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="EPPlus" Version="8.2.0" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3485.44" />
+    <PackageReference Include="PuppeteerSharp" Version="20.2.4" />
   </ItemGroup>
 	<ItemGroup>
     <PackageReference Include="Svg" Version="3.4.7" />

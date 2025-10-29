@@ -68,16 +68,11 @@ namespace E_Tax
             picCaptcha = new PictureBox();
             panelSearch = new Panel();
             mainSplitContainer = new SplitContainer();
-            lblKyBaoCao = new Label();
-            txtThang = new TextBox();
-            lblNam = new Label();
-            txtNam = new TextBox();
             label1 = new Label();
             dtpFromDate = new DateTimePicker();
             label2 = new Label();
             dtpToDate = new DateTimePicker();
             btnTaiHDGoc = new Button();
-            btnNenZip = new Button();
             btnCnKoPdf = new Button();
             btnXemHD = new Button();
             gbInvoiceType = new GroupBox();
@@ -363,16 +358,11 @@ namespace E_Tax
             // 
             // mainSplitContainer.Panel1
             // 
-            mainSplitContainer.Panel1.Controls.Add(lblKyBaoCao);
-            mainSplitContainer.Panel1.Controls.Add(txtThang);
-            mainSplitContainer.Panel1.Controls.Add(lblNam);
-            mainSplitContainer.Panel1.Controls.Add(txtNam);
             mainSplitContainer.Panel1.Controls.Add(label1);
             mainSplitContainer.Panel1.Controls.Add(dtpFromDate);
             mainSplitContainer.Panel1.Controls.Add(label2);
             mainSplitContainer.Panel1.Controls.Add(dtpToDate);
             mainSplitContainer.Panel1.Controls.Add(btnTaiHDGoc);
-            mainSplitContainer.Panel1.Controls.Add(btnNenZip);
             mainSplitContainer.Panel1.Controls.Add(btnCnKoPdf);
             mainSplitContainer.Panel1.Controls.Add(btnXemHD);
             mainSplitContainer.Panel1.Controls.Add(gbInvoiceType);
@@ -388,65 +378,26 @@ namespace E_Tax
             mainSplitContainer.SplitterDistance = 650;
             mainSplitContainer.TabIndex = 30;
             // 
-            // lblKyBaoCao
-            // 
-            lblKyBaoCao.AutoSize = true;
-            lblKyBaoCao.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            lblKyBaoCao.ForeColor = Color.FromArgb(0, 117, 214);
-            lblKyBaoCao.Location = new Point(12, 16);
-            lblKyBaoCao.Name = "lblKyBaoCao";
-            lblKyBaoCao.Size = new Size(80, 20);
-            lblKyBaoCao.TabIndex = 30;
-            lblKyBaoCao.Text = "Kỳ báo cáo";
-            // 
-            // txtThang
-            // 
-            txtThang.Location = new Point(17, 47);
-            txtThang.Name = "txtThang";
-            txtThang.PlaceholderText = "Tháng ";
-            txtThang.Size = new Size(88, 23);
-            txtThang.TabIndex = 31;
-            txtThang.Leave += txtMonthYear_Leave;
-            // 
-            // lblNam
-            // 
-            lblNam.AutoSize = true;
-            lblNam.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            lblNam.ForeColor = Color.FromArgb(0, 117, 214);
-            lblNam.Location = new Point(146, 16);
-            lblNam.Name = "lblNam";
-            lblNam.Size = new Size(41, 20);
-            lblNam.TabIndex = 34;
-            lblNam.Text = "Năm";
-            // 
-            // txtNam
-            // 
-            txtNam.Location = new Point(149, 47);
-            txtNam.Name = "txtNam";
-            txtNam.PlaceholderText = "Năm";
-            txtNam.Size = new Size(97, 23);
-            txtNam.TabIndex = 33;
-            txtNam.Leave += txtMonthYear_Leave;
-            // 
             // label1
             // 
             label1.AutoSize = true;
             label1.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
             label1.ForeColor = Color.FromArgb(0, 117, 214);
-            label1.Location = new Point(339, 16);
+            label1.Location = new Point(10, 27);
             label1.Name = "label1";
             label1.Size = new Size(61, 20);
             label1.TabIndex = 22;
             label1.Text = "Từ ngày";
+            label1.Click += label1_Click;
             // 
             // dtpFromDate
             // 
             dtpFromDate.CustomFormat = "dd/MM/yyyy";
             dtpFromDate.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             dtpFromDate.Format = DateTimePickerFormat.Custom;
-            dtpFromDate.Location = new Point(340, 47);
+            dtpFromDate.Location = new Point(10, 63);
             dtpFromDate.Name = "dtpFromDate";
-            dtpFromDate.Size = new Size(121, 23);
+            dtpFromDate.Size = new Size(156, 23);
             dtpFromDate.TabIndex = 24;
             // 
             // label2
@@ -454,7 +405,7 @@ namespace E_Tax
             label2.AutoSize = true;
             label2.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
             label2.ForeColor = Color.FromArgb(0, 117, 214);
-            label2.Location = new Point(505, 15);
+            label2.Location = new Point(225, 27);
             label2.Name = "label2";
             label2.Size = new Size(70, 20);
             label2.TabIndex = 23;
@@ -465,16 +416,16 @@ namespace E_Tax
             dtpToDate.CustomFormat = "dd/MM/yyyy";
             dtpToDate.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             dtpToDate.Format = DateTimePickerFormat.Custom;
-            dtpToDate.Location = new Point(505, 47);
+            dtpToDate.Location = new Point(225, 63);
             dtpToDate.Name = "dtpToDate";
-            dtpToDate.Size = new Size(121, 23);
+            dtpToDate.Size = new Size(156, 23);
             dtpToDate.TabIndex = 25;
             // 
             // btnTaiHDGoc
             // 
             btnTaiHDGoc.BackColor = SystemColors.GradientActiveCaption;
             btnTaiHDGoc.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnTaiHDGoc.Location = new Point(506, 165);
+            btnTaiHDGoc.Location = new Point(506, 180);
             btnTaiHDGoc.Name = "btnTaiHDGoc";
             btnTaiHDGoc.Size = new Size(130, 30);
             btnTaiHDGoc.TabIndex = 10;
@@ -482,22 +433,11 @@ namespace E_Tax
             btnTaiHDGoc.UseVisualStyleBackColor = false;
             btnTaiHDGoc.Click += btnTaiHDGoc_Click;
             // 
-            // btnNenZip
-            // 
-            btnNenZip.BackColor = SystemColors.GradientActiveCaption;
-            btnNenZip.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnNenZip.Location = new Point(111, 166);
-            btnNenZip.Name = "btnNenZip";
-            btnNenZip.Size = new Size(76, 30);
-            btnNenZip.TabIndex = 9;
-            btnNenZip.Text = "Mở file zip";
-            btnNenZip.UseVisualStyleBackColor = false;
-            // 
             // btnCnKoPdf
             // 
             btnCnKoPdf.BackColor = SystemColors.GradientActiveCaption;
             btnCnKoPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnCnKoPdf.Location = new Point(193, 165);
+            btnCnKoPdf.Location = new Point(126, 181);
             btnCnKoPdf.Name = "btnCnKoPdf";
             btnCnKoPdf.Size = new Size(76, 30);
             btnCnKoPdf.TabIndex = 8;
@@ -509,7 +449,7 @@ namespace E_Tax
             // 
             btnXemHD.BackColor = SystemColors.GradientActiveCaption;
             btnXemHD.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnXemHD.Location = new Point(8, 166);
+            btnXemHD.Location = new Point(10, 181);
             btnXemHD.Name = "btnXemHD";
             btnXemHD.Size = new Size(97, 30);
             btnXemHD.TabIndex = 7;
@@ -523,7 +463,7 @@ namespace E_Tax
             gbInvoiceType.Controls.Add(rbBought);
             gbInvoiceType.Controls.Add(rbSold);
             gbInvoiceType.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            gbInvoiceType.Location = new Point(12, 85);
+            gbInvoiceType.Location = new Point(7, 105);
             gbInvoiceType.Name = "gbInvoiceType";
             gbInvoiceType.Size = new Size(522, 60);
             gbInvoiceType.TabIndex = 29;
@@ -569,7 +509,7 @@ namespace E_Tax
             // btnLeftSearch
             // 
             btnLeftSearch.BackColor = SystemColors.ScrollBar;
-            btnLeftSearch.Location = new Point(540, 91);
+            btnLeftSearch.Location = new Point(535, 112);
             btnLeftSearch.Name = "btnLeftSearch";
             btnLeftSearch.Size = new Size(96, 54);
             btnLeftSearch.TabIndex = 35;
@@ -580,7 +520,7 @@ namespace E_Tax
             // btnExportChiTiet
             // 
             btnExportChiTiet.BackColor = SystemColors.GradientActiveCaption;
-            btnExportChiTiet.Location = new Point(278, 165);
+            btnExportChiTiet.Location = new Point(231, 180);
             btnExportChiTiet.Name = "btnExportChiTiet";
             btnExportChiTiet.Size = new Size(102, 30);
             btnExportChiTiet.TabIndex = 36;
@@ -591,7 +531,7 @@ namespace E_Tax
             // btnExportDS
             // 
             btnExportDS.BackColor = SystemColors.GradientActiveCaption;
-            btnExportDS.Location = new Point(386, 166);
+            btnExportDS.Location = new Point(359, 180);
             btnExportDS.Name = "btnExportDS";
             btnExportDS.Size = new Size(114, 30);
             btnExportDS.TabIndex = 37;
@@ -632,7 +572,7 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvLoaiHD, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
@@ -653,10 +593,10 @@ namespace E_Tax
             // 
             // colDgvLoaiHD
             // 
-            colDgvLoaiHD.HeaderText = "Loại HĐ";
-            colDgvLoaiHD.Name = "colDgvLoaiHD";
-            colDgvLoaiHD.ReadOnly = true;
-            colDgvLoaiHD.Width = 60;
+            //colDgvLoaiHD.HeaderText = "Loại HĐ";
+            //colDgvLoaiHD.Name = "colDgvLoaiHD";
+            //colDgvLoaiHD.ReadOnly = true;
+            //colDgvLoaiHD.Width = 60;
             // 
             // colDgvTraCuu
             // 
@@ -1013,7 +953,7 @@ namespace E_Tax
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);
-            FormBorderStyle = FormBorderStyle.Fixed3D;
+            FormBorderStyle = FormBorderStyle.FixedToolWindow;
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "E-Tax Invoice Downloader";
@@ -1051,11 +991,6 @@ namespace E_Tax
             ResumeLayout(false);
             PerformLayout();
         }
-        private void txtMonthYear_Leave(object sender, EventArgs e)
-        {
-            // Gọi phương thức cập nhật chung khi rời khỏi ô tháng hoặc năm
-            UpdateDatePickersFromMonthYear();
-        }
 
         private Panel panelActivation;
         private TextBox txtActivationKey;
@@ -1083,10 +1018,6 @@ namespace E_Tax
 
 
         private System.Windows.Forms.SplitContainer mainSplitContainer;
-        private System.Windows.Forms.Label lblKyBaoCao;
-        private System.Windows.Forms.TextBox txtThang;
-        private System.Windows.Forms.Label lblNam;
-        private System.Windows.Forms.TextBox txtNam;
         private System.Windows.Forms.RadioButton rbAllInvoices;
         private System.Windows.Forms.Button btnLeftSearch;
         private System.Windows.Forms.Button btnExportChiTiet;
@@ -1102,7 +1033,6 @@ namespace E_Tax
         private System.Windows.Forms.Button btnRightSearch;
         private System.Windows.Forms.Button btnXemHD;
         private System.Windows.Forms.Button btnCnKoPdf;
-        private System.Windows.Forms.Button btnNenZip;
         private System.Windows.Forms.Button btnTaiHDGoc;
         private TabControl tabControlMain;
         private TabPage tabTongHop;

@@ -1,20 +1,24 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.DirectoryServices.ActiveDirectory;
+using System.Drawing;
+using System.Drawing.Printing;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Drawing;
-using System.IO;
-using Svg;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
-using System.Collections.Generic;
-using System.Linq;
-using System.IO.Compression;
+using PuppeteerSharp;
+using Svg;
 
 namespace E_Tax
 {
@@ -887,273 +891,364 @@ namespace E_Tax
 
         private async Task SaveOriginalInvoicesAsync()
         {
-            // === GIAI ĐOẠN 1: KIỂM TRA ĐẦU VÀO ===
-            if (string.IsNullOrEmpty(jwtToken))
+            // === GIAI ĐOẠN 1: KIỂM TRA ĐẦU VÀO ===
+            if (string.IsNullOrEmpty(jwtToken))
             {
                 MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            DateTime fromDate = dtpFromDate.Value.Date;
-            DateTime toDate = dtpToDate.Value.Date;
+            DateTime globalFromDate = dtpFromDate.Value.Date;
+            DateTime globalToDate = dtpToDate.Value.Date;
 
-            if (toDate > fromDate.AddMonths(1))
-            {
-                MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (fromDate > toDate)
+            if (globalFromDate > globalToDate)
             {
                 MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // --- QUẢN LÝ UI ---
-            btnTaiHDGoc.Enabled = false; // Giả sử nút của bạn tên là btnTaiHDGoc
+            // --- QUẢN LÝ UI ---
+            btnTaiHDGoc.Enabled = false;
             downloadProgressBar.Visible = true;
             lblDownloadStatus.Visible = true;
-            string tempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
 
-            // === DANH SÁCH KẾT QUẢ MỚI ĐỂ LƯU ===
+            // Thư mục tạm chính để chứa MỌI THỨ
+            string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
+            // Thư mục con cho báo cáo
+            string reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
+            // Thư mục con để chứa các file ZIP gốc
+            string zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
+            // Thư mục con để chứa các file PDF đã convert (nếu có)
+            string pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
+            // Thư mục con để chứa các file XML (đã giải nén)
+            string xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+
             List<SearchResult> invoicesToDownload = new List<SearchResult>();
-            bool searchSuccess = true; // Cờ để theo dõi lỗi tìm kiếm
+            List<string> failedChunks = new List<string>();
+
+            // Biến cho PuppeteerSharp
+            bool chromiumDownloaded = false;
+            string chromiumExecutablePath = null;
 
             try
             {
-                lblDownloadStatus.Text = "Bước 1: Đang tìm kiếm lại hóa đơn...";
-                downloadProgressBar.Style = ProgressBarStyle.Marquee;
-                DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1);
-                string querySold = Timef(fromDate, preciseToDate, InvoiceType.Sold);
-                string queryBought = Timef(fromDate, preciseToDate, InvoiceType.Bought);
+                // === GIAI ĐOẠN 1.5: TÌM KIẾM HÓA ĐƠN (LOGIC VÒNG LẶP) ===
+                DateTime loopStartDate = globalFromDate;
+                const int chunkSizeInDays = 30;
+                double totalDays = (globalToDate - globalFromDate).TotalDays + 1;
+                int totalLoops = (int)Math.Ceiling(totalDays / chunkSizeInDays);
+                int apiCallsPerLoop = rbAllInvoices.Checked ? 2 : 1;
 
-                // --- TÌM KIẾM LẠI DỮ LIỆU (XỬ LÝ CẢ 3 TRƯỜNG HỢP) ---
+                lblDownloadStatus.Text = "Bước 1: Đang tìm kiếm hóa đơn...";
+                downloadProgressBar.Style = ProgressBarStyle.Blocks;
+                downloadProgressBar.Value = 0;
+                downloadProgressBar.Maximum = totalLoops * apiCallsPerLoop; // Chỉ tính bước tìm kiếm trước
 
-                // Tìm HĐ Bán ra
-                if (rbSold.Checked || rbAllInvoices.Checked)
+                int currentLoop = 0;
+                while (loopStartDate <= globalToDate)
                 {
-                    AppendLog("🔍 (Tải gốc) Bắt đầu tìm hóa đơn bán ra...");
-                    string resultSold = await GetProductsAsync("query/invoices/sold", querySold);
-                    if (resultSold.StartsWith("❌"))
+                    currentLoop++;
+                    DateTime loopEndDate = loopStartDate.AddDays(chunkSizeInDays - 1);
+                    if (loopEndDate > globalToDate) loopEndDate = globalToDate;
+                    lblDownloadStatus.Text = $"Bước 1: Tìm kiếm... ({currentLoop}/{totalLoops})";
+                    AppendLog($"🔍 (Tải gốc) Lát cắt {currentLoop}/{totalLoops}: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
+                    DateTime preciseLoopEndDate = loopEndDate.Date.AddDays(1).AddTicks(-1);
+                    string querySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold);
+                    string queryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought);
+
+                    // Tìm HĐ Bán ra
+                    if (rbSold.Checked || rbAllInvoices.Checked)
                     {
-                        AppendLog(resultSold);
-                        MessageBox.Show("Lỗi khi tìm lại HĐ Bán ra:\n" + resultSold, "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        searchSuccess = false;
-                    }
-                    else
-                    {
-                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, options);
-                        if (responseSold?.Datas != null)
+                        string resultSold = await GetProductsAsync("query/invoices/sold", querySold);
+                        if (resultSold.StartsWith("❌")) { failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]"); }
+                        else
                         {
-                            invoicesToDownload.AddRange(responseSold.Datas);
-                            AppendLog($"✅ (Tải gốc) Tìm thấy {responseSold.Datas.Count} hóa đơn bán ra.");
+                            var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (responseSold?.Datas != null) invoicesToDownload.AddRange(responseSold.Datas);
                         }
+                        if (downloadProgressBar.Value < downloadProgressBar.Maximum) downloadProgressBar.PerformStep();
                     }
-                }
-
-                // Tìm HĐ Mua vào (chỉ tìm nếu lần trước thành công và cần tìm mua/tất cả)
-                if (searchSuccess && (rbBought.Checked || rbAllInvoices.Checked))
-                {
-                    AppendLog("🔍 (Tải gốc) Bắt đầu tìm hóa đơn mua vào...");
-                    string resultBought = await GetProductsAsync("query/invoices/purchase", queryBought);
-                    if (resultBought.StartsWith("❌"))
+                    // Tìm HĐ Mua vào
+                    if (rbBought.Checked || rbAllInvoices.Checked)
                     {
-                        AppendLog(resultBought);
-                        MessageBox.Show("Lỗi khi tìm lại HĐ Mua vào:\n" + resultBought, "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        searchSuccess = false;
-                    }
-                    else
-                    {
-                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, options);
-                        if (responseBought?.Datas != null)
+                        string resultBought = await GetProductsAsync("query/invoices/purchase", queryBought);
+                        if (resultBought.StartsWith("❌")) { failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]"); }
+                        else
                         {
-                            invoicesToDownload.AddRange(responseBought.Datas);
-                            AppendLog($"✅ (Tải gốc) Tìm thấy {responseBought.Datas.Count} hóa đơn mua vào.");
+                            var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (responseBought?.Datas != null) invoicesToDownload.AddRange(responseBought.Datas);
                         }
+                        if (downloadProgressBar.Value < downloadProgressBar.Maximum) downloadProgressBar.PerformStep();
                     }
+                    loopStartDate = loopEndDate.AddDays(1);
+                    await Task.Delay(200);
                 }
+                // --- KẾT THÚC VÒNG LẶP TÌM KIẾM ---
 
-                // Nếu có lỗi ở bất kỳ bước tìm kiếm nào, dừng lại
-                if (!searchSuccess)
-                {
-                    return; // Thoát khỏi hàm, khối finally vẫn chạy để reset UI
-                }
+                invoicesToDownload = invoicesToDownload
+                .GroupBy(r => r.Id)
+                .Select(g => g.First())
+                .OrderByDescending(inv => inv.Ngay_lap)
+                .ThenBy(inv => inv.So_hoa_don)
+                .ToList();
 
-                // === KIỂM TRA KẾT QUẢ TÌM KIẾM LẠI ===
                 if (!invoicesToDownload.Any())
                 {
-                    MessageBox.Show("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn (khi tìm kiếm lại).",
-                                    "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return; // Dừng hàm
+                    MessageBox.Show("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
                 }
 
-                // === GIAI ĐOẠN 2: TẢI VỀ VÀ XỬ LÝ (Sử dụng invoicesToDownload) ===
-                // Sắp xếp lại nếu cần (ví dụ: theo ngày giảm dần)
-                invoicesToDownload = invoicesToDownload.OrderByDescending(inv => inv.Ngay_lap).ThenBy(inv => inv.So_hoa_don).ToList();
+                // === GIAI ĐOẠN 2: TẢI VỀ VÀ XỬ LÝ (Sử dụng invoicesToDownload) ===
+                ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
 
-                ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải...", Color.Green);
-                downloadProgressBar.Style = ProgressBarStyle.Blocks;
-                downloadProgressBar.Maximum = invoicesToDownload.Count + 4; // Cập nhật Maximum
+                // Đặt lại ProgressBar: 2 Excel + (Tải ZIP + Giải nén + Convert/Copy) cho mỗi HĐ + 1 bước Nén cuối
+                downloadProgressBar.Maximum = 2 + (invoicesToDownload.Count * 3) + 1;
                 downloadProgressBar.Value = 0;
 
-                Directory.CreateDirectory(tempDirectory);
+                // Tạo các thư mục con trong thư mục tạm chính
+                Directory.CreateDirectory(baseTempDirectory);
+                Directory.CreateDirectory(reportSubFolder); // Thư mục cho Excel
+                Directory.CreateDirectory(zipSubFolder);
+                Directory.CreateDirectory(pdfSubFolder);
+                Directory.CreateDirectory(xmlSubFolder);
 
-                lblDownloadStatus.Text = "Bước 2: Đang tải file Excel danh sách...";
-                string listExcelPath = Path.Combine(tempDirectory, "DanhSachHoaDon.xlsx");
-                // Xác định query string cho file Excel danh sách API
-                string queryForListExcel = (rbSold.Checked || rbAllInvoices.Checked) ? querySold : queryBought;
+                lblDownloadStatus.Text = "Bước 2: Đang tạo file Excel danh sách...";
+                string listExcelPath = Path.Combine(reportSubFolder, "0_DanhSachHoaDon.xlsx"); // Lưu vào thư mục con
+                DateTime preciseGlobalToDate = globalToDate.AddDays(1).AddTicks(-1);
+                string queryForListExcel = Timef(globalFromDate, preciseGlobalToDate, rbBought.Checked ? InvoiceType.Bought : InvoiceType.Sold);
+                if (rbAllInvoices.Checked) queryForListExcel = Timef(globalFromDate, preciseGlobalToDate, InvoiceType.Sold);
                 await DownloadInvoiceListExcelAsync(queryForListExcel, listExcelPath);
-                downloadProgressBar.PerformStep(); // Tăng 1 bước
+                downloadProgressBar.PerformStep(); // +1
 
-                lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
-                // *** GỌI HÀM ĐÃ SỬA ĐỔI ***
-                await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(tempDirectory, "ChiTietHoaDon.xlsx"));
-                downloadProgressBar.PerformStep(); // Tăng 1 bước
+                lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
+                await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(reportSubFolder, "0_ChiTietHoaDon.xlsx")); // Lưu vào thư mục con
+                downloadProgressBar.PerformStep(); // +1
 
-                int successCount = 0;
-                // Tải file ZIP cho từng hóa đơn
+                int successCount = 0;
+                int convertSuccessCount = 0;
+
+                // === BƯỚC 4: TẢI, GIẢI NÉN, CONVERT (NÂNG CẤP) ===
                 for (int i = 0; i < invoicesToDownload.Count; i++)
                 {
-                    lblDownloadStatus.Text = $"Bước 4: Đang tải hóa đơn gốc ({i + 1}/{invoicesToDownload.Count})...";
-                    if (await DownloadSingleInvoiceZipAsync(invoicesToDownload[i], tempDirectory))
+                    var invoice = invoicesToDownload[i];
+                    string invoiceIdentifier = $"{invoice.Ky_hieu_hoa_don?.Replace('/', '_') ?? "KH_NA"}_{invoice.So_hoa_don?.ToString() ?? "SHD_NA"}";
+                    lblDownloadStatus.Text = $"Bước 4: Đang xử lý HĐ ({i + 1}/{invoicesToDownload.Count})...";
+                    string zipFilePath = Path.Combine(zipSubFolder, $"HD_{invoiceIdentifier}.zip");
+                    string tempExtractPath = Path.Combine(baseTempDirectory, $"_temp_extract_{i}"); // Thư mục tạm để giải nén
+                    int currentStepBase = 2 + (i * 3); // 2 (Excel) + (i * 3 bước)
+
+                    try
                     {
-                        successCount++;
+                        // --- 4.1. Tải ZIP ---
+                        if (await DownloadSingleInvoiceZipAsync(invoice, zipSubFolder))
+                        {
+                            successCount++;
+                        }
+                        else
+                        {
+                            failedChunks.Add($"{invoiceIdentifier} (Lỗi tải ZIP)");
+                            downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum); // Bỏ qua 3 bước
+                            continue;
+                        }
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 1, downloadProgressBar.Maximum);
+
+                        // --- 4.2. Giải nén ZIP ---
+                        Directory.CreateDirectory(tempExtractPath);
+                        await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, tempExtractPath, true));
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 2, downloadProgressBar.Maximum);
+
+                        // --- 4.3. Tìm và Convert/Copy ---
+                        string[] pdfFiles = Directory.GetFiles(tempExtractPath, "*.pdf", SearchOption.AllDirectories);
+                        string[] htmlFiles = Directory.GetFiles(tempExtractPath, "*.html", SearchOption.AllDirectories);
+                        string[] xmlFiles = Directory.GetFiles(tempExtractPath, "*.xml", SearchOption.AllDirectories);
+                        string outputPdfPath = Path.Combine(pdfSubFolder, $"HD_{invoiceIdentifier}.pdf");
+
+                        if (pdfFiles.Length > 0)
+                        {
+                            File.Copy(pdfFiles[0], outputPdfPath, true);
+                            AppendLog($"✅ (Tải gốc) Đã sao chép PDF gốc: {invoiceIdentifier}");
+                            convertSuccessCount++;
+                        }
+                        else if (htmlFiles.Length > 0)
+                        {
+                            lblDownloadStatus.Text = $"Convert HTML... ({i + 1}/{invoicesToDownload.Count})";
+                            AppendLog($"🔄 (Tải gốc) Convert HTML: {invoiceIdentifier}");
+
+                            if (!chromiumDownloaded)
+                            {
+                                lblDownloadStatus.Text = "Tải Chromium (lần đầu)...";
+                                AppendLog("   -> Đang tải Chromium...");
+                                var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions { });
+                                var installedBrowser = await browserFetcher.DownloadAsync();
+                                AppendLog("   -> Tải Chromium hoàn tất.");
+                                if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+                                {
+                                    chromiumExecutablePath = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
+                                }
+                                if (string.IsNullOrEmpty(chromiumExecutablePath)) throw new Exception("Không thể lấy đường dẫn Chromium.");
+                                chromiumDownloaded = true;
+                                lblDownloadStatus.Text = $"Convert HTML... ({i + 1}/{invoicesToDownload.Count})";
+                            }
+
+                            var launchOptions = new LaunchOptions { Headless = true, ExecutablePath = chromiumExecutablePath };
+                            await using var browser = await Puppeteer.LaunchAsync(launchOptions);
+                            await using var page = await browser.NewPageAsync();
+                            await page.GoToAsync("file:///" + htmlFiles[0].Replace('\\', '/'), new NavigationOptions { Timeout = 60000, WaitUntil = new[] { WaitUntilNavigation.Networkidle0 } });
+                            await page.PdfAsync(outputPdfPath, new PdfOptions { Format = PuppeteerSharp.Media.PaperFormat.A4 });
+                            AppendLog($"  -> Convert thành công: {invoiceIdentifier}");
+                            convertSuccessCount++;
+                        }
+                        else
+                        {
+                            AppendLog($"⚠️ (Tải gốc) Không tìm thấy PDF/HTML cho HĐ: {invoiceIdentifier}");
+                            failedChunks.Add($"{invoiceIdentifier} (Không tìm thấy PDF/HTML)");
+                        }
+
+                        // Sao chép file XML
+                        if (xmlFiles.Length > 0)
+                        {
+                            string outputXmlPath = Path.Combine(xmlSubFolder, $"HD_{invoiceIdentifier}.xml");
+                            File.Copy(xmlFiles[0], outputXmlPath, true);
+                        }
+
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum); // Hoàn thành bước 3
+                    }
+                    catch (Exception exConvert)
+                    {
+                        AppendLog($"❌ (Tải gốc) Lỗi Giải nén/Convert HĐ {invoiceIdentifier}: {exConvert.Message}");
+                        failedChunks.Add($"{invoiceIdentifier} (Lỗi giải nén/convert)");
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum); // Hoàn thành 3 bước (dù lỗi)
+                    }
+                    finally
+                    {
+                        // Dọn dẹp thư mục giải nén tạm
+                        try { if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true); }
+                        catch (Exception exCleanTemp) { AppendLog($"⚠️ Lỗi dọn dẹp thư mục tạm {tempExtractPath}: {exCleanTemp.Message}"); }
                     }
-                    downloadProgressBar.Value = Math.Min(downloadProgressBar.Value + 1, downloadProgressBar.Maximum); // Cập nhật progress
-                    await Task.Delay(100); // Giữ delay nhỏ
-                }
+                } // Kết thúc vòng lặp For
 
-                // --- Phần còn lại: Nén, giải nén, thông báo ---
-                lblDownloadStatus.Text = "Bước 5: Đang tổng hợp và giải nén...";
-                using var fbd = new FolderBrowserDialog { Description = "Chọn thư mục để lưu kết quả" };
+                // --- GIAI ĐOẠN 3: NÉN THƯ MỤC KẾT QUẢ VÀ THÔNG BÁO ---
+                lblDownloadStatus.Text = "Bước 5: Đang nén kết quả...";
+                downloadProgressBar.Value = Math.Min(downloadProgressBar.Maximum - 1, downloadProgressBar.Maximum); // Gần xong
 
-                // Kiểm tra xem người dùng có chọn thư mục không
+                using var fbd = new FolderBrowserDialog { Description = "Chọn thư mục để lưu file ZIP kết quả" };
+
                 if (fbd.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(fbd.SelectedPath))
                 {
                     AppendLog("ℹ️ Người dùng đã hủy chọn thư mục lưu.");
-                    // Không return vội, vẫn cần dọn dẹp ở finally
                 }
-                else // Chỉ thực hiện nén/giải nén nếu người dùng đã chọn thư mục
+                else
                 {
-                    string tempZipPath = Path.Combine(Path.GetTempPath(), $"Temp_HoaDon_TongHop_{Guid.NewGuid()}.zip");
-                    AppendLog($"📦 Đang nén thư mục tạm: {tempDirectory} -> {tempZipPath}");
-                    ZipFile.CreateFromDirectory(tempDirectory, tempZipPath);
-                    AppendLog($"✅ Nén xong.");
+                    string finalZipName = $"E-Tax_Export_{globalFromDate:yyyyMMdd}_den_{globalToDate:yyyyMMdd}.zip";
+                    string finalZipPath = Path.Combine(fbd.SelectedPath, finalZipName);
+                    int counter = 1;
+                    while (File.Exists(finalZipPath))
+                    {
+                        finalZipName = $"E-Tax_Export_{globalFromDate:yyyyMMdd}_den_{globalToDate:yyyyMMdd}_{counter}.zip";
+                        finalZipPath = Path.Combine(fbd.SelectedPath, finalZipName);
+                        counter++;
+                    }
 
-                    // Đảm bảo tên thư mục cuối cùng hợp lệ
-                    string finalFolderName = Path.GetFileNameWithoutExtension(tempZipPath).Replace("Temp_", "");
-                    // Loại bỏ các ký tự không hợp lệ khỏi tên thư mục nếu cần (tùy HĐH)
-                    // finalFolderName = string.Join("_", finalFolderName.Split(Path.GetInvalidFileNameChars()));
+                    AppendLog($"📦 Đang nén thư mục kết quả: {baseTempDirectory} -> {finalZipPath}");
+                    await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath)); // Chạy nén trên Task
+                    AppendLog($"✅ Nén xong.");
+                    downloadProgressBar.Value = downloadProgressBar.Maximum; // Hoàn thành
 
-                    string finalExtractionPath = Path.Combine(fbd.SelectedPath, finalFolderName);
-                    AppendLog($"📂 Tạo thư mục đích: {finalExtractionPath}");
-                    Directory.CreateDirectory(finalExtractionPath);
+                    // *** BỎ QUA VIỆC GIẢI NÉN LẠI VÀ GỌI UnzipInnerArchives ***
+                    // AppendLog($"🚀 Đang giải nén file tổng hợp vào thư mục đích...");
+                    // ZipFile.ExtractToDirectory(tempZipPath, finalExtractionPath, true);
+                    // AppendLog($"🔍 Bắt đầu giải nén các file ZIP hóa đơn con...");
+                    // await Task.Run(() => UnzipInnerArchives(finalExtractionPath));
 
-                    AppendLog($"🚀 Đang giải nén file tổng hợp vào thư mục đích...");
-                    ZipFile.ExtractToDirectory(tempZipPath, finalExtractionPath, true); // true: ghi đè nếu tồn tại
-                    downloadProgressBar.Value = Math.Min(downloadProgressBar.Value + 1, downloadProgressBar.Maximum); // Cập nhật progress
-                    AppendLog($"✅ Giải nén file tổng hợp xong.");
-
-                    AppendLog($"🔍 Bắt đầu giải nén các file ZIP hóa đơn con...");
-                    await Task.Run(() => UnzipInnerArchives(finalExtractionPath)); // Chạy giải nén con trên thread khác
-                    downloadProgressBar.Value = Math.Min(downloadProgressBar.Value + 1, downloadProgressBar.Maximum); // Cập nhật progress
-                    AppendLog($"✅ Giải nén file con xong.");
-
-
-                    MessageBox.Show($"✅ Hoàn tất! \n\nĐã lưu và giải nén thành công {successCount} hóa đơn gốc và 2 file báo cáo Excel vào thư mục:\n\n{finalExtractionPath}", "Thành Công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    string successMessage = $"✅ Hoàn tất! \n\nĐã tải {successCount} HĐ gốc, xử lý/convert {convertSuccessCount} HĐ sang PDF.\n" +
+                    $"Đã lưu tất cả file (Excel, PDF, XML, ZIP gốc) vào một file nén duy nhất:\n\n{finalZipPath}";
+                    if (failedChunks.Any())
+                    {
+                        string errorList = string.Join("\n - ", failedChunks);
+                        successMessage += $"\n\nLưu ý: Đã xảy ra lỗi khi xử lý các mục sau (kết quả có thể bị thiếu):\n - {errorList}";
+                    }
+                    MessageBox.Show(successMessage,
+                               failedChunks.Any() ? "Hoàn tất (Có lỗi)" : "Thành Công",
+                               MessageBoxButtons.OK,
+                               failedChunks.Any() ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
                 }
             }
-            catch (JsonException jsonEx) // Bắt lỗi cụ thể khi Deserialize
+            catch (JsonException jsonEx)
             {
                 AppendLog($"❌ Lỗi phân tích JSON trong SaveOriginalInvoicesAsync: {jsonEx.ToString()}");
                 MessageBox.Show($"Lỗi xử lý dữ liệu trả về từ API: {jsonEx.Message}", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                searchSuccess = false; // Đánh dấu là tìm kiếm lỗi
             }
-            catch (IOException ioEx) // Bắt lỗi liên quan đến file/thư mục
+            catch (IOException ioEx)
             {
                 AppendLog($"❌ Lỗi IO trong SaveOriginalInvoicesAsync: {ioEx.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi khi xử lý file hoặc thư mục: {ioEx.Message}\n\nThường do đường dẫn quá dài, không có quyền ghi, hoặc file đang được sử dụng.", "Lỗi File/Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            catch (Exception ex) // Bắt các lỗi chung khác
+            catch (Exception ex)
             {
                 AppendLog($"🐞 LỖI NGHIÊM TRỌNG trong SaveOriginalInvoicesAsync: {ex.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                // --- Dọn dẹp và Reset UI ---
-                try
+               try
                 {
-                    AppendLog($"🧹 Đang dọn dẹp thư mục tạm: {tempDirectory}");
-                    if (Directory.Exists(tempDirectory))
+                    AppendLog($"🧹 Đang dọn dẹp thư mục tạm: {baseTempDirectory}");
+                    if (Directory.Exists(baseTempDirectory))
                     {
-                        Directory.Delete(tempDirectory, true); // true: xóa cả nội dung bên trong
+                        Directory.Delete(baseTempDirectory, true);
                     }
                     AppendLog($"🧹 Đang dọn dẹp các file ZIP tạm...");
                     foreach (var tempZip in Directory.GetFiles(Path.GetTempPath(), "Temp_HoaDon_TongHop_*.zip"))
                     {
                         File.Delete(tempZip);
-                        AppendLog($"   -> Đã xóa: {Path.GetFileName(tempZip)}");
+                        AppendLog($"   -> Đã xóa: {Path.GetFileName(tempZip)}");
                     }
                 }
                 catch (Exception ex)
                 {
                     AppendLog($"⚠️ Không thể dọn dẹp file/thư mục tạm: {ex.Message}");
-                    // Có thể thông báo cho người dùng nếu muốn, nhưng thường không cần thiết
                 }
 
-                btnTaiHDGoc.Enabled = true; // Đổi tên nút nếu cần
+                btnTaiHDGoc.Enabled = true;
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
                 AppendLog("🏁 Kết thúc tiến trình Tải HĐ Gốc.");
             }
         }
-        private void UnzipInnerArchives(string directoryPath)
-        {
-            try
-            {
-                AppendLog($"⚙️ Bắt đầu tìm và giải nén các file hóa đơn con...");
-                string[] zipFiles = Directory.GetFiles(directoryPath, "HD_*.zip"); // Chỉ tìm các file zip hóa đơn
-
-                if (!zipFiles.Any())
-                {
-                    AppendLog("ℹ️ Không tìm thấy file zip hóa đơn con nào để giải nén.");
-                    return;
-                }
-
-                foreach (var zipFilePath in zipFiles)
-                {
-                    try
-                    {
-                        // Tạo thư mục giải nén từ tên file zip (ví dụ: "HD_C25TQH_28")
-                        string destinationPath = Path.Combine(directoryPath, Path.GetFileNameWithoutExtension(zipFilePath));
-                        Directory.CreateDirectory(destinationPath);
-
-                        // Giải nén và ghi đè nếu tồn tại
-                        ZipFile.ExtractToDirectory(zipFilePath, destinationPath, true);
-                        AppendLog($"   => Đã giải nén: {Path.GetFileName(zipFilePath)}");
-
-                        // Xóa file .zip con sau khi giải nén xong
-                        File.Delete(zipFilePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"❌ Lỗi khi giải nén file con '{Path.GetFileName(zipFilePath)}': {ex.Message}");
-                    }
-                }
-                AppendLog("✅ Hoàn tất giải nén các file hóa đơn con.");
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Lỗi nghiêm trọng trong quá trình giải nén file con: {ex.Message}");
-            }
-        }
 
         private async void btnTaiHDGoc_Click(object sender, EventArgs e)
         {
-            await SaveOriginalInvoicesAsync();
+            // === BỔ SUNG: THAY ĐỔI TEXT VÀ REFRESH ===
+            btnTaiHDGoc.Text = "Đang xử lý...";
+            btnTaiHDGoc.Refresh(); // Buộc nút vẽ lại text mới ngay lập tức
+            // =========================================
+
+            // === VÔ HIỆU HÓA FORM ĐỂ TẠO HIỆU ỨNG "MODAL" ===
+            this.Enabled = false;
+            this.Cursor = Cursors.WaitCursor; // Thêm con trỏ chờ
+
+            try
+            {
+                // Chạy hàm tải chính
+                await SaveOriginalInvoicesAsync();
+            }
+            catch (Exception ex)
+            {
+                // Bắt các lỗi không mong muốn (nếu SaveOriginalInvoicesAsync ném ra)
+                AppendLog($"FATAL ERROR in btnTaiHDGoc_Click (captured from SaveOriginalInvoicesAsync): {ex.ToString()}");
+                MessageBox.Show($"Đã xảy ra lỗi nghiêm trọng không xác định: {ex.Message}", "Lỗi nghiêm trọng", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // === KÍCH HOẠT LẠI FORM ===
+                this.Enabled = true;
+                this.Cursor = Cursors.Default;
+
+                // === BỔ SUNG: KHÔI PHỤC TEXT NÚT ===
+                btnTaiHDGoc.Text = "Tải tất cả HĐ Gốc";
+                // ====================================
+            }
         }
 
         private void CheckForLicense()
@@ -1223,163 +1318,119 @@ namespace E_Tax
         }
 
         /// <summary>
-        /// Cập nhật DateTimePickers dựa trên tháng và năm nhập vào.
-        /// </summary>
-        private void UpdateDatePickersFromMonthYear()
-        {
-            // --- VALIDATE INPUT ---
-            bool isMonthValid = int.TryParse(txtThang.Text.Trim(), out int month);
-            bool isYearValid = int.TryParse(txtNam.Text.Trim(), out int year);
-
-            // Chỉ cập nhật nếu cả tháng và năm đều là số hợp lệ
-            if (!isMonthValid || !isYearValid)
-            {
-                // Có thể thêm thông báo lỗi ở đây nếu muốn, ví dụ dùng ErrorProvider
-                // Hoặc đơn giản là không làm gì cả nếu nhập liệu chưa đủ/đúng
-                return;
-            }
-
-            // Kiểm tra giá trị tháng (1-12)
-            if (month < 1 || month > 12)
-            {
-                MessageBox.Show("Tháng không hợp lệ. Vui lòng nhập giá trị từ 1 đến 12.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtThang.Focus(); // Đưa con trỏ về ô tháng
-                txtThang.SelectAll();
-                return;
-            }
-
-            // Kiểm tra giá trị năm (ví dụ: > 0 và < 9999)
-            if (year <= 0 || year > 9999)
-            {
-                MessageBox.Show("Năm không hợp lệ.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtNam.Focus(); // Đưa con trỏ về ô năm
-                txtNam.SelectAll();
-                return;
-            }
-
-            // --- CALCULATE DATES ---
-            try
-            {
-                // Ngày đầu tiên của tháng
-                DateTime firstDayOfMonth = new DateTime(year, month, 1);
-
-                // Ngày cuối cùng của tháng (Lấy ngày đầu tháng sau rồi trừ đi 1 ngày)
-                DateTime lastDayOfMonth = firstDayOfMonth.AddMonths(1).AddDays(-1);
-
-                // --- UPDATE DATETIMEPICKERS ---
-                dtpFromDate.Value = firstDayOfMonth;
-                dtpToDate.Value = lastDayOfMonth;
-
-                AppendLog($"🗓️ Đã cập nhật Từ ngày: {firstDayOfMonth:dd/MM/yyyy}, Đến ngày: {lastDayOfMonth:dd/MM/yyyy}");
-            }
-            catch (ArgumentOutOfRangeException ex)
-            {
-                // Trường hợp này ít xảy ra do đã validate ở trên, nhưng vẫn nên có phòng ngừa
-                MessageBox.Show($"Ngày tháng không hợp lệ: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                AppendLog($"❌ Lỗi khi tạo ngày từ tháng={month}, năm={year}: {ex.Message}");
-            }
-            catch (Exception ex) // Bắt các lỗi khác có thể xảy ra
-            {
-                MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                AppendLog($"❌ Lỗi không mong muốn khi cập nhật ngày: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// Xử lý sự kiện click nút Tìm kiếm bên trái.
         /// </summary>
         private async void btnLeftSearch_Click(object sender, EventArgs e)
         {
-            // --- KIỂM TRA ĐĂNG NHẬP ---
-            if (string.IsNullOrEmpty(jwtToken))
+            // --- KIỂM TRA ĐĂNG NHẬP ---
+            if (string.IsNullOrEmpty(jwtToken))
             {
                 MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            // --- LẤY THÔNG TIN TÌM KIẾM & VALIDATE ---
-            DateTime fromDate = dtpFromDate.Value.Date;
-            DateTime toDate = dtpToDate.Value.Date;
-            DateTime preciseToDate = toDate.AddDays(1).AddTicks(-1); // Lấy đến cuối ngày 'Đến ngày'
-            if (toDate > fromDate.AddMonths(1))
-            {
-                MessageBox.Show("Khoảng thời gian tìm kiếm không được lớn hơn 1 tháng.", "Giới hạn tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (fromDate > toDate)
+            // --- LẤY THÔNG TIN TÌM KIẾM & VALIDATE ---
+            DateTime globalFromDate = dtpFromDate.Value.Date; // Lấy ngày bắt đầu tổng
+            DateTime globalToDate = dtpToDate.Value.Date;    // Lấy ngày kết thúc tổng
+
+            if (globalFromDate > globalToDate)
             {
                 MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // --- QUẢN LÝ TRẠNG THÁI UI (Bắt đầu) ---
-            btnLeftSearch.Enabled = false;
+            // --- QUẢN LÝ TRẠNG THÁI UI (Bắt đầu) ---
+            btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
-            this.Cursor = Cursors.WaitCursor; // Đổi con trỏ chờ cho cả form
-            downloadProgressBar.Value = 0; // Reset progress bar
-            downloadProgressBar.Maximum = 100; // Đặt tạm Maximum
-            downloadProgressBar.Visible = true;
-            downloadProgressBar.Style = ProgressBarStyle.Marquee; // Marquee khi tìm kiếm danh sách
-            lblDownloadStatus.Text = "Đang tìm kiếm hóa đơn...";
-            lblDownloadStatus.Visible = true;
+            this.Cursor = Cursors.WaitCursor;
             dgvMain.DataSource = null;
-            dgvDetails.DataSource = null; // Xóa lưới chi tiết
-            dgvMua.DataSource = null;     // Xóa lưới mua
-            dgvBan.DataSource = null;     // Xóa lưới bán
+            dgvDetails.DataSource = null;
+            dgvMua.DataSource = null;
+            dgvBan.DataSource = null;
             dgvVatNop.DataSource = null;
             dgvGiamThue.DataSource = null;
             _latestResults.Clear();
-            _lastSuccessfulQueryString = "";
+            _lastSuccessfulQueryString = ""; // Xóa query string cũ
 
-            // --- THỰC HIỆN TÌM KIẾM DANH SÁCH ---
-            List<SearchResult> searchResults = new List<SearchResult>();
-            bool searchSoldSuccess = true;
-            bool searchBoughtSuccess = true;
-            string currentQuerySold = "";
-            string currentQueryBought = "";
+            // --- LOGIC VÒNG LẶP TÌM KIẾM MỚI ---
+            List<SearchResult> allSearchResults = new List<SearchResult>();
+            List<string> failedChunks = new List<string>(); // Lưu lại các khoảng thời gian bị lỗi
+            DateTime loopStartDate = globalFromDate;
+
+            // Tính toán số lần gọi API cho thanh tiến trình
+            const int chunkSizeInDays = 30;
+            double totalDays = (globalToDate - globalFromDate).TotalDays + 1; // +1 để bao gồm cả ngày cuối
+            int totalLoops = (int)Math.Ceiling(totalDays / chunkSizeInDays);
+
+            int apiCallsPerLoop = 0;
+            if (rbSold.Checked) apiCallsPerLoop = 1;
+            else if (rbBought.Checked) apiCallsPerLoop = 1;
+            else if (rbAllInvoices.Checked) apiCallsPerLoop = 2;
+
+            downloadProgressBar.Value = 0;
+            downloadProgressBar.Maximum = totalLoops * apiCallsPerLoop; // SỐ vòng lặp * số API (Bán/Mua)
+            downloadProgressBar.Visible = true;
+            downloadProgressBar.Style = ProgressBarStyle.Blocks; // Chuyển sang kiểu khối
+            lblDownloadStatus.Visible = true;
 
             try
             {
-                // --- Tìm hóa đơn bán ra ---
-                if (rbSold.Checked || rbAllInvoices.Checked)
+                int currentLoop = 0;
+                while (loopStartDate <= globalToDate)
                 {
-                    lblDownloadStatus.Text = "Đang tìm hóa đơn bán ra...";
-                    AppendLog("🔍 Bắt đầu tìm hóa đơn bán ra...");
-                    currentQuerySold = Timef(fromDate, preciseToDate, InvoiceType.Sold);
-                    string resultSold = await GetProductsAsync("query/invoices/sold", currentQuerySold);
-                    if (resultSold.StartsWith("❌"))
-                    {
-                        AppendLog(resultSold);
-                        MessageBox.Show("Lỗi khi tìm hóa đơn bán ra:\n" + resultSold, "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        searchSoldSuccess = false;
-                    }
-                    else
-                    {
-                        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                        var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, options);
-                        if (responseSold?.Datas != null)
-                        {
-                            responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra"); // Gán loại hóa đơn
-                            searchResults.AddRange(responseSold.Datas);
-                            AppendLog($"✅ Tìm thấy {responseSold.Datas.Count} hóa đơn bán ra.");
-                        }
-                    }
-                }
+                    currentLoop++;
+                    // Tính ngày kết thúc của "lát cắt" này (tối đa 30 ngày tính cả ngày bắt đầu)
+                    DateTime loopEndDate = loopStartDate.AddDays(chunkSizeInDays - 1);
 
-                // --- Tìm hóa đơn mua vào ---
-                if (rbBought.Checked || rbAllInvoices.Checked)
-                {
-                    if (searchSoldSuccess) // Chỉ tìm nếu lần trước thành công
+                    // Đảm bảo ngày kết thúc không vượt quá ngày kết thúc tổng
+                    if (loopEndDate > globalToDate)
                     {
-                        lblDownloadStatus.Text = "Đang tìm hóa đơn mua vào...";
-                        AppendLog("🔍 Bắt đầu tìm hóa đơn mua vào...");
-                        currentQueryBought = Timef(fromDate, preciseToDate, InvoiceType.Bought);
+                        loopEndDate = globalToDate;
+                    }
+
+                    lblDownloadStatus.Text = $"Đang tìm... ({currentLoop}/{totalLoops}): [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}]";
+                    AppendLog($"🔍 Bắt đầu lát cắt {currentLoop}/{totalLoops}: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
+
+                    // Lấy thời điểm cuối cùng trong ngày (23:59:59)
+                    DateTime preciseLoopEndDate = loopEndDate.Date.AddDays(1).AddTicks(-1);
+
+                    string currentQuerySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold);
+                    string currentQueryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought);
+
+                    // --- Tìm hóa đơn bán ra (trong lát cắt) ---
+                    if (rbSold.Checked || rbAllInvoices.Checked)
+                    {
+                        lblDownloadStatus.Text = $"Đang tìm HĐ Bán ra... ({currentLoop}/{totalLoops})";
+                        string resultSold = await GetProductsAsync("query/invoices/sold", currentQuerySold);
+                        if (resultSold.StartsWith("❌"))
+                        {
+                            AppendLog($"❌ Lỗi lát cắt (Bán ra) {currentLoop}: {resultSold}");
+                            failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]");
+                        }
+                        else
+                        {
+                            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                            var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, options);
+                            if (responseSold?.Datas != null)
+                            {
+                                responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra");
+                                allSearchResults.AddRange(responseSold.Datas);
+                                AppendLog($"✅ Lát cắt (Bán ra) {currentLoop} tìm thấy {responseSold.Datas.Count} HĐ.");
+                            }
+                        }
+                        if (downloadProgressBar.Value < downloadProgressBar.Maximum)
+                            downloadProgressBar.PerformStep();
+                    }
+
+                    // --- Tìm hóa đơn mua vào (trong lát cắt) ---
+                    if (rbBought.Checked || rbAllInvoices.Checked)
+                    {
+                        lblDownloadStatus.Text = $"Đang tìm HĐ Mua vào... ({currentLoop}/{totalLoops})";
                         string resultBought = await GetProductsAsync("query/invoices/purchase", currentQueryBought);
                         if (resultBought.StartsWith("❌"))
                         {
-                            AppendLog(resultBought);
-                            MessageBox.Show("Lỗi khi tìm hóa đơn mua vào:\n" + resultBought, "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                            searchBoughtSuccess = false;
+                            AppendLog($"❌ Lỗi lát cắt (Mua vào) {currentLoop}: {resultBought}");
+                            failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]");
                         }
                         else
                         {
@@ -1387,123 +1438,107 @@ namespace E_Tax
                             var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, options);
                             if (responseBought?.Datas != null)
                             {
-                                responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào"); // Gán loại hóa đơn
-                                searchResults.AddRange(responseBought.Datas);
-                                AppendLog($"✅ Tìm thấy {responseBought.Datas.Count} hóa đơn mua vào.");
+                                responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào");
+                                allSearchResults.AddRange(responseBought.Datas);
+                                AppendLog($"✅ Lát cắt (Mua vào) {currentLoop} tìm thấy {responseBought.Datas.Count} HĐ.");
                             }
                         }
+                        if (downloadProgressBar.Value < downloadProgressBar.Maximum)
+                            downloadProgressBar.PerformStep();
                     }
-                    else { searchBoughtSuccess = false; } // Đánh dấu lỗi nếu tìm bán bị lỗi
-                }
 
-                // --- XỬ LÝ KẾT QUẢ TÌM KIẾM DANH SÁCH ---
-                if (searchSoldSuccess && searchBoughtSuccess)
+                    // Chuyển sang ngày bắt đầu của lát cắt tiếp theo
+                    loopStartDate = loopEndDate.AddDays(1);
+                    await Task.Delay(200); // Thêm 1 chút delay nhỏ giữa các lần gọi API để tránh bị chặn
+                }
+                // --- KẾT THÚC VÒNG LẶP ---
+
+                // --- XỬ LÝ KẾT QUẢ TÌM KIẾM TỔNG HỢP ---
+                lblDownloadStatus.Text = "Đang tổng hợp kết quả...";
+                _latestResults = allSearchResults
+                                        .GroupBy(r => r.Id) // Nhóm theo ID để loại bỏ trùng lặp (nếu có)
+                                        .Select(g => g.First())
+                                        .OrderByDescending(r => r.Ngay_lap)
+                                        .ThenBy(r => r.So_hoa_don)
+                                        .ToList();
+
+                // Vẫn lưu 1 query string (ví dụ: của lát cắt đầu tiên) để dùng cho "Tải danh sách HĐ"
+                // (Lưu ý: Chức năng "Tải danh sách" có thể cần sửa lại để hỗ trợ nhiều khoảng thời gian)
+                if (rbSold.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Sold); }
+                else if (rbBought.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Bought); }
+                else { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Sold); }
+
+
+                if (_latestResults.Any())
                 {
-                    // Sắp xếp lại kết quả tổng hợp (ví dụ: theo ngày giảm dần)
-                    _latestResults = searchResults.OrderByDescending(r => r.Ngay_lap).ThenBy(r => r.So_hoa_don).ToList();
+                    AppendLog($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn (sau khi loại bỏ trùng lặp).");
+                    lblDownloadStatus.Text = $"Đang hiển thị {_latestResults.Count} hóa đơn...";
 
-                    // Lưu query string thành công cuối cùng
-                    if (rbSold.Checked) { _lastSuccessfulQueryString = currentQuerySold; }
-                    else if (rbBought.Checked) { _lastSuccessfulQueryString = currentQueryBought; }
-                    else { _lastSuccessfulQueryString = currentQuerySold; AppendLog("ℹ️ Lưu query HĐ Bán cho export khi chọn 'Tất cả'."); }
-                    if (!_latestResults.Any()) { _lastSuccessfulQueryString = ""; } // Xóa nếu không có kết quả
-                    else { AppendLog($"💾 Đã lưu query string: {_lastSuccessfulQueryString}"); }
+                    // Gán DataSource cho lưới chính
+                    dgvMain.DataSource = _latestResults;
 
-
-                    if (_latestResults.Any())
+                    // Cập nhật STT và định dạng ngày
+                    UpdateGridRowNumbers(); // Gọi hàm cập nhật STT (đã có sẵn)
+                    dgvMain.SuspendLayout();
+                    try
                     {
-                        AppendLog($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn. Đang xử lý...");
-                        lblDownloadStatus.Text = $"Đang hiển thị {_latestResults.Count} hóa đơn...";
-                        downloadProgressBar.Style = ProgressBarStyle.Blocks; // Đổi style
-
-                        // Gán DataSource cho lưới chính
-                        dgvMain.DataSource = _latestResults;
-
-                        // Cập nhật STT và định dạng ngày cho lưới chính
-                        dgvMain.SuspendLayout(); // Tạm dừng vẽ
-                        try
+                        foreach (DataGridViewRow row in dgvMain.Rows)
                         {
-                            for (int i = 0; i < dgvMain.Rows.Count; i++)
+                            // Định dạng ngày (nếu cần, vì UpdateGridRowNumbers có thể chưa làm)
+                            var cellNgayLap = row.Cells["colDgvNgayLap"];
+                            if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
                             {
-                                if (dgvMain.Columns.Contains("colDgvSTT")) dgvMain.Rows[i].Cells["colDgvSTT"].Value = i + 1;
-                                // Gán Loại HĐ dựa trên Thong_tin_lien_quan đã gán trước đó
-                                if (dgvMain.Columns.Contains("colDgvLoaiHD") && i < _latestResults.Count && _latestResults[i] != null)
-                                    dgvMain.Rows[i].Cells["colDgvLoaiHD"].Value = _latestResults[i].Thong_tin_lien_quan;
-
-                                // Định dạng ngày
-                                var cellNgayLap = dgvMain.Rows[i].Cells["colDgvNgayLap"];
-                                if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
-                                {
-                                    cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
-                                }
+                                cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
                             }
                         }
-                        finally
-                        {
-                            dgvMain.ResumeLayout(); // Bật lại vẽ
-                        }
-                        AppendLog("✅ Hiển thị xong lưới tổng hợp.");
-                        AppendLog($"📊 Gán dữ liệu cho Bảng kê giảm thuế...");
-                        dgvGiamThue.DataSource = null;
-                        dgvGiamThue.DataSource = _latestResults; // Gán cùng list kết quả                                          
-                        AppendLog($"✅ Hiển thị xong Bảng kê giảm thuế.");
-
-                        // !!! GỌI HÀM TẢI DỮ LIỆU CHI TIẾT !!!
-                        await _detailGridManager.PopulateDetailGridAsync(_latestResults);
-
                     }
-                    else // Không tìm thấy hóa đơn nào
+                    finally
                     {
-                        lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
-                        MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        AppendLog("ℹ️ Không tìm thấy hóa đơn nào.");
-                        // Đảm bảo các lưới chi tiết trống
-                        dgvDetails.DataSource = null;
-                        dgvMua.DataSource = null;
-                        dgvBan.DataSource = null;
-                        dgvVatNop.DataSource = null;
-                        dgvGiamThue.DataSource = null;
+                        dgvMain.ResumeLayout();
                     }
+
+                    AppendLog("✅ Hiển thị xong lưới tổng hợp.");
+                    AppendLog($"📊 Gán dữ liệu cho Bảng kê giảm thuế...");
+                    dgvGiamThue.DataSource = null;
+                    dgvGiamThue.DataSource = _latestResults;
+                    AppendLog($"✅ Hiển thị xong Bảng kê giảm thuế.");
+
+                    // Tải dữ liệu chi tiết cho các tab khác
+                    await _detailGridManager.PopulateDetailGridAsync(_latestResults);
                 }
-                // Trường hợp tìm kiếm lỗi (searchSoldSuccess=false hoặc searchBoughtSuccess=false)
                 else
                 {
-                    // Đã có MessageBox báo lỗi API ở trên
-                    dgvMain.DataSource = null;
-                    dgvDetails.DataSource = null;
-                    dgvMua.DataSource = null;
-                    dgvBan.DataSource = null;
-                    AppendLog("❌ Tìm kiếm hóa đơn không thành công.");
+                    lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
+                    MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    AppendLog("ℹ️ Không tìm thấy hóa đơn nào.");
+                }
+
+                // Thông báo nếu có lỗi trong các lát cắt
+                if (failedChunks.Any())
+                {
+                    string errorList = string.Join("\n - ", failedChunks);
+                    MessageBox.Show($"Đã hoàn tất tìm kiếm, tuy nhiên đã xảy ra lỗi ở các khoảng thời gian sau:\n - {errorList}\n\nKết quả từ các khoảng thời gian này có thể bị thiếu.", "Lỗi trong quá trình tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
-            catch (JsonException jsonEx) // Lỗi Deserialize danh sách
+            catch (JsonException jsonEx)
             {
                 AppendLog($"❌ Lỗi phân tích JSON kết quả tìm kiếm: {jsonEx.ToString()}");
                 MessageBox.Show($"Lỗi xử lý dữ liệu trả về: {jsonEx.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                dgvMain.DataSource = null;
-                dgvDetails.DataSource = null;
-                dgvMua.DataSource = null;
-                dgvBan.DataSource = null;
-                dgvVatNop.DataSource = null;
-                dgvGiamThue.DataSource = null;
             }
-            catch (Exception ex) // Lỗi chung khác
+            catch (Exception ex)
             {
                 AppendLog($"❌ Lỗi không mong muốn khi tìm kiếm: {ex.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                dgvMain.DataSource = null;
-                dgvDetails.DataSource = null;
-                dgvMua.DataSource = null;
-                dgvBan.DataSource = null;
-                dgvVatNop.DataSource = null;
-                dgvGiamThue.DataSource = null;
             }
             finally
             {
-                // --- KHÔI PHỤC TRẠNG THÁI UI ---
-                btnLeftSearch.Enabled = true;
+                // --- KHÔI PHỤC TRẠNG THÁI UI ---
+                btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
+                downloadProgressBar.Visible = false;
+                lblDownloadStatus.Visible = false;
+                lblDownloadStatus.Text = "";
             }
         }
         private async Task<string> GetInvoiceDetailAsync(string nbmst, string khhdon, int? shdon, int? khmshdon)
@@ -1840,58 +1875,47 @@ namespace E_Tax
         /// </summary>
         private async void btnExportDS_Click(object sender, EventArgs e)
         {
-            // Kiểm tra xem đã có kết quả tìm kiếm và query string chưa
-            if (string.IsNullOrEmpty(_lastSuccessfulQueryString))
+            // Kiểm tra xem đã CÓ KẾT QUẢ TÌM KIẾM (_latestResults) chưa
+            if (_latestResults == null || !_latestResults.Any())
             {
-                MessageBox.Show("Không có dữ liệu hoặc truy vấn tìm kiếm gần nhất để xuất. Vui lòng tìm kiếm trước.",
-                                "Chưa có dữ liệu/truy vấn", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            if (_latestResults == null || !_latestResults.Any()) // Kiểm tra lại _latestResults để chắc chắn có HĐ để tải
-            {
-                MessageBox.Show("Không có hóa đơn nào trong kết quả tìm kiếm gần nhất để tải danh sách.",
-                                "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Chưa có dữ liệu hóa đơn nào để xuất. Vui lòng nhấn 'Tìm kiếm' trước.",
+                        "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-
-            // Hỏi người dùng nơi lưu file
-            using var sfd = new SaveFileDialog
+            // Hỏi người dùng nơi lưu file
+            using var sfd = new SaveFileDialog
             {
                 Filter = "Excel Files (*.xlsx)|*.xlsx",
-                FileName = $"DanhSachHoaDon_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx", // Tên file gợi ý
-                Title = "Lưu danh sách hóa đơn (Tải từ API)"
+                FileName = $"DanhSachHoaDon_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
+                Title = "Lưu danh sách hóa đơn"
             };
 
             if (sfd.ShowDialog() == DialogResult.OK)
             {
-                btnExportDS.Enabled = false;
-                btnExportDS.Text = "Đang tải...";
+                // Cập nhật UI
+                btnExportDS.Enabled = false;
+                btnExportDS.Text = "Đang tạo...";
                 downloadProgressBar.Visible = true;
-                downloadProgressBar.Style = ProgressBarStyle.Marquee; // Dùng Marquee vì không biết tiến trình tải file
-                lblDownloadStatus.Text = "Đang tải file Excel danh sách từ API...";
+                downloadProgressBar.Style = ProgressBarStyle.Marquee;
+                lblDownloadStatus.Text = "Đang tạo file Excel danh sách...";
                 lblDownloadStatus.Visible = true;
 
                 try
                 {
-                    // Gọi hàm tải Excel trực tiếp từ API
-                    bool success = await DownloadInvoiceListExcelAsync(_lastSuccessfulQueryString, sfd.FileName);
+                    // === THAY ĐỔI QUAN TRỌNG ===
+                    // Gọi hàm TỰ TẠO Excel từ danh sách _latestResults (đã đầy đủ)
+                    // thay vì gọi DownloadInvoiceListExcelAsync (gọi API)
+                    await ExportSearchResultsToExcelAsync(_latestResults, sfd.FileName);
+                    // === KẾT THÚC THAY ĐỔI ===
 
-                    if (success)
-                    {
-                        MessageBox.Show($"Đã tải thành công file Excel danh sách hóa đơn vào:\n{sfd.FileName}",
-                                        "Tải thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    }
-                    else
-                    {
-                        MessageBox.Show($"Không thể tải file Excel danh sách từ API. Vui lòng xem log (nếu có) để biết chi tiết.",
-                                        "Lỗi tải file", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
+                    MessageBox.Show($"Đã tạo và lưu thành công file Excel danh sách vào:\n{sfd.FileName}",
+                  "Tạo file thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"Lỗi khi tải file Excel danh sách: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    AppendLog($"❌ Lỗi btnExportDS_Click (API Download): {ex.ToString()}");
+                    MessageBox.Show($"Lỗi khi tạo file Excel danh sách: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppendLog($"❌ Lỗi btnExportDS_Click (Tự tạo Excel): {ex.ToString()}");
                 }
                 finally
                 {
@@ -1903,7 +1927,6 @@ namespace E_Tax
                 }
             }
         }
-
         /// <summary>
         /// Xử lý sự kiện click nút "Tải chi tiết HĐ" (btnExportChiTiet).
         /// </summary>
@@ -2422,6 +2445,7 @@ namespace E_Tax
             // --- DÒNG MỚI THÊM ---
             // Thêm cột Số hóa đơn (bind dữ liệu từ SearchResult.So_hoa_don)
             AddTextColumnToGrid(dgvGiamThue, "colGiamThueKyHieuHoaDon", "Ký hiệu hóa đơn", nameof(SearchResult.Ky_hieu_hoa_don), 100, frozen: true, alignment: DataGridViewContentAlignment.MiddleCenter);
+            AddTextColumnToGrid(dgvGiamThue, "colGiamThueSoHD", "Số hóa đơn", nameof(SearchResult.So_hoa_don), 100, frozen: true, alignment: DataGridViewContentAlignment.MiddleCenter);
             // --- KẾT THÚC DÒNG MỚI ---
 
             // Thêm các cột tiền tệ (bind dữ liệu từ SearchResult)
@@ -2470,11 +2494,6 @@ namespace E_Tax
             };
             dgv.Columns.Add(column);
         }
-        // --------------------------------------------------------
-
-        /// <summary>
-        /// Xử lý sự kiện CellFormatting cho dgvGiamThue để tính và hiển thị Tổng tiền phí.
-        /// </summary>
         /// <summary>
         /// Xử lý sự kiện CellFormatting cho dgvGiamThue để TẠO STT, 
         /// tính Tổng tiền phí và định dạng các giá trị null.
@@ -2558,164 +2577,391 @@ namespace E_Tax
             // Ghi log lỗi (Quan trọng để debug)
             AppendLog($"‼️ {errorMsg.Replace("\n", " | ")}"); // Ghi log trên 1 dòng
 
-            // Tùy chọn: Hiển thị lỗi chi tiết hơn (có thể comment dòng này đi nếu không muốn popup)
-            // MessageBox.Show(errorMsg, "Lỗi DataGridView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
-            // Quan trọng: Ngăn dialog mặc định hiển thị và giữ chương trình chạy
-            e.ThrowException = false; // Bỏ qua lỗi và không hiển thị dialog mặc định
-                                      // Bạn có thể đặt giá trị mặc định cho ô nếu muốn, ví dụ:
-                                      // if(e.Context == DataGridViewDataErrorContexts.Formatting) {
-                                      //    dgv.Rows[e.RowIndex].Cells[e.ColumnIndex].Value = 0; // Hoặc null tùy kiểu cột
-                                      // }
+            e.ThrowException = false;
         }
 
         private async void btnCnKoPdf_Click(object sender, EventArgs e)
         {
-            if (dgvMain.CurrentRow == null)
+            // === BƯỚC 1: LẤY DANH SÁCH HÓA ĐƠN ĐÃ CHỌN (ĐÃ SỬA LOGIC) ===
+            List<SearchResult> selectedInvoices = new List<SearchResult>();
+
+            if (dgvMain.SelectedRows.Count > 0)
             {
-                MessageBox.Show("Vui lòng chọn một hóa đơn từ danh sách để in PDF.", "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                AppendLog($"Tìm thấy {dgvMain.SelectedRows.Count} dòng được chọn (SelectedRows).");
+                selectedInvoices = dgvMain.SelectedRows
+                    .Cast<DataGridViewRow>()
+                    .Select(row => row.DataBoundItem as SearchResult)
+                    .Where(invoice => invoice != null)
+                    .ToList();
+            }
+            else if (dgvMain.CurrentRow != null)
+            {
+                AppendLog("Không tìm thấy SelectedRows. Lấy CurrentRow.");
+                var currentInvoice = dgvMain.CurrentRow.DataBoundItem as SearchResult;
+                if (currentInvoice != null)
+                {
+                    selectedInvoices.Add(currentInvoice);
+                }
+            }
+
+            List<SearchResult> validInvoices = selectedInvoices
+                .Where(invoice => !string.IsNullOrEmpty(invoice.Ma_so_thue) &&
+                                 !string.IsNullOrEmpty(invoice.Ky_hieu_hoa_don) &&
+                                 invoice.So_hoa_don.HasValue &&
+                                 invoice.Ky_hieu_ma_so.HasValue)
+                .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
+                .ToList();
+
+            if (!validInvoices.Any())
+            {
+                MessageBox.Show("Vui lòng chọn ít nhất một hóa đơn hợp lệ từ danh sách để in/lưu PDF.",
+                                "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                if (selectedInvoices.Any() && !validInvoices.Any())
+                {
+                    AppendLog("⚠️ Đã chọn hóa đơn nhưng thiếu thông tin (MST/KHHĐ/SHĐ/KHMHS).");
+                }
                 return;
             }
 
-            // --- LẤY DỮ LIỆU TỪ DÒNG ĐƯỢC CHỌN ---
-            SearchResult selectedInvoice = dgvMain.CurrentRow.DataBoundItem as SearchResult;
+            AppendLog($"🖨️ Bắt đầu xử lý {validInvoices.Count} hóa đơn hợp lệ để In/Lưu PDF...");
 
-            if (selectedInvoice == null)
-            {
-                MessageBox.Show("Không thể lấy dữ liệu hóa đơn từ dòng đã chọn.", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                AppendLog("⚠️ Lỗi: Không thể ép kiểu DataBoundItem thành SearchResult tại btnCnKoPdf_Click."); // Sửa tên hàm trong log
-                return;
-            }
-
-            // --- KIỂM TRA THÔNG TIN HÓA ĐƠN CẦN THIẾT ---
-            if (string.IsNullOrEmpty(selectedInvoice.Ma_so_thue) ||
-                string.IsNullOrEmpty(selectedInvoice.Ky_hieu_hoa_don) ||
-                !selectedInvoice.So_hoa_don.HasValue ||
-                !selectedInvoice.Ky_hieu_ma_so.HasValue)
-            {
-                MessageBox.Show("Hóa đơn được chọn thiếu thông tin cần thiết (MST, Ký hiệu, Số HĐ, KH Mẫu số).", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                AppendLog($"⚠️ Hóa đơn ID {selectedInvoice.Id} thiếu thông tin để tải ZIP.");
-                return;
-            }
-
-            // --- QUẢN LÝ UI --- (SỬA TÊN NÚT)
-            btnCnKoPdf.Enabled = false;       // <-- Đã sửa
-            btnCnKoPdf.Text = "Đang tải...";  // <-- Đã sửa
+            // --- QUẢN LÝ UI ---
+            btnCnKoPdf.Enabled = false;
+            btnCnKoPdf.Text = $"Xử lý {validInvoices.Count}...";
             downloadProgressBar.Visible = true;
-            downloadProgressBar.Style = ProgressBarStyle.Marquee;
-            lblDownloadStatus.Text = $"Đang tải HĐ {selectedInvoice.So_hoa_don}...";
+            downloadProgressBar.Minimum = 0;
+            downloadProgressBar.Maximum = validInvoices.Count * 4;
+            downloadProgressBar.Value = 0;
+            downloadProgressBar.Style = ProgressBarStyle.Blocks;
+            lblDownloadStatus.Text = "Bắt đầu xử lý...";
             lblDownloadStatus.Visible = true;
+            this.Cursor = Cursors.WaitCursor;
 
-            string tempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Print_{Guid.NewGuid()}"); // Thư mục tạm duy nhất
-            string extractPath = Path.Combine(tempDirectory, "extracted");
-            string zipFilePath = Path.Combine(tempDirectory, $"HD_{selectedInvoice.Ky_hieu_hoa_don}_{selectedInvoice.So_hoa_don}.zip");
+            List<string> finalPdfPaths = new List<string>();
+            List<string> failedInvoicesInfo = new List<string>();
+            string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-MultiPrint_{Guid.NewGuid()}");
+
+            bool chromiumDownloaded = false;
+            string chromiumExecutablePath = null;
 
             try
             {
-                Directory.CreateDirectory(tempDirectory); // Tạo thư mục tạm
-                Directory.CreateDirectory(extractPath);   // Tạo thư mục con để giải nén
+                Directory.CreateDirectory(baseTempDirectory);
 
-                AppendLog($"🖨️ Bắt đầu tải ZIP để IN: {selectedInvoice.Ky_hieu_hoa_don} - {selectedInvoice.So_hoa_don}"); // Cập nhật log
-
-                // --- TẢI FILE ZIP ---
-                bool downloadSuccess = await DownloadSingleInvoiceZipAsync(selectedInvoice, tempDirectory);
-
-                if (!downloadSuccess)
+                // --- BƯỚC 2: TẢI, GIẢI NÉN VÀ CHUẨN BỊ FILE PDF CHO TỪNG HÓA ĐƠN ---
+                for (int i = 0; i < validInvoices.Count; i++)
                 {
-                    MessageBox.Show("Không thể tải được file ZIP chứa hóa đơn.", "Lỗi tải file", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                if (!File.Exists(zipFilePath))
-                {
-                    MessageBox.Show($"File ZIP dự kiến ({Path.GetFileName(zipFilePath)}) không tồn tại sau khi tải.", "Lỗi tải file", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    AppendLog($"⚠️ File ZIP không tồn tại tại đường dẫn: {zipFilePath}");
-                    return;
-                }
-
-                // --- GIẢI NÉN ---
-                lblDownloadStatus.Text = "Đang giải nén file...";
-                await Task.Run(() =>
-                {
-                    try
-                    {
-                        ZipFile.ExtractToDirectory(zipFilePath, extractPath, true); // Giải nén và ghi đè
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"❌ Lỗi giải nén ZIP (Task): {ex.ToString()}");
-                        throw new Exception($"Lỗi khi giải nén file ZIP: {ex.Message}", ex);
-                    }
-                });
-
-                AppendLog($"⚙️ Đã giải nén file: {zipFilePath} vào {extractPath}");
-
-                // --- TÌM VÀ IN FILE PDF --- (THAY THẾ CODE LƯU BẰNG CODE IN)
-                lblDownloadStatus.Text = "Đang tìm file PDF...";
-                string[] pdfFiles = Directory.GetFiles(extractPath, "*.pdf", SearchOption.AllDirectories);
-                string pdfPath = null;
-
-                if (pdfFiles.Length > 0)
-                {
-                    pdfPath = pdfFiles[0]; // Lấy file PDF đầu tiên tìm thấy
-                    AppendLog($"✅ Tìm thấy file PDF: {pdfPath}. Đang gửi đến máy in...");
-                    lblDownloadStatus.Text = "Đang gửi file đến máy in...";
+                    SearchResult invoice = validInvoices[i];
+                    string invoiceIdentifier = $"{invoice.Ky_hieu_hoa_don?.Replace('/', '_') ?? "KH_NA"}_{invoice.So_hoa_don?.ToString() ?? "SHD_NA"}";
+                    string invoiceTempDir = Path.Combine(baseTempDirectory, $"Invoice_{i}_{invoiceIdentifier}");
+                    string extractPath = Path.Combine(invoiceTempDir, "extracted");
+                    string zipFilePath = Path.Combine(invoiceTempDir, $"HD_{invoiceIdentifier}.zip");
+                    string outputPdfPath = Path.Combine(invoiceTempDir, $"HD_{invoiceIdentifier}.pdf");
+                    string fileToProcess = null;
+                    string fileTypeFound = "";
+                    int currentStepBase = i * 4;
 
                     try
                     {
-                        // Tạo một tiến trình mới để in file
-                        System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(pdfPath)
+                        Directory.CreateDirectory(invoiceTempDir);
+                        Directory.CreateDirectory(extractPath);
+
+                        // --- Tải ZIP ---
+                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang tải HĐ {invoice.So_hoa_don}...";
+                        AppendLog($" Tải ZIP cho HĐ: {invoiceIdentifier}");
+                        bool downloadSuccess = await DownloadSingleInvoiceZipAsync(invoice, invoiceTempDir);
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 1, downloadProgressBar.Maximum);
+
+                        if (!downloadSuccess || !File.Exists(zipFilePath))
                         {
-                            Verb = "print", // Sử dụng động từ "print" của Windows
-                            UseShellExecute = true,
-                            CreateNoWindow = true // Không hiển thị cửa sổ của phần mềm PDF
-                        };
-                        System.Diagnostics.Process.Start(psi);
+                            AppendLog($"  -> Lỗi tải ZIP HĐ {invoiceIdentifier}");
+                            failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi tải file ZIP)");
+                            downloadProgressBar.Value = Math.Min(currentStepBase + 4, downloadProgressBar.Maximum);
+                            continue;
+                        }
 
-                        AppendLog($"✅ Đã gửi lệnh in cho file: {pdfPath}");
-                        MessageBox.Show($"Đã gửi hóa đơn (file PDF) đến máy in mặc định của bạn.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        // --- Giải nén ---
+                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang giải nén HĐ {invoice.So_hoa_don}...";
+                        AppendLog($"  -> Giải nén ZIP HĐ: {invoiceIdentifier}");
+                        await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, extractPath, true));
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 2, downloadProgressBar.Maximum);
+
+                        // --- Tìm file PDF hoặc HTML ---
+                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang tìm file HĐ {invoice.So_hoa_don}...";
+                        string[] pdfFiles = Directory.GetFiles(extractPath, "*.pdf", SearchOption.AllDirectories);
+                        string[] htmlFiles = Directory.GetFiles(extractPath, "*.html", SearchOption.AllDirectories);
+
+                        if (pdfFiles.Length > 0)
+                        {
+                            fileToProcess = pdfFiles[0];
+                            fileTypeFound = "PDF";
+                            AppendLog($"  -> Tìm thấy PDF: {Path.GetFileName(fileToProcess)}");
+                            File.Move(fileToProcess, outputPdfPath);
+                            finalPdfPaths.Add(outputPdfPath);
+                            downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
+                        }
+                        else if (htmlFiles.Length > 0)
+                        {
+                            fileToProcess = htmlFiles[0];
+                            fileTypeFound = "HTML";
+                            AppendLog($"  -> Tìm thấy HTML: {Path.GetFileName(fileToProcess)}");
+
+                            // --- Convert HTML sang PDF ---
+                            lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang convert HTML sang PDF...";
+                            AppendLog($"  -> Chuyển đổi HTML sang PDF...");
+
+                            try
+                            {
+                                // Tải/Kiểm tra Chromium nếu cần
+                                if (!chromiumDownloaded)
+                                {
+                                    lblDownloadStatus.Text = "Đang kiểm tra/tải Chromium (chỉ lần đầu)...";
+                                    AppendLog("   -> Đang kiểm tra/tải trình duyệt Chromium...");
+                                    var browserFetcherOptions = new BrowserFetcherOptions { /* Path = ... */ };
+                                    var browserFetcher = new BrowserFetcher(browserFetcherOptions);
+
+                                    var installedBrowser = await browserFetcher.DownloadAsync();
+                                    AppendLog("   -> Kiểm tra/Tải Chromium hoàn tất.");
+
+                                    if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+                                    {
+                                        AppendLog($"   -> Lấy được BuildId từ DownloadAsync: {installedBrowser.BuildId}");
+                                        try
+                                        {
+                                            chromiumExecutablePath = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
+                                            AppendLog($"   -> Đường dẫn Chromium: {chromiumExecutablePath}");
+                                        }
+                                        catch (Exception pathEx)
+                                        {
+                                            AppendLog($"   -> Lỗi khi gọi GetExecutablePath với BuildId {installedBrowser.BuildId}: {pathEx.Message}");
+                                            chromiumExecutablePath = null;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        AppendLog("   -> !!! Lỗi: Không lấy được BuildId hợp lệ từ DownloadAsync.");
+                                        chromiumExecutablePath = null;
+                                    }
+
+                                    if (string.IsNullOrEmpty(chromiumExecutablePath))
+                                    {
+                                        AppendLog("   -> !!! Lỗi nghiêm trọng: Không tìm thấy đường dẫn Chromium.");
+                                        throw new Exception("Không thể xác định đường dẫn thực thi Chromium. Quá trình convert PDF không thể tiếp tục.");
+                                    }
+
+                                    chromiumDownloaded = true;
+                                    lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang convert HTML sang PDF...";
+                                }
+
+                                if (string.IsNullOrEmpty(chromiumExecutablePath))
+                                {
+                                    throw new Exception("Đường dẫn thực thi Chromium không hợp lệ.");
+                                }
+
+                                // Convert
+                                var launchOptions = new LaunchOptions { Headless = true, ExecutablePath = chromiumExecutablePath };
+                                await using var browser = await Puppeteer.LaunchAsync(launchOptions);
+                                await using var page = await browser.NewPageAsync();
+
+                                await page.GoToAsync("file:///" + fileToProcess.Replace('\\', '/'),
+                                                    timeout: 60000,
+                                                    waitUntil: new[] { WaitUntilNavigation.Networkidle0 });
+
+                                await page.PdfAsync(outputPdfPath, new PdfOptions { Format = PuppeteerSharp.Media.PaperFormat.A4 });
+                                finalPdfPaths.Add(outputPdfPath);
+                                AppendLog($"  -> Chuyển đổi thành công: {Path.GetFileName(outputPdfPath)}");
+                                downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
+                            }
+                            catch (Exception exConvert)
+                            {
+                                AppendLog($"  -> Lỗi convert HTML->PDF HĐ {invoiceIdentifier}: {exConvert.ToString()}");
+                                failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi convert HTML sang PDF)");
+                                downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            AppendLog($"  -> Không tìm thấy PDF/HTML cho HĐ {invoiceIdentifier}");
+                            failedInvoicesInfo.Add($"{invoiceIdentifier} (Không tìm thấy file PDF/HTML)");
+                            downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
+                            continue;
+                        }
                     }
-                    catch (Exception exPrint)
+                    catch (Exception exInvoice)
                     {
-                        // Bắt lỗi nếu không thể tự động in (ví dụ: không có phần mềm đọc PDF)
-                        AppendLog($"⚠️ Lỗi khi tự động in: {exPrint.Message}");
-                        MessageBox.Show($"Không thể tự động gửi lệnh in. Lỗi: {exPrint.Message}\n\nFile PDF đã được lưu tạm tại:\n{pdfPath}\n(File này sẽ bị xóa khi đóng chương trình)", "Lỗi In", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        AppendLog($"❌ Lỗi xử lý HĐ {invoiceIdentifier}: {exInvoice.ToString()}");
+                        failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi chung: {exInvoice.Message})");
+                        downloadProgressBar.Value = Math.Min(currentStepBase + 4, downloadProgressBar.Maximum);
+                        continue;
                     }
+                } // Kết thúc vòng lặp for
+
+                // --- BƯỚC 3: KIỂM TRA MÁY IN VÀ THỰC HIỆN IN HOẶC LƯU ---
+                if (!finalPdfPaths.Any())
+                {
+                    MessageBox.Show("Không có file PDF nào được tạo/tìm thấy để thực hiện.", "Không có kết quả", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    AppendLog("⚠️ Không có file PDF nào sau khi xử lý.");
+                    downloadProgressBar.Value = downloadProgressBar.Maximum;
+                    return;
+                }
+
+                lblDownloadStatus.Text = "Kiểm tra máy in...";
+                bool hasPrinters = false;
+                try
+                {
+                    hasPrinters = PrinterSettings.InstalledPrinters.Count > 0;
+                }
+                catch (Exception exPrinterCheck)
+                {
+                    AppendLog($"⚠️ Lỗi khi kiểm tra danh sách máy in: {exPrinterCheck.Message}. Giả định không có máy in.");
+                    hasPrinters = false;
+                }
+
+                downloadProgressBar.Maximum = downloadProgressBar.Value + finalPdfPaths.Count;
+
+                if (hasPrinters)
+                {
+                    // Có máy in -> In từng file
+                    AppendLog($"🖨️ Có máy in. Gửi {finalPdfPaths.Count} file PDF đến hộp thoại in...");
+                    lblDownloadStatus.Text = $"Đang mở hộp thoại in ({finalPdfPaths.Count} file)...";
+                    int printSuccessCount = 0;
+                    foreach (string pdfPath in finalPdfPaths)
+                    {
+                        lblDownloadStatus.Text = $"Đang gửi file {Path.GetFileName(pdfPath)} đến máy in...";
+                        try
+                        {
+                            if (!File.Exists(pdfPath))
+                            {
+                                AppendLog($"  -> Lỗi: File PDF không tồn tại để in: {pdfPath}");
+                                failedInvoicesInfo.Add($"{Path.GetFileNameWithoutExtension(pdfPath)} (File PDF tạm không tồn tại)");
+                                downloadProgressBar.PerformStep();
+                                continue;
+                            }
+                            ProcessStartInfo psi = new ProcessStartInfo(pdfPath) { Verb = "print", UseShellExecute = true, CreateNoWindow = true };
+                            Process.Start(psi);
+                            AppendLog($"  -> Đã gửi lệnh in: {Path.GetFileName(pdfPath)}");
+                            printSuccessCount++;
+                            await Task.Delay(1000); // Delay
+                        }
+                        catch (Exception exPrint)
+                        {
+                            AppendLog($"  -> Lỗi gửi lệnh in cho {Path.GetFileName(pdfPath)}: {exPrint.ToString()}");
+                            failedInvoicesInfo.Add($"{Path.GetFileNameWithoutExtension(pdfPath)} (Lỗi gửi lệnh in)");
+                        }
+                        downloadProgressBar.PerformStep();
+                    }
+                    MessageBox.Show($"Đã gửi {printSuccessCount}/{finalPdfPaths.Count} hóa đơn đến hộp thoại in.\n" +
+                                    $"Vui lòng kiểm tra các hộp thoại in xuất hiện.\n\n" +
+                                    (failedInvoicesInfo.Count > 0 ? $"Lưu ý: Có {failedInvoicesInfo.Count} hóa đơn gặp lỗi." : ""),
+                                    "Hoàn tất gửi lệnh in", MessageBoxButtons.OK,
+                                    failedInvoicesInfo.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
                 }
                 else
                 {
-                    // Không tìm thấy file PDF nào
-                    AppendLog("⚠️ Không tìm thấy file PDF trong file ZIP.");
-                    MessageBox.Show("Không tìm thấy file PDF nào trong file ZIP của hóa đơn này. Không thể in.", "Không tìm thấy PDF", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    // Không có máy in -> Lưu tất cả PDF
+                    AppendLog("🚫 Không có máy in. Lưu PDF...");
+
+                    // === BỔ SUNG THÔNG BÁO CHO NGƯỜI DÙNG ===
+                    MessageBox.Show("Không tìm thấy máy in nào được cài đặt.\nChương trình sẽ chuyển sang chế độ Lưu file PDF về máy tính.",
+                                    "Không tìm thấy máy in",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information);
+                    // === KẾT THÚC BỔ SUNG ===
+
+                    lblDownloadStatus.Text = "Chọn thư mục để lưu PDF...";
+
+                    using (var fbd = new FolderBrowserDialog())
+                    {
+                        fbd.Description = $"Không tìm thấy máy in. Chọn thư mục để lưu {finalPdfPaths.Count} file PDF";
+                        fbd.UseDescriptionForTitle = true;
+                        if (fbd.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(fbd.SelectedPath))
+                        {
+                            AppendLog($"📁 Thư mục lưu đã chọn: {fbd.SelectedPath}");
+                            lblDownloadStatus.Text = $"Đang lưu {finalPdfPaths.Count} file PDF...";
+                            int saveSuccessCount = 0;
+                            foreach (string pdfPath in finalPdfPaths)
+                            {
+                                lblDownloadStatus.Text = $"Đang lưu file {Path.GetFileName(pdfPath)}...";
+                                try
+                                {
+                                    if (!File.Exists(pdfPath))
+                                    {
+                                        AppendLog($"  -> Lỗi: File PDF không tồn tại để lưu: {pdfPath}");
+                                        failedInvoicesInfo.Add($"{Path.GetFileNameWithoutExtension(pdfPath)} (File PDF tạm không tồn tại)");
+                                        downloadProgressBar.PerformStep();
+                                        continue;
+                                    }
+                                    string originalFileName = Path.GetFileName(pdfPath);
+                                    string destFileName = Path.Combine(fbd.SelectedPath, originalFileName);
+                                    int counter = 1;
+                                    while (File.Exists(destFileName))
+                                    {
+                                        string tempFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_{counter}{Path.GetExtension(originalFileName)}";
+                                        destFileName = Path.Combine(fbd.SelectedPath, tempFileName);
+                                        counter++;
+                                    }
+                                    File.Copy(pdfPath, destFileName);
+                                    AppendLog($"  -> Đã lưu: {Path.GetFileName(destFileName)}");
+                                    saveSuccessCount++;
+                                }
+                                catch (Exception exSave)
+                                {
+                                    AppendLog($"  -> Lỗi lưu file {Path.GetFileName(pdfPath)}: {exSave.ToString()}");
+                                    failedInvoicesInfo.Add($"{Path.GetFileNameWithoutExtension(pdfPath)} (Lỗi lưu file)");
+                                }
+                                downloadProgressBar.PerformStep();
+                            }
+                            MessageBox.Show($"Đã lưu thành công {saveSuccessCount}/{finalPdfPaths.Count} hóa đơn thành file PDF vào thư mục:\n{fbd.SelectedPath}\n\n" +
+                                            (failedInvoicesInfo.Count > 0 ? $"Lưu ý: Có {failedInvoicesInfo.Count} hóa đơn gặp lỗi." : ""),
+                                           "Lưu PDF thành công", MessageBoxButtons.OK,
+                                           failedInvoicesInfo.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                        }
+                        else
+                        {
+                            AppendLog("⚠️ Người dùng đã hủy chọn thư mục lưu.");
+                            MessageBox.Show("Đã hủy thao tác lưu PDF.", "Đã hủy", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            downloadProgressBar.Value = downloadProgressBar.Maximum;
+                        }
+                    }
                 }
-                // --- KẾT THÚC PHẦN THAY THẾ ---
+
+                if (failedInvoicesInfo.Any())
+                {
+                    AppendLog($"🔴 Có lỗi xảy ra với {failedInvoicesInfo.Count} hóa đơn trong toàn bộ quá trình.");
+                }
+
             }
-            catch (Exception ex) // Bắt các lỗi tổng quát (bao gồm cả lỗi giải nén)
+            catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi không mong muốn trong btnCnKoPdf_Click: {ex.ToString()}"); // Sửa tên hàm trong log
-                MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"❌ Lỗi nghiêm trọng trong btnCnKoPdf_Click: {ex.ToString()}");
+                MessageBox.Show($"Đã xảy ra lỗi không mong muốn trong quá trình xử lý: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                downloadProgressBar.Value = downloadProgressBar.Maximum;
             }
             finally
             {
-                // --- KHÔI PHỤC UI --- (SỬA TÊN NÚT)
-                btnCnKoPdf.Enabled = true;     // <-- Đã sửa
-                btnCnKoPdf.Text = "In PDF"; // <-- Đã sửa (bạn có thể đổi Text này thành "In HĐ" nếu muốn)
+                // --- KHÔI PHỤC UI ---
+                btnCnKoPdf.Enabled = true;
+                btnCnKoPdf.Text = "In HĐ";
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
+                this.Cursor = Cursors.Default;
 
-                // --- DỌN DẸP THƯ MỤC TẠM ---
+                // --- DỌN DẸP THƯ MỤC TẠM CHÍNH ---
                 try
                 {
-                    if (Directory.Exists(tempDirectory))
+                    if (Directory.Exists(baseTempDirectory))
                     {
-                        Directory.Delete(tempDirectory, true);
-                        AppendLog($"🧹 Đã dọn dẹp thư mục tạm: {tempDirectory}");
+                        Directory.Delete(baseTempDirectory, true);
+                        AppendLog($"🧹 Đã dọn dẹp thư mục tạm chính: {baseTempDirectory}");
                     }
                 }
                 catch (Exception exClean)
                 {
-                    AppendLog($"⚠️ Không thể dọn dẹp thư mục tạm PDF: {exClean.Message}");
+                    AppendLog($"⚠️ Không thể dọn dẹp thư mục tạm chính: {exClean.Message}");
+                    MessageBox.Show($"Không thể tự động xóa thư mục tạm:\n{baseTempDirectory}\n\nVui lòng xóa thủ công.\nLỗi: {exClean.Message}",
+                                    "Lỗi dọn dẹp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
         }
@@ -2812,6 +3058,11 @@ namespace E_Tax
         }
 
         private void rbAllInvoices_CheckedChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label1_Click(object sender, EventArgs e)
         {
 
         }
