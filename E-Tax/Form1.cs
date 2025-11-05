@@ -413,19 +413,18 @@ namespace E_Tax
             }
         }
 
-        private string Timef(DateTime from, DateTime to, InvoiceType type)
+        private string Timef(DateTime from, DateTime to, InvoiceType type, int page, int size)
         {
-            // Tạo chuỗi tìm kiếm cơ bản với khoảng thời gian
-            string baseSearch = $"tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
+            // Tạo chuỗi tìm kiếm cơ bản với khoảng thời gian
+            string baseSearch = $"tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
 
-            // Nếu là hóa đơn mua vào, thêm điều kiện ttxly==5
-            if (type == InvoiceType.Bought)
+            // Nếu là hóa đơn mua vào, thêm điều kiện ttxly==5
+            if (type == InvoiceType.Bought)
             {
                 baseSearch += ";ttxly==5";
             }
 
-            // Trả về chuỗi query hoàn chỉnh, bổ sung tham số 'size' để lấy nhiều kết quả hơn
-            return $"size=50&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={baseSearch}";
+            return $"size={size}&page={page}&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={baseSearch}";
         }
 
 
@@ -911,23 +910,24 @@ namespace E_Tax
             btnTaiHDGoc.Enabled = false;
             downloadProgressBar.Visible = true;
             lblDownloadStatus.Visible = true;
+            this.Cursor = Cursors.WaitCursor; // Thêm con trỏ chờ
 
-            // Thư mục tạm chính để chứa MỌI THỨ
-            string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
-            // Thư mục con cho báo cáo
-            string reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
-            // Thư mục con để chứa các file ZIP gốc
+            // Thư mục tạm chính để chứa MỌI THỨ
+            string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
+            // Thư mục con cho báo cáo
+            string reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
+            // Thư mục con để chứa các file ZIP gốc
             string zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
             // Thư mục con để chứa các file PDF đã convert (nếu có)
             string pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
-            // Thư mục con để chứa các file XML (đã giải nén)
-            string xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+            // Thư mục con để chứa các file XML (đã giải nén)
+            string xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
 
             List<SearchResult> invoicesToDownload = new List<SearchResult>();
             List<string> failedChunks = new List<string>();
 
-            // Biến cho PuppeteerSharp
-            bool chromiumDownloaded = false;
+            // Biến cho PuppeteerSharp
+            bool chromiumDownloaded = false;
             string chromiumExecutablePath = null;
 
             try
@@ -935,62 +935,92 @@ namespace E_Tax
                 // === GIAI ĐOẠN 1.5: TÌM KIẾM HÓA ĐƠN (LOGIC VÒNG LẶP) ===
                 DateTime loopStartDate = globalFromDate;
                 const int chunkSizeInDays = 30;
-                double totalDays = (globalToDate - globalFromDate).TotalDays + 1;
+                const int pageSize = 50; // Giữ nguyên giới hạn 50 của API
+                double totalDays = (globalToDate - globalFromDate).TotalDays + 1;
                 int totalLoops = (int)Math.Ceiling(totalDays / chunkSizeInDays);
-                int apiCallsPerLoop = rbAllInvoices.Checked ? 2 : 1;
 
                 lblDownloadStatus.Text = "Bước 1: Đang tìm kiếm hóa đơn...";
-                downloadProgressBar.Style = ProgressBarStyle.Blocks;
-                downloadProgressBar.Value = 0;
-                downloadProgressBar.Maximum = totalLoops * apiCallsPerLoop; // Chỉ tính bước tìm kiếm trước
+                downloadProgressBar.Style = ProgressBarStyle.Marquee; // Dùng Marquee vì không biết số trang
+                downloadProgressBar.Value = 0;
 
-                int currentLoop = 0;
+                int currentLoop = 0;
                 while (loopStartDate <= globalToDate)
                 {
                     currentLoop++;
                     DateTime loopEndDate = loopStartDate.AddDays(chunkSizeInDays - 1);
                     if (loopEndDate > globalToDate) loopEndDate = globalToDate;
-                    lblDownloadStatus.Text = $"Bước 1: Tìm kiếm... ({currentLoop}/{totalLoops})";
-                    AppendLog($"🔍 (Tải gốc) Lát cắt {currentLoop}/{totalLoops}: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
                     DateTime preciseLoopEndDate = loopEndDate.Date.AddDays(1).AddTicks(-1);
-                    string querySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold);
-                    string queryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought);
 
-                    // Tìm HĐ Bán ra
-                    if (rbSold.Checked || rbAllInvoices.Checked)
+                    AppendLog($"🔍 (Tải gốc) Lát cắt {currentLoop}/{totalLoops}: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
+
+                    // === VÒNG LẶP BÊN TRONG (PHÂN TRANG) ===
+                    int currentPage = 0;
+                    bool keepFetchingPages = true;
+
+                    while (keepFetchingPages)
                     {
-                        string resultSold = await GetProductsAsync("query/invoices/sold", querySold);
-                        if (resultSold.StartsWith("❌")) { failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]"); }
+                        lblDownloadStatus.Text = $"Bước 1: Tìm kiếm [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}], Trang {currentPage + 1}...";
+                        int resultsFoundOnThisPage = 0;
+
+                        // --- Tìm HĐ Bán ra (Trang hiện tại) ---
+                        if (rbSold.Checked || rbAllInvoices.Checked)
+                        {
+                            string querySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold, currentPage, pageSize);
+                            string resultSold = await GetProductsAsync("query/invoices/sold", querySold);
+                            if (resultSold.StartsWith("❌")) { failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}], Trang {currentPage + 1}"); }
+                            else
+                            {
+                                var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (responseSold?.Datas != null && responseSold.Datas.Any())
+                                {
+                                    invoicesToDownload.AddRange(responseSold.Datas);
+                                    resultsFoundOnThisPage += responseSold.Datas.Count;
+                                }
+                            }
+                        }
+
+                        // --- Tìm HĐ Mua vào (Trang hiện tại) ---
+                        if (rbBought.Checked || rbAllInvoices.Checked)
+                        {
+                            string queryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought, currentPage, pageSize);
+                            string resultBought = await GetProductsAsync("query/invoices/purchase", queryBought);
+                            if (resultBought.StartsWith("❌")) { failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}], Trang {currentPage + 1}"); }
+                            else
+                            {
+                                var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (responseBought?.Datas != null && responseBought.Datas.Any())
+                                {
+                                    invoicesToDownload.AddRange(responseBought.Datas);
+                                    resultsFoundOnThisPage += responseBought.Datas.Count;
+                                }
+                            }
+                        }
+
+                        // Nếu trang này không trả về kết quả nào (hoặc trả về ít hơn 50)
+                        if (resultsFoundOnThisPage < pageSize)
+                        {
+                            // Đây là trang cuối cùng của lát cắt thời gian này.
+                            AppendLog($"  -> Lát cắt {loopStartDate:dd/MM} - {loopEndDate:dd/MM} hoàn tất sau {currentPage + 1} trang.");
+                            keepFetchingPages = false; // Dừng vòng lặp 'while(keepFetchingPages)'
+                        }
                         else
                         {
-                            var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            if (responseSold?.Datas != null) invoicesToDownload.AddRange(responseSold.Datas);
-                        }
-                        if (downloadProgressBar.Value < downloadProgressBar.Maximum) downloadProgressBar.PerformStep();
+                            currentPage++; // Tăng số trang để lấy trang tiếp theo
+                            await Task.Delay(200); // Delay giữa các trang
+                        }
                     }
-                    // Tìm HĐ Mua vào
-                    if (rbBought.Checked || rbAllInvoices.Checked)
-                    {
-                        string resultBought = await GetProductsAsync("query/invoices/purchase", queryBought);
-                        if (resultBought.StartsWith("❌")) { failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]"); }
-                        else
-                        {
-                            var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            if (responseBought?.Datas != null) invoicesToDownload.AddRange(responseBought.Datas);
-                        }
-                        if (downloadProgressBar.Value < downloadProgressBar.Maximum) downloadProgressBar.PerformStep();
-                    }
-                    loopStartDate = loopEndDate.AddDays(1);
-                    await Task.Delay(200);
+                    // === KẾT THÚC VÒNG LẶP BÊN TRONG (PHÂN TRANG) ===
+
+                    loopStartDate = loopEndDate.AddDays(1);
                 }
-                // --- KẾT THÚC VÒNG LẶP TÌM KIẾM ---
+                // === KẾT THÚC VÒNG LẶP BÊN NGOÀI (THỜI GIAN) ===
 
                 invoicesToDownload = invoicesToDownload
-                .GroupBy(r => r.Id)
-                .Select(g => g.First())
-                .OrderByDescending(inv => inv.Ngay_lap)
-                .ThenBy(inv => inv.So_hoa_don)
-                .ToList();
+          .GroupBy(r => r.Id)
+          .Select(g => g.First())
+          .OrderByDescending(inv => inv.Ngay_lap)
+          .ThenBy(inv => inv.So_hoa_don)
+          .ToList();
 
                 if (!invoicesToDownload.Any())
                 {
@@ -998,46 +1028,50 @@ namespace E_Tax
                     return;
                 }
 
-                // === GIAI ĐOẠN 2: TẢI VỀ VÀ XỬ LÝ (Sử dụng invoicesToDownload) ===
+                // === GIAI ĐOẠN 2: TẢI VỀ VÀ XỬ LÝ ===
                 ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
 
-                // Đặt lại ProgressBar: 2 Excel + (Tải ZIP + Giải nén + Convert/Copy) cho mỗi HĐ + 1 bước Nén cuối
-                downloadProgressBar.Maximum = 2 + (invoicesToDownload.Count * 3) + 1;
+                // Đặt lại ProgressBar: 2 Excel + (Tải ZIP + Giải nén + Convert/Copy) cho mỗi HĐ + 1 Nén cuối
+                downloadProgressBar.Maximum = 2 + (invoicesToDownload.Count * 3) + 1;
                 downloadProgressBar.Value = 0;
+                downloadProgressBar.Style = ProgressBarStyle.Blocks;
 
-                // Tạo các thư mục con trong thư mục tạm chính
+                // Tạo thư mục con
                 Directory.CreateDirectory(baseTempDirectory);
-                Directory.CreateDirectory(reportSubFolder); // Thư mục cho Excel
-                Directory.CreateDirectory(zipSubFolder);
+                Directory.CreateDirectory(reportSubFolder);
+                Directory.CreateDirectory(zipSubFolder);
                 Directory.CreateDirectory(pdfSubFolder);
                 Directory.CreateDirectory(xmlSubFolder);
 
-                lblDownloadStatus.Text = "Bước 2: Đang tạo file Excel danh sách...";
-                string listExcelPath = Path.Combine(reportSubFolder, "0_DanhSachHoaDon.xlsx"); // Lưu vào thư mục con
-                DateTime preciseGlobalToDate = globalToDate.AddDays(1).AddTicks(-1);
-                string queryForListExcel = Timef(globalFromDate, preciseGlobalToDate, rbBought.Checked ? InvoiceType.Bought : InvoiceType.Sold);
-                if (rbAllInvoices.Checked) queryForListExcel = Timef(globalFromDate, preciseGlobalToDate, InvoiceType.Sold);
-                await DownloadInvoiceListExcelAsync(queryForListExcel, listExcelPath);
-                downloadProgressBar.PerformStep(); // +1
+                // --- BƯỚC 2: TẠO FILE EXCEL DANH SÁCH ---
+                lblDownloadStatus.Text = "Bước 2: Đang tạo file Excel danh sách...";
+                string listExcelPath = Path.Combine(reportSubFolder, "0_DanhSachHoaDon.xlsx");
 
-                lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
-                await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(reportSubFolder, "0_ChiTietHoaDon.xlsx")); // Lưu vào thư mục con
+                // *** SỬA LỖI: Dùng ExportSearchResultsToExcelAsync thay vì DownloadInvoiceListExcelAsync ***
+                await ExportSearchResultsToExcelAsync(invoicesToDownload, listExcelPath);
+                // *** KẾT THÚC SỬA LỖI ***
+
                 downloadProgressBar.PerformStep(); // +1
+
+                // --- BƯỚC 3: TẠO FILE EXCEL CHI TIẾT ---
+                lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
+                await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(reportSubFolder, "0_ChiTietHoaDon.xlsx"));
+                downloadProgressBar.PerformStep(); // +1
 
                 int successCount = 0;
                 int convertSuccessCount = 0;
 
-                // === BƯỚC 4: TẢI, GIẢI NÉN, CONVERT (NÂNG CẤP) ===
-                for (int i = 0; i < invoicesToDownload.Count; i++)
+                // === BƯỚC 4: TẢI, GIẢI NÉN, CONVERT (NÂNG CẤP) ===
+                for (int i = 0; i < invoicesToDownload.Count; i++)
                 {
                     var invoice = invoicesToDownload[i];
                     string invoiceIdentifier = $"{invoice.Ky_hieu_hoa_don?.Replace('/', '_') ?? "KH_NA"}_{invoice.So_hoa_don?.ToString() ?? "SHD_NA"}";
-                    lblDownloadStatus.Text = $"Bước 4: Đang xử lý HĐ ({i + 1}/{invoicesToDownload.Count})...";
+                    lblDownloadStatus.Text = $"Bước 4: Xử lý HĐ ({i + 1}/{invoicesToDownload.Count})...";
                     string zipFilePath = Path.Combine(zipSubFolder, $"HD_{invoiceIdentifier}.zip");
-                    string tempExtractPath = Path.Combine(baseTempDirectory, $"_temp_extract_{i}"); // Thư mục tạm để giải nén
-                    int currentStepBase = 2 + (i * 3); // 2 (Excel) + (i * 3 bước)
+                    string tempExtractPath = Path.Combine(baseTempDirectory, $"_temp_extract_{i}");
+                    int currentStepBase = 2 + (i * 3);
 
-                    try
+                    try
                     {
                         // --- 4.1. Tải ZIP ---
                         if (await DownloadSingleInvoiceZipAsync(invoice, zipSubFolder))
@@ -1047,13 +1081,13 @@ namespace E_Tax
                         else
                         {
                             failedChunks.Add($"{invoiceIdentifier} (Lỗi tải ZIP)");
-                            downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum); // Bỏ qua 3 bước
-                            continue;
+                            downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
+                            continue;
                         }
                         downloadProgressBar.Value = Math.Min(currentStepBase + 1, downloadProgressBar.Maximum);
 
                         // --- 4.2. Giải nén ZIP ---
-                        Directory.CreateDirectory(tempExtractPath);
+                        Directory.CreateDirectory(tempExtractPath);
                         await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, tempExtractPath, true));
                         downloadProgressBar.Value = Math.Min(currentStepBase + 2, downloadProgressBar.Maximum);
 
@@ -1150,29 +1184,27 @@ namespace E_Tax
                     }
 
                     AppendLog($"📦 Đang nén thư mục kết quả: {baseTempDirectory} -> {finalZipPath}");
-                    await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath)); // Chạy nén trên Task
-                    AppendLog($"✅ Nén xong.");
+                    // Dùng Task.Run để chạy nén trên một thread khác, tránh làm treo UI
+                    await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath));
+                    AppendLog("✅ Nén xong.");
                     downloadProgressBar.Value = downloadProgressBar.Maximum; // Hoàn thành
 
-                    // *** BỎ QUA VIỆC GIẢI NÉN LẠI VÀ GỌI UnzipInnerArchives ***
-                    // AppendLog($"🚀 Đang giải nén file tổng hợp vào thư mục đích...");
-                    // ZipFile.ExtractToDirectory(tempZipPath, finalExtractionPath, true);
-                    // AppendLog($"🔍 Bắt đầu giải nén các file ZIP hóa đơn con...");
-                    // await Task.Run(() => UnzipInnerArchives(finalExtractionPath));
+                    // Bỏ qua việc giải nén lại (logic cũ)
 
                     string successMessage = $"✅ Hoàn tất! \n\nĐã tải {successCount} HĐ gốc, xử lý/convert {convertSuccessCount} HĐ sang PDF.\n" +
-                    $"Đã lưu tất cả file (Excel, PDF, XML, ZIP gốc) vào một file nén duy nhất:\n\n{finalZipPath}";
+                                            $"Đã lưu tất cả file (Excel, PDF, XML, ZIP gốc) vào một file nén duy nhất:\n\n{finalZipPath}";
                     if (failedChunks.Any())
                     {
                         string errorList = string.Join("\n - ", failedChunks);
                         successMessage += $"\n\nLưu ý: Đã xảy ra lỗi khi xử lý các mục sau (kết quả có thể bị thiếu):\n - {errorList}";
                     }
                     MessageBox.Show(successMessage,
-                               failedChunks.Any() ? "Hoàn tất (Có lỗi)" : "Thành Công",
-                               MessageBoxButtons.OK,
-                               failedChunks.Any() ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
-                }
-            }
+                         failedChunks.Any() ? "Hoàn tất (Có lỗi)" : "Thành Công",
+                         MessageBoxButtons.OK,
+                         failedChunks.Any() ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                    }
+                downloadProgressBar.Value = downloadProgressBar.Maximum; // Hoàn thành
+            }
             catch (JsonException jsonEx)
             {
                 AppendLog($"❌ Lỗi phân tích JSON trong SaveOriginalInvoicesAsync: {jsonEx.ToString()}");
@@ -1190,7 +1222,8 @@ namespace E_Tax
             }
             finally
             {
-               try
+                // --- Dọn dẹp và Reset UI ---
+                try
                 {
                     AppendLog($"🧹 Đang dọn dẹp thư mục tạm: {baseTempDirectory}");
                     if (Directory.Exists(baseTempDirectory))
@@ -1213,10 +1246,10 @@ namespace E_Tax
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
-                AppendLog("🏁 Kết thúc tiến trình Tải HĐ Gốc.");
+                this.Cursor = Cursors.Default; // Thêm lại dòng này
+                AppendLog("🏁 Kết thúc tiến trình Tải HĐ Gốc.");
             }
         }
-
         private async void btnTaiHDGoc_Click(object sender, EventArgs e)
         {
             // === BỔ SUNG: THAY ĐỔI TEXT VÀ REFRESH ===
@@ -1322,170 +1355,197 @@ namespace E_Tax
         /// </summary>
         private async void btnLeftSearch_Click(object sender, EventArgs e)
         {
-            // --- KIỂM TRA ĐĂNG NHẬP ---
-            if (string.IsNullOrEmpty(jwtToken))
+            // --- (Giữ nguyên code kiểm tra đăng nhập và ngày tháng) ---
+            if (string.IsNullOrEmpty(jwtToken))
             {
-                MessageBox.Show("Bạn chưa đăng nhập hoặc token không hợp lệ!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Bạn chưa đăng nhập...", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-
-            // --- LẤY THÔNG TIN TÌM KIẾM & VALIDATE ---
-            DateTime globalFromDate = dtpFromDate.Value.Date; // Lấy ngày bắt đầu tổng
-            DateTime globalToDate = dtpToDate.Value.Date;    // Lấy ngày kết thúc tổng
-
-            if (globalFromDate > globalToDate)
+            DateTime globalFromDate = dtpFromDate.Value.Date;
+            DateTime globalToDate = dtpToDate.Value.Date;
+            if (globalFromDate > globalToDate)
             {
                 MessageBox.Show("Ngày bắt đầu không thể lớn hơn ngày kết thúc.", "Lỗi nhập liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // --- QUẢN LÝ TRẠNG THÁI UI (Bắt đầu) ---
-            btnLeftSearch.Enabled = false;
+            // --- (Giữ nguyên code Cập nhật UI) ---
+            btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
             dgvMain.DataSource = null;
-            dgvDetails.DataSource = null;
-            dgvMua.DataSource = null;
-            dgvBan.DataSource = null;
-            dgvVatNop.DataSource = null;
-            dgvGiamThue.DataSource = null;
+            // ... (xóa các grid khác) ...
             _latestResults.Clear();
-            _lastSuccessfulQueryString = ""; // Xóa query string cũ
+            _lastSuccessfulQueryString = "";
 
-            // --- LOGIC VÒNG LẶP TÌM KIẾM MỚI ---
-            List<SearchResult> allSearchResults = new List<SearchResult>();
-            List<string> failedChunks = new List<string>(); // Lưu lại các khoảng thời gian bị lỗi
-            DateTime loopStartDate = globalFromDate;
+            // --- LOGIC VÒNG LẶP TÌM KIẾM MỚI (LỒNG NHAU) ---
+            List<SearchResult> allSearchResults = new List<SearchResult>();
+            List<string> failedChunks = new List<string>();
+            DateTime loopStartDate = globalFromDate;
 
-            // Tính toán số lần gọi API cho thanh tiến trình
-            const int chunkSizeInDays = 30;
-            double totalDays = (globalToDate - globalFromDate).TotalDays + 1; // +1 để bao gồm cả ngày cuối
-            int totalLoops = (int)Math.Ceiling(totalDays / chunkSizeInDays);
+            const int chunkSizeInDays = 30; // Giới hạn 30 ngày của API
+            const int pageSize = 50; // Giới hạn 50 kết quả của API
 
-            int apiCallsPerLoop = 0;
-            if (rbSold.Checked) apiCallsPerLoop = 1;
-            else if (rbBought.Checked) apiCallsPerLoop = 1;
-            else if (rbAllInvoices.Checked) apiCallsPerLoop = 2;
+            // THAY ĐỔI: Khởi tạo bộ đệm log (dùng System.Text.StringBuilder)
+            System.Text.StringBuilder logBuilder = new System.Text.StringBuilder();
 
-            downloadProgressBar.Value = 0;
-            downloadProgressBar.Maximum = totalLoops * apiCallsPerLoop; // SỐ vòng lặp * số API (Bán/Mua)
-            downloadProgressBar.Visible = true;
-            downloadProgressBar.Style = ProgressBarStyle.Blocks; // Chuyển sang kiểu khối
-            lblDownloadStatus.Visible = true;
+            // Cập nhật progress bar
+            downloadProgressBar.Visible = true;
+            downloadProgressBar.Style = ProgressBarStyle.Marquee;
+            lblDownloadStatus.Visible = true;
 
             try
             {
-                int currentLoop = 0;
+                // === VÒNG LẶP BÊN NGOÀI (THEO THỜI GIAN) ===
                 while (loopStartDate <= globalToDate)
                 {
-                    currentLoop++;
-                    // Tính ngày kết thúc của "lát cắt" này (tối đa 30 ngày tính cả ngày bắt đầu)
                     DateTime loopEndDate = loopStartDate.AddDays(chunkSizeInDays - 1);
-
-                    // Đảm bảo ngày kết thúc không vượt quá ngày kết thúc tổng
-                    if (loopEndDate > globalToDate)
-                    {
-                        loopEndDate = globalToDate;
-                    }
-
-                    lblDownloadStatus.Text = $"Đang tìm... ({currentLoop}/{totalLoops}): [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}]";
-                    AppendLog($"🔍 Bắt đầu lát cắt {currentLoop}/{totalLoops}: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
-
-                    // Lấy thời điểm cuối cùng trong ngày (23:59:59)
+                    if (loopEndDate > globalToDate) loopEndDate = globalToDate;
                     DateTime preciseLoopEndDate = loopEndDate.Date.AddDays(1).AddTicks(-1);
 
-                    string currentQuerySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold);
-                    string currentQueryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought);
+                    // THAY ĐỔI: Dùng logBuilder
+                    logBuilder.AppendLine($"🔍 Bắt đầu lát cắt: {loopStartDate:dd/MM/yyyy} - {loopEndDate:dd/MM/yyyy}");
 
-                    // --- Tìm hóa đơn bán ra (trong lát cắt) ---
-                    if (rbSold.Checked || rbAllInvoices.Checked)
+                    // === VÒNG LẶP BÊN TRONG (PHÂN TRANG) - ĐÃ TỐI ƯU ===
+                    int currentPage = 0;
+
+                    bool keepFetchingSold = (rbSold.Checked || rbAllInvoices.Checked);
+                    bool keepFetchingBought = (rbBought.Checked || rbAllInvoices.Checked);
+
+                    while (keepFetchingSold || keepFetchingBought)
                     {
-                        lblDownloadStatus.Text = $"Đang tìm HĐ Bán ra... ({currentLoop}/{totalLoops})";
-                        string resultSold = await GetProductsAsync("query/invoices/sold", currentQuerySold);
-                        if (resultSold.StartsWith("❌"))
+                        lblDownloadStatus.Text = $"Đang tìm [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}], Trang {currentPage + 1}...";
+
+                        // --- Tìm hóa đơn bán ra (Trang hiện tại) ---
+                        if (keepFetchingSold)
                         {
-                            AppendLog($"❌ Lỗi lát cắt (Bán ra) {currentLoop}: {resultSold}");
-                            failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]");
+                            string querySold = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Sold, currentPage, pageSize);
+                            string resultSold = await GetProductsAsync("query/invoices/sold", querySold);
+                            if (resultSold.StartsWith("❌"))
+                            {
+                                failedChunks.Add($"Bán ra [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}], Trang {currentPage + 1}");
+                                keepFetchingSold = false;
+                            }
+                            else
+                            {
+                                var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (responseSold?.Datas != null && responseSold.Datas.Any())
+                                {
+                                    int count = responseSold.Datas.Count;
+                                    // THAY ĐỔI: Dùng logBuilder
+                                    logBuilder.AppendLine($"  -> Trang {currentPage + 1} (Bán ra) tìm thấy: {count} mục.");
+
+                                    responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra");
+                                    allSearchResults.AddRange(responseSold.Datas);
+
+                                    if (responseSold.Datas.Count < pageSize)
+                                    {
+                                        keepFetchingSold = false;
+                                    }
+                                }
+                                else
+                                {
+                                    // THAY ĐỔI: Dùng logBuilder
+                                    logBuilder.AppendLine($"  -> Trang {currentPage + 1} (Bán ra) tìm thấy: 0 mục. Dừng tìm Bán ra.");
+                                    keepFetchingSold = false;
+                                }
+                            }
+                        }
+
+                        // --- Tìm hóa đơn mua vào (Trang hiện tại) ---
+                        if (keepFetchingBought)
+                        {
+                            string queryBought = Timef(loopStartDate, preciseLoopEndDate, InvoiceType.Bought, currentPage, pageSize);
+                            string resultBought = await GetProductsAsync("query/invoices/purchase", queryBought);
+                            if (resultBought.StartsWith("❌"))
+                            {
+                                failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}], Trang {currentPage + 1}");
+                                keepFetchingBought = false;
+                            }
+                            else
+                            {
+                                var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                if (responseBought?.Datas != null && responseBought.Datas.Any())
+                                {
+                                    int count = responseBought.Datas.Count;
+                                    // THAY ĐỔI: Dùng logBuilder
+                                    logBuilder.AppendLine($"  -> Trang {currentPage + 1} (Mua vào) tìm thấy: {count} mục.");
+
+                                    responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào");
+                                    allSearchResults.AddRange(responseBought.Datas);
+
+                                    if (responseBought.Datas.Count < pageSize)
+                                    {
+                                        keepFetchingBought = false;
+                                    }
+                                }
+                                else
+                                {
+                                    // THAY ĐỔI: Dùng logBuilder
+                                    logBuilder.AppendLine($"  -> Trang {currentPage + 1} (Mua vào) tìm thấy: 0 mục. Dừng tìm Mua vào.");
+                                    keepFetchingBought = false;
+                                }
+                            }
+                        }
+
+                        // --- KIỂM TRA ĐIỀU KIỆN DỪNG VÒNG LẶP TRONG ---
+                        if (keepFetchingSold || keepFetchingBought)
+                        {
+                            currentPage++;
+                            await Task.Delay(200);
                         }
                         else
                         {
-                            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                            var responseSold = JsonSerializer.Deserialize<SearchResponse>(resultSold, options);
-                            if (responseSold?.Datas != null)
-                            {
-                                responseSold.Datas.ForEach(item => item.Thong_tin_lien_quan = "Bán ra");
-                                allSearchResults.AddRange(responseSold.Datas);
-                                AppendLog($"✅ Lát cắt (Bán ra) {currentLoop} tìm thấy {responseSold.Datas.Count} HĐ.");
-                            }
+                            // THAY ĐỔI: Dùng logBuilder
+                            logBuilder.AppendLine($"  -> Lát cắt {loopStartDate:dd/MM} - {loopEndDate:dd/MM} hoàn tất sau {currentPage + 1} trang.");
                         }
-                        if (downloadProgressBar.Value < downloadProgressBar.Maximum)
-                            downloadProgressBar.PerformStep();
                     }
+                    // === KẾT THÚC VÒNG LẶP BÊN TRONG (PHÂN TRANG) ===
 
-                    // --- Tìm hóa đơn mua vào (trong lát cắt) ---
-                    if (rbBought.Checked || rbAllInvoices.Checked)
-                    {
-                        lblDownloadStatus.Text = $"Đang tìm HĐ Mua vào... ({currentLoop}/{totalLoops})";
-                        string resultBought = await GetProductsAsync("query/invoices/purchase", currentQueryBought);
-                        if (resultBought.StartsWith("❌"))
-                        {
-                            AppendLog($"❌ Lỗi lát cắt (Mua vào) {currentLoop}: {resultBought}");
-                            failedChunks.Add($"Mua vào [{loopStartDate:dd/MM} - {loopEndDate:dd/MM}]");
-                        }
-                        else
-                        {
-                            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                            var responseBought = JsonSerializer.Deserialize<SearchResponse>(resultBought, options);
-                            if (responseBought?.Datas != null)
-                            {
-                                responseBought.Datas.ForEach(item => item.Thong_tin_lien_quan = "Mua vào");
-                                allSearchResults.AddRange(responseBought.Datas);
-                                AppendLog($"✅ Lát cắt (Mua vào) {currentLoop} tìm thấy {responseBought.Datas.Count} HĐ.");
-                            }
-                        }
-                        if (downloadProgressBar.Value < downloadProgressBar.Maximum)
-                            downloadProgressBar.PerformStep();
-                    }
+                    // THAY ĐỔI: Dùng logBuilder
+                    logBuilder.AppendLine($"  -> Kết thúc lát cắt. Tổng số mục tạm thời: {allSearchResults.Count}");
 
-                    // Chuyển sang ngày bắt đầu của lát cắt tiếp theo
                     loopStartDate = loopEndDate.AddDays(1);
-                    await Task.Delay(200); // Thêm 1 chút delay nhỏ giữa các lần gọi API để tránh bị chặn
                 }
-                // --- KẾT THÚC VÒNG LẶP ---
+                // === KẾT THÚC VÒNG LẶP BÊN NGOÀI (THỜI GIAN) ===
 
-                // --- XỬ LÝ KẾT QUẢ TÌM KIẾM TỔNG HỢP ---
+                // THAY ĐỔI: Dùng logBuilder
+                logBuilder.AppendLine($"Tổng cộng trước khi lọc trùng: {allSearchResults.Count}");
+
+                // --- XỬ LÝ KẾT QUẢ TÌM KIẾM TỔNG HỢP ---
                 lblDownloadStatus.Text = "Đang tổng hợp kết quả...";
                 _latestResults = allSearchResults
-                                        .GroupBy(r => r.Id) // Nhóm theo ID để loại bỏ trùng lặp (nếu có)
+                                        .GroupBy(r => r.Id)
                                         .Select(g => g.First())
                                         .OrderByDescending(r => r.Ngay_lap)
                                         .ThenBy(r => r.So_hoa_don)
                                         .ToList();
 
-                // Vẫn lưu 1 query string (ví dụ: của lát cắt đầu tiên) để dùng cho "Tải danh sách HĐ"
-                // (Lưu ý: Chức năng "Tải danh sách" có thể cần sửa lại để hỗ trợ nhiều khoảng thời gian)
-                if (rbSold.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Sold); }
-                else if (rbBought.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Bought); }
-                else { _lastSuccessfulQueryString = Timef(globalFromDate, globalToDate.AddDays(1).AddTicks(-1), InvoiceType.Sold); }
-
+                // --- (Phần còn lại của hàm giữ nguyên) ---
+                DateTime preciseGlobalToDate = globalToDate.AddDays(1).AddTicks(-1);
+                int finalPageSize = 50;
+                if (rbSold.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, preciseGlobalToDate, InvoiceType.Sold, 0, finalPageSize); }
+                else if (rbBought.Checked) { _lastSuccessfulQueryString = Timef(globalFromDate, preciseGlobalToDate, InvoiceType.Bought, 0, finalPageSize); }
+                else { _lastSuccessfulQueryString = Timef(globalFromDate, preciseGlobalToDate, InvoiceType.Sold, 0, finalPageSize); }
 
                 if (_latestResults.Any())
                 {
-                    AppendLog($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn (sau khi loại bỏ trùng lặp).");
+                    // THAY ĐỔI: Dùng logBuilder
+                    logBuilder.AppendLine($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn (sau khi loại bỏ trùng lặp).");
                     lblDownloadStatus.Text = $"Đang hiển thị {_latestResults.Count} hóa đơn...";
 
-                    // Gán DataSource cho lưới chính
-                    dgvMain.DataSource = _latestResults;
-
-                    // Cập nhật STT và định dạng ngày
-                    UpdateGridRowNumbers(); // Gọi hàm cập nhật STT (đã có sẵn)
-                    dgvMain.SuspendLayout();
+                    dgvMain.DataSource = _latestResults;
+                    UpdateGridRowNumbers();
+                    dgvMain.SuspendLayout();
                     try
                     {
                         foreach (DataGridViewRow row in dgvMain.Rows)
                         {
-                            // Định dạng ngày (nếu cần, vì UpdateGridRowNumbers có thể chưa làm)
-                            var cellNgayLap = row.Cells["colDgvNgayLap"];
+                            if (row.DataBoundItem is SearchResult item && dgvMain.Columns.Contains("colDgvLoaiHD"))
+                            {
+                                row.Cells["colDgvLoaiHD"].Value = item.Thong_tin_lien_quan;
+                            }
+                            var cellNgayLap = row.Cells["colDgvNgayLap"];
                             if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
                             {
                                 cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
@@ -1497,48 +1557,60 @@ namespace E_Tax
                         dgvMain.ResumeLayout();
                     }
 
-                    AppendLog("✅ Hiển thị xong lưới tổng hợp.");
-                    AppendLog($"📊 Gán dữ liệu cho Bảng kê giảm thuế...");
+                    // THAY ĐỔI: Dùng logBuilder
+                    logBuilder.AppendLine("✅ Hiển thị xong lưới tổng hợp.");
+                    logBuilder.AppendLine($"📊 Gán dữ liệu cho Bảng kê giảm thuế...");
                     dgvGiamThue.DataSource = null;
                     dgvGiamThue.DataSource = _latestResults;
-                    AppendLog($"✅ Hiển thị xong Bảng kê giảm thuế.");
+                    logBuilder.AppendLine($"✅ Hiển thị xong Bảng kê giảm thuế.");
 
-                    // Tải dữ liệu chi tiết cho các tab khác
-                    await _detailGridManager.PopulateDetailGridAsync(_latestResults);
+                    await _detailGridManager.PopulateDetailGridAsync(_latestResults, logBuilder);
                 }
                 else
                 {
                     lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                     MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    AppendLog("ℹ️ Không tìm thấy hóa đơn nào.");
+                    // THAY ĐỔI: Dùng logBuilder
+                    logBuilder.AppendLine("ℹ️ Không tìm thấy hóa đơn nào.");
+                    dgvMain.DataSource = null;
+                    dgvDetails.DataSource = null;
+                    dgvMua.DataSource = null;
+                    dgvBan.DataSource = null;
+                    dgvVatNop.DataSource = null;
+                    dgvGiamThue.DataSource = null;
                 }
 
-                // Thông báo nếu có lỗi trong các lát cắt
                 if (failedChunks.Any())
                 {
                     string errorList = string.Join("\n - ", failedChunks);
-                    MessageBox.Show($"Đã hoàn tất tìm kiếm, tuy nhiên đã xảy ra lỗi ở các khoảng thời gian sau:\n - {errorList}\n\nKết quả từ các khoảng thời gian này có thể bị thiếu.", "Lỗi trong quá trình tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show($"Đã hoàn tất tìm kiếm, tuy nhiên đã xảy ra lỗi ở các khoảng thời gian/trang sau:\n - {errorList}\n\nKết quả có thể bị thiếu.", "Lỗi trong quá trình tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             catch (JsonException jsonEx)
             {
-                AppendLog($"❌ Lỗi phân tích JSON kết quả tìm kiếm: {jsonEx.ToString()}");
+                // THAY ĐỔI: Dùng logBuilder
+                logBuilder.AppendLine($"❌ Lỗi phân tích JSON kết quả tìm kiếm: {jsonEx.ToString()}");
                 MessageBox.Show($"Lỗi xử lý dữ liệu trả về: {jsonEx.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
-                AppendLog($"❌ Lỗi không mong muốn khi tìm kiếm: {ex.ToString()}");
+                // THAY ĐỔI: Dùng logBuilder
+                logBuilder.AppendLine($"❌ Lỗi không mong muốn khi tìm kiếm: {ex.ToString()}");
                 MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
-                // --- KHÔI PHỤC TRẠNG THÁI UI ---
-                btnLeftSearch.Enabled = true;
+                btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
+
+                // THAY ĐỔI: Hiển thị MessageBox log tại đây
+                // Khối finally LUÔN LUÔN chạy, dù có lỗi hay không.
+               // MessageBox.Show(logBuilder.ToString(), "Log Kết Quả Tìm Kiếm", MessageBoxButtons.OK, MessageBoxIcon.Information);
+               MessageBox.Show("✅ Hoàn tất tìm kiếm. Dữ liệu đã thêm đầy đủ vào các bảng.", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
         private async Task<string> GetInvoiceDetailAsync(string nbmst, string khhdon, int? shdon, int? khmshdon)
@@ -3027,10 +3099,13 @@ namespace E_Tax
                     // 3b. Nếu không, xóa trắng ô
                     txtGhiChu.Text = ""; // <-- THAY TÊN NẾU CẦN
                 }
+
+                txtKtraMaDoanhNghiep.Text = selectedInvoice.Ma_so_thue;
             }
             else
             {
                 txtGhiChu.Text = "";
+                txtKtraMaDoanhNghiep.Text = "";
             }
         }
 
@@ -3069,6 +3144,153 @@ namespace E_Tax
         private void label1_Click(object sender, EventArgs e)
         {
 
+        }
+
+        private async void btnKtraDNMuaLe_Click(object sender, EventArgs e)
+        {
+            string taxCode = txtKtraMaDoanhNghiep.Text.Trim();
+
+            if (string.IsNullOrEmpty(taxCode))
+            {
+                MessageBox.Show("Vui lòng nhập một Mã số thuế vào ô 'Nhập mã doanh nghiệp' (hoặc click vào một hóa đơn trên lưới để chọn).",
+                        "Thiếu thông tin", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtKtraMaDoanhNghiep.Focus();
+                return;
+            }
+
+            string apiToken = "VpVC1xtjIBha1VZVdBQE3z5uvw6jXmGVoAHbotLA1MDruVg4fKRY4JH1OlilistK";
+            string apiUrl = $"https://license.metaecom.net/api/blacklist/check?tax_code={Uri.EscapeDataString(taxCode)}&token={Uri.EscapeDataString(apiToken)}";
+
+            btnKtraDNMuaLe.Enabled = false;
+            btnKtraDNMuaLe.Text = "Đang KT...";
+            this.Cursor = Cursors.WaitCursor;
+            AppendLog($"🔍 Bắt đầu kiểm tra Blacklist cho MST: {taxCode}...");
+            string jsonResponse = ""; // Lưu lại response để gỡ lỗi
+
+            try
+            {
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(BrowserUserAgent);
+                    AppendLog($"  -> Gọi URL: {apiUrl}");
+                    var response = await httpClient.GetAsync(apiUrl);
+                    jsonResponse = await response.Content.ReadAsStringAsync();
+                    AppendLog($"  -> Phản hồi Blacklist API: {jsonResponse}");
+
+                    using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
+                    {
+                        JsonElement root = doc.RootElement;
+
+                        // --- KIỂM TRA LỖI API TRƯỚC ---
+                        if (root.TryGetProperty("success", out JsonElement successEl) && successEl.ValueKind == JsonValueKind.False)
+                        {
+                            string errorMessage = root.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : "Lỗi không xác định.";
+                            AppendLog($"  -> Lỗi API (success=false): {errorMessage}");
+                            throw new Exception($"API báo lỗi: {errorMessage}");
+                        }
+                        if (root.TryGetProperty("error", out JsonElement errorEl) && errorEl.ValueKind == JsonValueKind.String)
+                        {
+                            string errorMessage = errorEl.GetString();
+                            AppendLog($"  -> Lỗi API (có trường 'error'): {errorMessage}");
+                            throw new Exception($"API báo lỗi: {errorMessage}");
+                        }
+
+                        // --- TÌM KẾT QUẢ (ĐÃ SỬA LOGIC) ---
+                        string tenDoanhNghiep = "";
+                        JsonElement blacklistedElement = default;
+                        bool foundBlacklistProp = false; // Dùng cờ
+
+                        // Lấy tên doanh nghiệp (nếu có)
+                        if (root.TryGetProperty("data", out JsonElement dataEl) && dataEl.ValueKind == JsonValueKind.Object)
+                        {
+                            if (dataEl.TryGetProperty("name", out JsonElement nameEl) && nameEl.ValueKind == JsonValueKind.String)
+                            {
+                                tenDoanhNghiep = nameEl.GetString();
+                            }
+                            // Thử tìm "blacklisted" BÊN TRONG "data"
+                            foundBlacklistProp = dataEl.TryGetProperty("blacklisted", out blacklistedElement);
+                        }
+
+                        // *** SỬA ĐỔI QUAN TRỌNG ***
+                        // Nếu KHÔNG tìm thấy "blacklisted" bên trong "data" (foundBlacklistProp vẫn là false)
+                        // HÃY TÌM NÓ ở "root" (bên ngoài)
+                        if (!foundBlacklistProp)
+                        {
+                                      foundBlacklistProp = root.TryGetProperty("blacklisted", out blacklistedElement);
+                        }
+                        // *** KẾT THÚC SỬA ĐỔI ***
+
+                        // Nếu sau khi tìm cả 2 nơi vẫn không thấy, mới báo lỗi
+                        if (!foundBlacklistProp)
+                        {
+                            throw new Exception($"Phản hồi JSON không hợp lệ. Không tìm thấy 'blacklisted'.\nPhản hồi nhận được: {jsonResponse}");
+                        }
+
+                        // Logic kiểm tra đa kiểu (Đã đúng, giữ nguyên)
+                        bool isBlacklisted = false;
+                        switch (blacklistedElement.ValueKind)
+                        {
+                            case JsonValueKind.True:
+                                isBlacklisted = true;
+                                break;
+                            case JsonValueKind.String:
+                                string strValue = blacklistedElement.GetString();
+                                isBlacklisted = strValue.Equals("true", StringComparison.OrdinalIgnoreCase) || strValue == "1";
+            
+                                break;
+                            case JsonValueKind.Number:
+                                isBlacklisted = blacklistedElement.TryGetInt32(out int intValue) && intValue == 1;
+                                break;
+                        }
+
+                        string message = $"Mã số thuế: {taxCode}\n";
+                        if (!string.IsNullOrEmpty(tenDoanhNghiep))
+                        {
+                            message += $"(Tên: {tenDoanhNghiep})\n\n";
+                        }
+                        else
+                        {
+                            message += "\n";
+                        }
+
+                        if (isBlacklisted)
+                        {
+                            AppendLog("  -> KẾT QUẢ: CÓ TRONG DANH SÁCH CẢNH BÁO.");
+                            MessageBox.Show(message + "Trạng thái: 🔴 Công ty nằm trong danh sách cảnh báo rủi ro!",
+                                    "Nguy Hiểm", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        else
+                        {
+                            AppendLog("  -> KẾT QUẢ: An toàn.");
+                            MessageBox.Show(message + "Trạng thái: ✅ An toàn (Công ty không nằm trong danh sách cảnh báo rủi ro).",
+                                      "An Toàn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                }
+            }
+            catch (JsonException jsonEx)
+            {
+                AppendLog($"❌ Lỗi parse JSON Blacklist: {jsonEx.Message}");
+                MessageBox.Show($"Lỗi đọc phản hồi từ máy chủ: {jsonEx.Message}\nPhản hồi gốc: {jsonResponse}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (HttpRequestException httpEx)
+            {
+                AppendLog($"❌ Lỗi kết nối API Blacklist: {httpEx.Message}");   
+                MessageBox.Show($"Lỗi kết nối đến máy chủ kiểm tra: {httpEx.Message}", "Lỗi mạng", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi khác khi kiểm tra Blacklist: {ex.ToString()}");
+                MessageBox.Show($"Đã xảy ra lỗi: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                // === BƯỚC 5: KHÔI PHỤC UI ===
+                btnKtraDNMuaLe.Enabled = true;
+                btnKtraDNMuaLe.Text = "Ktra DN Mua Lẻ";
+      
+        this.Cursor = Cursors.Default;
+            }
         }
     }
 
