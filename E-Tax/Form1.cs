@@ -1390,9 +1390,9 @@ namespace E_Tax
             System.Text.StringBuilder logBuilder = new System.Text.StringBuilder();
 
             // Cập nhật progress bar
-            downloadProgressBar.Visible = true;
-            downloadProgressBar.Style = ProgressBarStyle.Marquee;
-            lblDownloadStatus.Visible = true;
+            ProcessingForm modal = new ProcessingForm();
+            modal.Show(this); // Hiển thị Form modal (không khóa)
+            this.Enabled = false;
 
             try
             {
@@ -1413,9 +1413,8 @@ namespace E_Tax
                     bool keepFetchingBought = (rbBought.Checked || rbAllInvoices.Checked);
 
                     while (keepFetchingSold || keepFetchingBought)
-                    {
-                        lblDownloadStatus.Text = $"Đang tìm [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}], Trang {currentPage + 1}...";
-
+                    { 
+                        modal.UpdateStatus($"Đang tìm [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}], Trang {currentPage + 1}...");
                         // --- Tìm hóa đơn bán ra (Trang hiện tại) ---
                         if (keepFetchingSold)
                         {
@@ -1513,7 +1512,7 @@ namespace E_Tax
                 logBuilder.AppendLine($"Tổng cộng trước khi lọc trùng: {allSearchResults.Count}");
 
                 // --- XỬ LÝ KẾT QUẢ TÌM KIẾM TỔNG HỢP ---
-                lblDownloadStatus.Text = "Đang tổng hợp kết quả...";
+                modal.UpdateStatus("Đang tổng hợp kết quả...");
                 _latestResults = allSearchResults
                                         .GroupBy(r => r.Id)
                                         .Select(g => g.First())
@@ -1532,7 +1531,7 @@ namespace E_Tax
                 {
                     // THAY ĐỔI: Dùng logBuilder
                     logBuilder.AppendLine($"📊 Tìm thấy tổng cộng {_latestResults.Count} hóa đơn (sau khi loại bỏ trùng lặp).");
-                    lblDownloadStatus.Text = $"Đang hiển thị {_latestResults.Count} hóa đơn...";
+                    modal.UpdateStatus($"Đang hiển thị {_latestResults.Count} hóa đơn...");
 
                     dgvMain.DataSource = _latestResults;
                     UpdateGridRowNumbers();
@@ -1563,6 +1562,8 @@ namespace E_Tax
                     dgvGiamThue.DataSource = null;
                     dgvGiamThue.DataSource = _latestResults;
                     logBuilder.AppendLine($"✅ Hiển thị xong Bảng kê giảm thuế.");
+
+                    modal.UpdateStatus($"Đang tải chi tiết cho {_latestResults.Count} hóa đơn...");
 
                     await _detailGridManager.PopulateDetailGridAsync(_latestResults, logBuilder);
                 }
@@ -1600,12 +1601,12 @@ namespace E_Tax
             }
             finally
             {
+                this.Enabled = true; // Kích hoạt lại Form1
+                modal.Close();
+
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
-                downloadProgressBar.Visible = false;
-                lblDownloadStatus.Visible = false;
-                lblDownloadStatus.Text = "";
 
                 // THAY ĐỔI: Hiển thị MessageBox log tại đây
                 // Khối finally LUÔN LUÔN chạy, dù có lỗi hay không.
