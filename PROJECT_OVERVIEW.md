@@ -37,6 +37,7 @@ E-Tax/
 ├── GdtApi.cs                  # Hằng URL/User-Agent; CreateRequest(...) set header chung; BuildDetailUrl(...)
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
 ├── GridColumnHelper.cs        # Style + tạo cột text/số cho DataGridView cấu hình bằng code
+├── Logger.cs                  # Ghi log ra file theo ngày (%LocalAppData%/E-Tax/logs)
 ├── LicenseManager.cs          # static LicenseManager + enum LicenseStatus
 ├── ProcessingForm.cs          # Form "đang xử lý" (ControlBox=false), có UpdateStatus(string)
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
@@ -85,7 +86,8 @@ API ngoài: `BlacklistApiUrl?tax_code=...&token=BlacklistApiToken` (hằng trong
 | tthai | Trang_thai_hoa_don | int |
 | kqcht | Ket_qua_kiem_tra_hoa_don | |
 | shdgoc | Hoa_don_lien_quan | |
-| nmdchi | Thong_tin_lien_quan | ⚠️ Bị **ghi đè** thành `"Bán ra"` / `"Mua vào"` sau khi search — được dùng làm cờ phân loại |
+| nmdchi | Thong_tin_lien_quan | Giữ nguyên dữ liệu gốc (không còn bị ghi đè) |
+| _(không có)_ | Loai_hoa_don | `[JsonIgnore]`, gán `"Bán ra"` / `"Mua vào"` sau khi search; dùng cho cột `colDgvLoaiHD`, lọc BK mua/bán, cột Excel "Loại hóa đơn" |
 
 Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stckhau, thtcthue, tsuat, tthue, solo, hsd, ghichu`.
 
@@ -108,7 +110,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`.
 1. `SearchInvoicesAsync(from, to, includeSold, includeBought, reportStatus)` — **dùng chung** với `SaveOriginalInvoicesAsync`:
    chia lát 30 ngày; mỗi lát lặp trang (size 50) cho Bán ra / Mua vào độc lập (`FetchSearchPageAsync` trả false khi hết trang hoặc lỗi).
-2. Gắn `Thong_tin_lien_quan = "Bán ra"/"Mua vào"`, dedupe theo `Id`, sort `Ngay_lap` desc, `So_hoa_don` asc → `_latestResults`. Trang lỗi gom vào `FailedChunks`.
+2. Gắn `Loai_hoa_don = "Bán ra"/"Mua vào"`, dedupe theo `Id`, sort `Ngay_lap` desc, `So_hoa_don` asc → `_latestResults`. Trang lỗi gom vào `FailedChunks`.
 3. `BindMainGrid()` bind `dgvMain` (tab **Tổng hợp**); bind `dgvGiamThue` (tab có text **"VAT nộp"**).
 4. `DetailGridManager.PopulateDetailGridAsync` → gọi `detail` cho **từng** HĐ (delay 500ms/HĐ) → bind:
    - `dgvDetails` (tab **Chi tiết**) — tất cả dòng hàng
@@ -133,7 +135,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 | Ktra DN Mua Lẻ (`btnKtraDNMuaLe`) | gọi API blacklist metaecom | MST lấy từ `txtKtraMaDoanhNghiep` (tự điền khi chọn dòng) |
 
 ### 5.5 Tiện ích
-- `AppendLog(string)` — **thân hàm rỗng**, mọi log đều bị bỏ (DetailGridManager cũng log qua delegate này).
+- `AppendLog(string)` → `Logger.Write` ghi file `%LocalAppData%/E-Tax/logs/etax_yyyyMMdd.log` (giữ 30 ngày, không ném lỗi). DetailGridManager cũng log qua delegate này. **Không log token/mật khẩu.**
 - `EnsureChromiumAsync()` tải Chromium lần đầu và **cache đường dẫn** (`_chromiumExecutablePath`); `ConvertHtmlToPdfAsync(html, pdf)` launch Puppeteer mỗi lần gọi (A4, Networkidle0, timeout 60s).
 - `DownloadSingleInvoiceZipAsync(invoice, dir)` trả đường dẫn `HD_{FileIdentifier}.zip` hoặc `null` khi lỗi.
 - `GetSelectedInvoiceWithKeys(row, msg)` — lấy HĐ từ dòng lưới và kiểm tra đủ khóa, tự hiện thông báo nếu không hợp lệ.
@@ -156,11 +158,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 4. Mật khẩu người dùng bị `Trim()` trước khi gửi (mật khẩu có khoảng trắng đầu/cuối sẽ sai).
 
 ### Bug / hành vi sai
-- `btnCnKoPdf_Click`: khi **có** máy in vẫn hiện thông báo "Không tìm thấy máy in vật lý nào..." (message sai nhánh).
-- `btnLeftSearch_Click`: `finally` luôn hiện "✅ Hoàn tất tìm kiếm..." kể cả khi lỗi/không có kết quả (sau khi đã hiện thông báo lỗi).
-- `Thong_tin_lien_quan` map vào JSON `nmdchi` (địa chỉ người mua) nhưng bị dùng làm cờ loại HĐ → mất dữ liệu gốc, cột Excel "Thông tin liên quan" sai nghĩa. Nên thêm property riêng (vd. `LoaiHD`, `[JsonIgnore]`).
 - `notes.json` lưu tại `Application.StartupPath` — nếu cài vào `Program Files` sẽ không ghi được. Nên dùng `%AppData%`.
-- `AppendLog` rỗng → không có cách chẩn đoán lỗi ở máy khách. Nên ghi file log (vd. `%AppData%\E-Tax\logs`).
 
 ### Hiệu năng
 - Chi tiết HĐ gọi tuần tự + `Task.Delay(500)` mỗi HĐ (DetailGridManager) → 1000 HĐ ≈ >8 phút chỉ riêng delay. Tìm kiếm luôn kéo chi tiết toàn bộ dù người dùng chỉ cần danh sách.
@@ -177,10 +175,10 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 
 ### Đề xuất refactor theo thứ tự ưu tiên
 1. Sửa license EPPlus (hoặc chuyển ClosedXML), bỏ secret hard-code, cơ chế kích hoạt an toàn hơn.
-2. Ghi log ra file trong `AppendLog`; sửa các bug message ở trên.
+2. ✅ (2026-11-16) Ghi log ra file; sửa thông báo in và thông báo hoàn tất tìm kiếm.
 3. Tách lớp: `GdtApiClient` (captcha/login/search/detail/download + header chung), `InvoiceSearchService` (chia lát 30 ngày + phân trang, dùng chung cho Search & Tải gốc), `ExcelExporter`, `PdfService` (dùng chung 1 browser Puppeteer), `NotesStore`.
 4. Cache chi tiết HĐ đã lấy (theo `Id`) để Export/Tải gốc không gọi lại API; cân nhắc gọi song song có giới hạn (SemaphoreSlim 3–5) thay vì delay cố định.
-5. Thêm property phân loại HĐ riêng thay vì ghi đè `Thong_tin_lien_quan`.
+5. ✅ (2026-11-16) Đã thêm `Loai_hoa_don` thay vì ghi đè `Thong_tin_lien_quan`.
 6. Dọn warning nullable còn lại.
 
 ## 7. Ghi chú khi sửa code

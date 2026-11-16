@@ -58,9 +58,14 @@ namespace E_Tax
         [JsonPropertyName("shdgoc")]
         public string Hoa_don_lien_quan { get; set; }
 
-        // Sau khi tìm kiếm, trường này bị ghi đè thành "Bán ra" / "Mua vào" để phân loại hóa đơn.
         [JsonPropertyName("nmdchi")]
         public string Thong_tin_lien_quan { get; set; }
+
+        /// <summary>
+        /// "Bán ra" / "Mua vào" — gán sau khi tìm kiếm theo endpoint đã gọi, không có trong JSON.
+        /// </summary>
+        [JsonIgnore]
+        public string Loai_hoa_don { get; set; } = "";
 
         /// <summary>
         /// Đủ 4 khóa (MST, KHHĐ, Số HĐ, KH mẫu số) để gọi API chi tiết / tải ZIP.

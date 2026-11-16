@@ -81,6 +81,7 @@ namespace E_Tax
 
         private void AppendLog(string message)
         {
+            Logger.Write(message);
         }
 
         private async void Form1_Load(object sender, EventArgs e)
@@ -383,7 +384,7 @@ namespace E_Tax
 
         /// <summary>
         /// Tìm hóa đơn trong khoảng ngày: chia thành các lát 30 ngày, mỗi lát lấy hết các trang.
-        /// Kết quả đã loại trùng theo Id, sắp theo ngày lập giảm dần; Thong_tin_lien_quan = "Bán ra"/"Mua vào".
+        /// Kết quả đã loại trùng theo Id, sắp theo ngày lập giảm dần; Loai_hoa_don = "Bán ra"/"Mua vào".
         /// </summary>
         private async Task<(List<SearchResult> Results, List<string> FailedChunks)> SearchInvoicesAsync(
             DateTime fromDate, DateTime toDate, bool includeSold, bool includeBought, Action<string> reportStatus)
@@ -453,7 +454,7 @@ namespace E_Tax
             if (parsed?.Datas == null || !parsed.Datas.Any())
                 return false;
 
-            parsed.Datas.ForEach(item => item.Thong_tin_lien_quan = typeLabel);
+            parsed.Datas.ForEach(item => item.Loai_hoa_don = typeLabel);
             results.AddRange(parsed.Datas);
             return parsed.Datas.Count >= SearchPageSize;
         }
@@ -565,7 +566,7 @@ namespace E_Tax
                 "Mã số thuế", "Ký hiệu mã số", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày lập",
                 "Thông tin hóa đơn", "Tổng tiền chưa thuế", "Tổng tiền thuế", "Tổng tiền chiết khấu",
                 "Tổng tiền phí", "Tổng tiền thanh toán", "Đơn vị tiền tệ",
-                "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Thông tin liên quan"
+                "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Loại hóa đơn"
             };
 
             using var package = new ExcelPackage();
@@ -615,7 +616,7 @@ namespace E_Tax
                 ws.Cells[row, 13].Value = item.Trang_thai_hoa_don;
                 ws.Cells[row, 14].Value = item.Ket_qua_kiem_tra_hoa_don;
                 ws.Cells[row, 15].Value = item.Hoa_don_lien_quan;
-                ws.Cells[row, 16].Value = item.Thong_tin_lien_quan;
+                ws.Cells[row, 16].Value = item.Loai_hoa_don;
 
                 ws.Cells[row, 7, row, 11].Style.Numberformat.Format = "#,##0";
 
@@ -842,6 +843,7 @@ namespace E_Tax
             var modal = new ProcessingForm();
             modal.Show(this);
             this.Enabled = false;
+            bool showCompleted = false;
 
             try
             {
@@ -864,6 +866,7 @@ namespace E_Tax
 
                     modal.UpdateStatus($"Đang tải chi tiết cho {_latestResults.Count} hóa đơn...");
                     await _detailGridManager.PopulateDetailGridAsync(_latestResults);
+                    showCompleted = !failedChunks.Any();
                 }
                 else
                 {
@@ -901,7 +904,11 @@ namespace E_Tax
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
+            }
 
+            // Chỉ báo hoàn tất khi có kết quả và không có lỗi (các trường hợp khác đã có thông báo riêng)
+            if (showCompleted)
+            {
                 MessageBox.Show("✅ Hoàn tất tìm kiếm. Dữ liệu đã thêm đầy đủ vào các bảng.", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -920,7 +927,7 @@ namespace E_Tax
                 {
                     if (row.DataBoundItem is SearchResult item && dgvMain.Columns.Contains("colDgvLoaiHD"))
                     {
-                        row.Cells["colDgvLoaiHD"].Value = item.Thong_tin_lien_quan;
+                        row.Cells["colDgvLoaiHD"].Value = item.Loai_hoa_don;
                     }
                     var cellNgayLap = row.Cells["colDgvNgayLap"];
                     if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
@@ -1673,6 +1680,7 @@ namespace E_Tax
         private async Task PrintPdfFilesAsync(List<string> pdfPaths, List<string> failedInvoicesInfo)
         {
             lblDownloadStatus.Text = $"Đang mở hộp thoại in ({pdfPaths.Count} file)...";
+            int sentCount = 0;
             foreach (string pdfPath in pdfPaths)
             {
                 lblDownloadStatus.Text = $"Đang gửi file {Path.GetFileName(pdfPath)} đến máy in...";
@@ -1685,6 +1693,7 @@ namespace E_Tax
                         continue;
                     }
                     Process.Start(new ProcessStartInfo(pdfPath) { Verb = "print", UseShellExecute = true, CreateNoWindow = true });
+                    sentCount++;
                     await Task.Delay(1000);
                 }
                 catch (Exception exPrint)
@@ -1695,10 +1704,15 @@ namespace E_Tax
                 downloadProgressBar.PerformStep();
             }
 
-            MessageBox.Show($"Đã gửi xử lý hóa đơn đến hộp thoại in.\n" +
-                            $"Không tìm thấy máy in vật lý nào kết nối đến máy của bạn!",
-                            "Hãy kết nối đến máy in của bạn", MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
+            string message = $"Đã gửi {sentCount}/{pdfPaths.Count} hóa đơn đến máy in.";
+            if (failedInvoicesInfo.Any())
+            {
+                message += $"\n\nCác hóa đơn gặp lỗi:\n - {string.Join("\n - ", failedInvoicesInfo)}";
+            }
+            MessageBox.Show(message,
+                            failedInvoicesInfo.Any() ? "In hóa đơn (Có lỗi)" : "In hóa đơn",
+                            MessageBoxButtons.OK,
+                            failedInvoicesInfo.Any() ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }
 
         private void SavePdfFilesToFolder(List<string> pdfPaths, List<string> failedInvoicesInfo)

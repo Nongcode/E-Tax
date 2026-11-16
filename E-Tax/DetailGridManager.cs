@@ -233,7 +233,7 @@ namespace E_Tax
                             var detailItem = CreateDetailItem(root, product, invoiceHeader);
                             detailItem.STT = globalStt++;
                             allDetailItems.Add(detailItem);
-                            if (invoiceHeader.Thong_tin_lien_quan == "Mua vào")
+                            if (invoiceHeader.Loai_hoa_don == "Mua vào")
                                 boughtDetailItems.Add(detailItem);
                             else
                                 soldDetailItems.Add(detailItem);
