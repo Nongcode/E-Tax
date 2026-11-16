@@ -10,10 +10,10 @@
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Nền tảng web |
 | Bước Superpowers | subagent-driven-development (người dùng chọn 2026-11-16) |
-| Task đang làm | T-001.4 |
-| **Bước tiếp theo** | T-001.4 mockDb: lưu trữ, seed, xác thực, gói |
+| Task đang làm | T-001.5 |
+| **Bước tiếp theo** | T-001.5 mockDb: đơn hàng và xác nhận thanh toán |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-16 23:34 |
+| Cập nhật lần cuối | 2026-11-16 23:37 |
 | Ghi chú dở dang | Sổ SDD: `.superpowers/sdd/plan/progress.md` (git-ignored) |
 
 ## File chính
@@ -34,8 +34,8 @@
 | T-001.1 | Khung dự án `web/` (Vite, React, antd, Vitest, ESLint) | ✅ DONE | ✅ vitest 1/1, lint, build. Bỏ qua Playwright: chỉ có khung, chưa có màn hình | 5df2af0, review sạch |
 | T-001.2 | Hàm định dạng và kiểm tra dữ liệu | ✅ DONE | ✅ vitest 17/17, lint, build. Bỏ qua Playwright: hàm thuần, chưa có màn hình | 6b1673d, review sạch |
 | T-001.3 | Hợp đồng kiểu dữ liệu và `apiFetch` | ✅ DONE | ✅ vitest 24/24, lint, build. Bỏ qua Playwright: chưa có màn hình | 62b9de2, review sạch |
-| T-001.4 | mockDb: lưu trữ, seed, xác thực, gói, cài đặt | 🔄 DOING | | |
-| T-001.5 | mockDb: đơn hàng và xác nhận thanh toán | ⬜ TODO | | R4–R6, R15, R17 |
+| T-001.4 | mockDb: lưu trữ, seed, xác thực, gói, cài đặt | ✅ DONE | ✅ vitest 38/38, lint, build. Bỏ qua Playwright: chưa có màn hình | c38887c, review sạch |
+| T-001.5 | mockDb: đơn hàng và xác nhận thanh toán | 🔄 DOING | | |
 | T-001.6 | mockDb: bản quyền và máy | ⬜ TODO | | R7–R15 |
 | T-001.7 | mockDb: khách hàng và số liệu (admin) | ⬜ TODO | | R19, stats |
 | T-001.8 | MSW handlers và các hàm `api/*` | ⬜ TODO | | R16 |
@@ -50,6 +50,7 @@
 | 2026-11-16 23:25 | `npm run test && npm run lint && npm run build` (T-001.1) | ✅ 1/1, 0 lỗi lint, build OK | |
 | 2026-11-16 23:32 | `npm run test && npm run lint && npm run build` (T-001.2) | ✅ 17/17, lint, build OK | |
 | 2026-11-16 23:34 | `npm run test && npm run lint && npm run build` (T-001.3) | ✅ 24/24, lint, build OK | |
+| 2026-11-16 23:37 | `npm run test && npm run lint && npm run build` (T-001.4) | ✅ 38/38, lint, build OK | |
 
 ## Nhật ký phiên
 
@@ -58,3 +59,4 @@
 - 2026-11-16 23:25 — T-001.1 xong (5df2af0): react 18.3.1, antd 5.29.3, vite 6.4.6, vitest 3.2.7, msw 2.15.0, react-router-dom 7.18.5, TS 5.7.3. Review sạch.
 - 2026-11-16 23:32 — T-001.2 xong (6b1673d): 16 test mới. Review sạch.
 - 2026-11-16 23:34 — T-001.3 xong (62b9de2): 7 test client (401 không token không kích hoạt hết phiên). Review sạch.
+- 2026-11-16 23:37 — T-001.4 xong (c38887c): 14 test mockDb (R1–R3, R16, R18, R20, storage hỏng, email hoa thường). Thông báo: UNAUTHORIZED 'Vui lòng đăng nhập để tiếp tục', PLAN_NOT_FOUND 'Không tìm thấy gói'.

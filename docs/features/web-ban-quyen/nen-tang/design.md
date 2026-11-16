@@ -71,6 +71,9 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/shared/validators.ts | `normalizeMachineId`, `isValidMachineId`, `isValidTaxCode`, `isValidPhone`, `MACHINE_ID_MESSAGE` | Kiểm tra mã máy 16 hex, MST, SĐT |
 | web/src/api/types.ts | `User`, `Plan`, `Order`, `OrderDetail`, `License`, `Activation`, `Admin*`, input types | Hợp đồng dữ liệu dùng chung |
 | web/src/api/client.ts | `apiFetch`, `ApiError`, `configureClient` | fetch + Bearer; 401 có token → onUnauthorized; lỗi mạng → NETWORK; lỗi không JSON → UNKNOWN |
+| web/src/mocks/memoryStorage.ts | `createMemoryStorage` | Storage trong bộ nhớ cho test |
+| web/src/mocks/seed.ts | `createSeed(now)` | Dữ liệu mẫu: admin, khách, 4 gói, 2 đơn, bản quyền l-1, máy a-1, ngân hàng, phiên bản app |
+| web/src/mocks/mockDb.ts | `createMockDb`, `MockError`, `DbState`, `MockDb` | Quy tắc nghiệp vụ giả lập, lưu localStorage `etax-mockdb-v1`; hỏng → nạp seed |
 
 ## Nhật ký sửa đổi
 
@@ -81,3 +84,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.1 | web/ (mới) | Khung Vite + React 18 + antd 5 + Vitest + ESLint | Nền cho mọi màn hình |
 | T-001.2 | web/src/shared/format.ts, validators.ts (mới) | Hàm định dạng và kiểm tra | Dùng chung cho mọi màn hình và mockDb |
 | T-001.3 | web/src/api/types.ts, client.ts (mới) | Kiểu dữ liệu và hàm gọi API | Mọi màn hình gọi qua apiFetch |
+| T-001.4 | web/src/mocks/ (mới) | mockDb: seed, đăng ký/đăng nhập, hồ sơ, đổi mật khẩu, gói, cài đặt (R1–R3, R16, R18, R20) | Nền giả lập backend |
