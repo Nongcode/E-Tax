@@ -1,5 +1,7 @@
+import dayjs from 'dayjs';
 import type {
   Activation,
+  AdminOrder,
   AppRelease,
   AuthResponse,
   BankSettings,
@@ -8,6 +10,8 @@ import type {
   LicenseStatus,
   LoginInput,
   Order,
+  OrderDetail,
+  OrderStatus,
   Plan,
   PlanInput,
   ProfileInput,
@@ -55,10 +59,40 @@ export interface MockDb {
   setBank(b: BankSettings): BankSettings;
   getApp(): AppRelease;
   setApp(a: AppRelease): AppRelease;
+  createOrder(userId: string, planId: string): OrderDetail;
+  listOrders(userId: string): Order[];
+  getOrder(userId: string, id: string): OrderDetail;
+  cancelOrder(userId: string, id: string): Order;
+  adminListOrders(f: { status?: OrderStatus; q?: string }): AdminOrder[];
+  adminConfirmOrder(adminId: string, id: string, note?: string): { order: Order; license: License };
+  adminCancelOrder(id: string, note?: string): Order;
+}
+
+type StoredLicense = DbState['licenses'][number];
+
+export function buildQrUrl(bank: BankSettings, amount: number, content: string): string {
+  return `https://img.vietqr.io/image/${bank.bankBin}-${bank.accountNo}-compact2.png?amount=${amount}&addInfo=${content}&accountName=${encodeURIComponent(bank.accountName)}`;
+}
+
+/** R5: đơn pending quá hạn được coi là expired khi đọc, không ghi lại. */
+export function effectiveOrderStatus(o: Order, now: Date): OrderStatus {
+  return o.status === 'pending' && new Date(o.expiresAt).getTime() < now.getTime() ? 'expired' : o.status;
+}
+
+/** Dựng License công khai: R7 (active quá hạn thì expired) và activeMachines tính khi đọc. */
+export function toPublicLicense(s: DbState, l: StoredLicense, now: Date): License {
+  const expired = l.status === 'active' && l.expiresAt !== null && new Date(l.expiresAt).getTime() < now.getTime();
+  return {
+    ...l,
+    status: expired ? 'expired' : l.status,
+    activeMachines: s.activations.filter((a) => a.licenseId === l.id && a.revokedAt === null).length,
+  };
 }
 
 const normEmail = (e: string) => e.trim().toLowerCase();
 const unauthorized = () => new MockError(401, 'UNAUTHORIZED', 'Vui lòng đăng nhập để tiếp tục');
+const notFound = () => new MockError(404, 'NOT_FOUND', 'Không tìm thấy dữ liệu');
+const notPending = () => new MockError(409, 'ORDER_NOT_PENDING', 'Đơn không còn ở trạng thái chờ thanh toán');
 
 function toPublicUser(u: User & { password: string }): User {
   const pub: User & { password?: string } = { ...u };
@@ -77,7 +111,15 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as Partial<DbState> | null;
-        if (parsed && parsed.version === 1 && Array.isArray(parsed.users) && Array.isArray(parsed.plans)) {
+        if (parsed && parsed.version === 1 && Array.isArray(parsed.users) && Array.isArray(parsed.plans) &&
+          Array.isArray(parsed.orders) &&
+          Array.isArray(parsed.licenses) &&
+          Array.isArray(parsed.activations) &&
+          !!parsed.bank &&
+          typeof parsed.bank === 'object' &&
+          !!parsed.app &&
+          typeof parsed.app === 'object'
+        ) {
           return parsed as DbState;
         }
       } catch {
@@ -94,6 +136,64 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
     const u = s.users.find((x) => x.id === id);
     if (!u || u.status === 'locked') throw unauthorized();
     return u;
+  }
+
+  /** Order với trạng thái suy ra theo R5. */
+  function viewOrder(o: Order): Order {
+    return { ...o, status: effectiveOrderStatus(o, now()) };
+  }
+
+  function detail(s: DbState, o: Order): OrderDetail {
+    return {
+      ...viewOrder(o),
+      payment: {
+        qrUrl: buildQrUrl(s.bank, o.amount, o.code),
+        bankName: s.bank.bankName,
+        accountNo: s.bank.accountNo,
+        accountName: s.bank.accountName,
+        amount: o.amount,
+        transferContent: o.code,
+      },
+      licenseId: s.licenses.find((l) => l.orderId === o.id)?.id ?? null,
+    };
+  }
+
+  /** Đơn của chính user; đơn người khác hoặc không có đều NOT_FOUND (R15). */
+  function findOwnOrder(s: DbState, userId: string, id: string): Order {
+    const o = s.orders.find((x) => x.id === id && x.userId === userId);
+    if (!o) throw notFound();
+    return o;
+  }
+
+  function findOrder(s: DbState, id: string): Order {
+    const o = s.orders.find((x) => x.id === id);
+    if (!o) throw notFound();
+    return o;
+  }
+
+  /** Mới nhất trước; cùng thời điểm thì đơn thêm sau đứng trước. */
+  function newestFirst(orders: Order[]): Order[] {
+    return orders
+      .map((o, i) => ({ o, i }))
+      .sort((a, b) => b.o.createdAt.localeCompare(a.o.createdAt) || b.i - a.i)
+      .map(({ o }) => o);
+  }
+
+  /** R17: ET + 6 số, lặp đến khi không trùng. */
+  function newOrderCode(s: DbState): string {
+    let code: string;
+    do {
+      code = 'ET' + String(Math.floor(100000 + Math.random() * 900000));
+    } while (s.orders.some((o) => o.code === code));
+    return code;
+  }
+
+  function cancel(s: DbState, o: Order, note?: string): Order {
+    if (effectiveOrderStatus(o, now()) !== 'pending') throw notPending();
+    o.status = 'cancelled';
+    if (note !== undefined) o.note = note;
+    save(s);
+    return viewOrder(o);
   }
 
   load();
@@ -201,6 +301,98 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
       s.app = { ...a };
       save(s);
       return s.app;
+    },
+
+    createOrder(userId, planId) {
+      const s = load();
+      requireUser(s, userId);
+      const plan = s.plans.find((p) => p.id === planId && p.active);
+      if (!plan) throw new MockError(404, 'PLAN_NOT_FOUND', 'Không tìm thấy gói');
+      const createdAt = now();
+      const order: Order = {
+        id: crypto.randomUUID(),
+        code: newOrderCode(s),
+        userId,
+        planId,
+        planSnapshot: {
+          name: plan.name,
+          durationMonths: plan.durationMonths,
+          maxMachines: plan.maxMachines,
+          maxMachineChanges: plan.maxMachineChanges,
+          price: plan.price,
+        },
+        amount: plan.price,
+        status: 'pending',
+        createdAt: createdAt.toISOString(),
+        expiresAt: new Date(createdAt.getTime() + 72 * 3600 * 1000).toISOString(),
+        paidAt: null,
+        confirmedBy: null,
+        note: null,
+      };
+      s.orders.push(order);
+      save(s);
+      return detail(s, order);
+    },
+
+    listOrders(userId) {
+      return newestFirst(load().orders.filter((o) => o.userId === userId)).map(viewOrder);
+    },
+
+    getOrder(userId, id) {
+      const s = load();
+      return detail(s, findOwnOrder(s, userId, id));
+    },
+
+    cancelOrder(userId, id) {
+      const s = load();
+      return cancel(s, findOwnOrder(s, userId, id));
+    },
+
+    adminListOrders(f) {
+      const s = load();
+      const q = f.q?.trim().toLowerCase();
+      return newestFirst(s.orders).flatMap((o) => {
+        const u = s.users.find((x) => x.id === o.userId);
+        const view = viewOrder(o);
+        if (f.status && view.status !== f.status) return [];
+        if (q) {
+          const hay = [o.code, u?.email, u?.taxCode].map((x) => (x ?? '').toLowerCase());
+          if (!hay.some((h) => h.includes(q))) return [];
+        }
+        return [{ ...view, userEmail: u?.email ?? '', userFullName: u?.fullName ?? '', userTaxCode: u?.taxCode ?? null }];
+      });
+    },
+
+    adminConfirmOrder(adminId, id, note) {
+      const s = load();
+      const o = findOrder(s, id);
+      if (effectiveOrderStatus(o, now()) !== 'pending') throw notPending();
+      const paidAt = now().toISOString();
+      o.status = 'paid';
+      o.paidAt = paidAt;
+      o.confirmedBy = adminId;
+      if (note !== undefined) o.note = note;
+      const snap = o.planSnapshot;
+      const license: StoredLicense = {
+        id: crypto.randomUUID(),
+        orderId: o.id,
+        userId: o.userId,
+        planName: snap.name,
+        maxMachines: snap.maxMachines,
+        maxMachineChanges: snap.maxMachineChanges,
+        machineChangesUsed: 0,
+        startsAt: paidAt,
+        expiresAt: snap.durationMonths === null ? null : dayjs(paidAt).add(snap.durationMonths, 'month').toISOString(),
+        status: 'active',
+      };
+      s.licenses.push(license);
+      save(s);
+      return { order: viewOrder(o), license: toPublicLicense(s, license, now()) };
+    },
+
+    adminCancelOrder(id, note) {
+      const s = load();
+      return cancel(s, findOrder(s, id), note);
     },
   };
 }
