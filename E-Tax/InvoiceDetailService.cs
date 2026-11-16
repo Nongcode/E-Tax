@@ -40,7 +40,7 @@ namespace E_Tax
 
         /// <summary>
         /// JSON của từng trang sản phẩm (trang đầu luôn có, kể cả khi HĐ không có hàng hóa).
-        /// Trả về null nếu thiếu khóa, chưa đăng nhập hoặc trang đầu lỗi. Kết quả lỗi/thiếu trang không được cache.
+        /// Trả về null nếu thiếu khóa, chưa đăng nhập hoặc có trang lỗi (không trả dữ liệu thiếu trang). Kết quả lỗi không được cache.
         /// </summary>
         public async Task<IReadOnlyList<string>?> GetDetailPagesAsync(SearchResult invoice)
         {
@@ -84,8 +84,8 @@ namespace E_Tax
                 }
             }
 
-            if (pages.Count == 0) return null;
-            if (cacheable && complete) _cache[invoice.Id] = pages;
+            if (!complete) return null;
+            if (cacheable) _cache[invoice.Id] = pages;
             return pages;
         }
 

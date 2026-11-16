@@ -137,7 +137,8 @@ namespace E_Tax
         /// Tải chi tiết (song song có giới hạn, có cache) cho danh sách hóa đơn và bind kết quả vào 4 lưới.
         /// Dòng hàng được dựng theo đúng thứ tự danh sách để STT ổn định. Phải được gọi từ UI thread.
         /// </summary>
-        public async Task PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
+        /// <returns>Số hóa đơn không lấy được chi tiết.</returns>
+        public async Task<int> PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
         {
             _dgvDetails.DataSource = null;
             _dgvMua.DataSource = null;
@@ -155,7 +156,7 @@ namespace E_Tax
                 _logAction("ℹ️ (Detail Mgr) Không có hóa đơn nào để lấy chi tiết.");
                 _statusLabel.Visible = false;
                 _progressBar.Visible = false;
-                return;
+                return 0;
             }
 
             int total = invoiceHeaders.Count;
@@ -170,6 +171,7 @@ namespace E_Tax
             var boughtDetailItems = new List<InvoiceDetailItem>();
             var soldDetailItems = new List<InvoiceDetailItem>();
             int globalStt = 1;
+            int failedCount = 0;
 
             for (int i = 0; i < total; i++)
             {
@@ -184,6 +186,7 @@ namespace E_Tax
                 if (pages == null)
                 {
                     _logAction($"  -> ❌ (Detail Mgr) Không lấy được chi tiết HĐ {invoiceHeader.So_hoa_don}.");
+                    failedCount++;
                     continue;
                 }
 
@@ -218,10 +221,12 @@ namespace E_Tax
                 catch (JsonException jsonEx)
                 {
                     _logAction($"❌ (Detail Mgr) Lỗi parse JSON HĐ {invoiceHeader.So_hoa_don}: {jsonEx.Message}");
+                    failedCount++;
                 }
                 catch (Exception ex)
                 {
                     _logAction($"❌ (Detail Mgr) Lỗi khác khi xử lý HĐ {invoiceHeader.So_hoa_don}: {ex}");
+                    failedCount++;
                 }
             }
 
@@ -245,6 +250,7 @@ namespace E_Tax
                 _progressBar.Visible = false;
                 _ = HideStatusLabelLaterAsync();
             }
+            return failedCount;
         }
 
         private async Task HideStatusLabelLaterAsync()

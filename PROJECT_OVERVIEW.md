@@ -136,6 +136,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
    - `dgvBan` (tab **BK bán**) — còn lại
    - `dgvVatNop` (tab có text **"Bảng kê Thuế"**) — tất cả, ít cột
    Đầu `btnLeftSearch_Click` gọi `_detailService.ClearCache()`; trong phiên tìm kiếm, chi tiết đã tải được dùng lại (cache theo `Id`, chỉ cache kết quả thành công đủ trang).
+   HĐ lỗi hoặc thiếu trang → `GetDetailPagesAsync` trả null (không trả dữ liệu thiếu); `PopulateDetailGridAsync` trả số HĐ lỗi → cảnh báo "Thiếu dữ liệu chi tiết", không báo "Hoàn tất". Lưu hàng loạt: HĐ lỗi chi tiết trong Excel được thêm vào danh sách lỗi cuối.
 5. Hiển thị `ProcessingForm` trong lúc chạy; `this.Enabled = false`.
 
 > Lưu ý tên: `tabVATNop` hiển thị "Bảng kê Thuế" (chứa `dgvVatNop`), còn `tabGiamThue` hiển thị "VAT nộp" (chứa `dgvGiamThue`). Tên biến và text bị lệch nhau.

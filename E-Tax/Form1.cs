@@ -574,12 +574,14 @@ namespace E_Tax
         /// <summary>
         /// Lấy chi tiết hàng hóa của nhiều hóa đơn và xuất ra một file Excel tổng hợp.
         /// </summary>
-        private async Task ExportInvoiceDetailsToExcelAsync(List<SearchResult> invoices, string filePath)
+        /// <returns>Ký hiệu-số các hóa đơn không lấy được chi tiết (không có trong file).</returns>
+        private async Task<List<string>> ExportInvoiceDetailsToExcelAsync(List<SearchResult> invoices, string filePath)
         {
+            var failedInvoices = new List<string>();
             if (invoices == null || !invoices.Any())
             {
                 AppendLog("⚠️ (Excel Chi Tiết) Không có dữ liệu hóa đơn để lấy chi tiết.");
-                return;
+                return failedInvoices;
             }
 
             var detailsList = new List<Dictionary<string, string>>();
@@ -601,6 +603,7 @@ namespace E_Tax
                 if (pages == null)
                 {
                     AppendLog($"❌ (Excel Chi Tiết) Lỗi khi lấy chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don} (xem log phía trên).");
+                    failedInvoices.Add($"{invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}");
                     continue;
                 }
 
@@ -615,6 +618,7 @@ namespace E_Tax
                 catch (Exception ex)
                 {
                     AppendLog($"❌ (Excel Chi Tiết) Lỗi khi xử lý chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}: {ex.Message}");
+                    failedInvoices.Add($"{invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}");
                 }
             }
 
@@ -622,11 +626,12 @@ namespace E_Tax
             {
                 AppendLog("⚠️ (Excel Chi Tiết) Không có chi tiết sản phẩm nào từ các hóa đơn hợp lệ để xuất Excel.");
                 await Task.Run(() => ExcelExporter.ExportDetailSummary(detailsList, filePath));
-                return;
+                return failedInvoices;
             }
 
             await Task.Run(() => ExcelExporter.ExportDetailSummary(detailsList, filePath));
             AppendLog($"✅ (Excel Chi Tiết) Đã tạo file Excel chi tiết tổng hợp tại: {filePath}");
+            return failedInvoices;
         }
 
         /// <summary>
@@ -713,8 +718,12 @@ namespace E_Tax
                     dgvGiamThue.DataSource = _latestResults;
 
                     modal.UpdateStatus($"Đang tải chi tiết cho {_latestResults.Count} hóa đơn...");
-                    await _detailGridManager.PopulateDetailGridAsync(_latestResults);
-                    showCompleted = !failedChunks.Any();
+                    int detailFailed = await _detailGridManager.PopulateDetailGridAsync(_latestResults);
+                    showCompleted = !failedChunks.Any() && detailFailed == 0;
+                    if (detailFailed > 0)
+                    {
+                        MessageBox.Show($"Không lấy được chi tiết hàng hóa của {detailFailed}/{_latestResults.Count} hóa đơn (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối).\nCác bảng chi tiết có thể bị thiếu, hãy tìm kiếm lại. Xem log để biết thêm.", "Thiếu dữ liệu chi tiết", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                 }
                 else
                 {
@@ -935,7 +944,8 @@ namespace E_Tax
                 downloadProgressBar.PerformStep();
 
                 lblDownloadStatus.Text = "Bước 3: Đang tạo file Excel chi tiết...";
-                await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(reportSubFolder, "0_ChiTietHoaDon.xlsx"));
+                var detailFailed = await ExportInvoiceDetailsToExcelAsync(invoicesToDownload, Path.Combine(reportSubFolder, "0_ChiTietHoaDon.xlsx"));
+                failedChunks.AddRange(detailFailed.Select(id => $"{id} (Lỗi lấy chi tiết cho Excel)"));
                 downloadProgressBar.PerformStep();
 
                 // --- Bước 4: Tải ZIP, giải nén, lấy PDF (hoặc convert HTML) và XML ---

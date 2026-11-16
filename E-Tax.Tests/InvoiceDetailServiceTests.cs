@@ -71,6 +71,23 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public async Task GetDetailPages_PartialPagesReturnNull()
+        {
+            // Trang 1 đủ 50 dòng, trang 2 lỗi 401 → coi là lỗi (không trả dữ liệu thiếu), không cache
+            var handler = new FakeHttpHandler((req, n) => n == 2
+                ? FakeHttpHandler.Json("{\"message\":\"Unauthorized\"}", HttpStatusCode.Unauthorized)
+                : FakeHttpHandler.Json(FakeHttpHandler.DetailJson(req.RequestUri!.Query.Contains("page=0") ? 50 : 3)));
+            var service = CreateService(handler);
+
+            var partial = await service.GetDetailPagesAsync(Invoice("a"));
+            Assert.Null(partial);
+
+            var full = await service.GetDetailPagesAsync(Invoice("a"));
+            Assert.NotNull(full);
+            Assert.Equal(2, full!.Count);
+        }
+
+        [Fact]
         public async Task Retries_On429()
         {
             var handler = new FakeHttpHandler((_, n) => n <= 2
