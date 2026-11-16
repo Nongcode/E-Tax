@@ -65,6 +65,12 @@ namespace E_Tax
 
             panelLogin.Visible = true;
             panelSearch.Visible = false;
+
+            // Kích thước thiết kế là kích thước tối thiểu; khôi phục vị trí lần trước trước khi form hiện
+            MinimumSize = Size;
+            RestoreWindowBounds();
+            Resize += (_, _) => CenterLoginPanel();
+            FormClosing += (_, _) => SaveWindowBounds();
         }
 
         protected override void Dispose(bool disposing)
@@ -89,6 +95,46 @@ namespace E_Tax
             dgvMain.AutoGenerateColumns = false;
             await LoadCaptchaAsync();
         }
+
+        #region Cửa sổ
+
+        private void RestoreWindowBounds()
+        {
+            var saved = WindowSettings.Load(WindowSettings.DefaultPath);
+            if (saved == null) return;
+
+            var workingAreas = Screen.AllScreens.Select(s => s.WorkingArea).ToList();
+            var bounds = WindowSettings.Fit(saved, workingAreas, MinimumSize);
+            if (bounds == null) return; // vị trí cũ nằm ngoài các màn hình hiện có → giữ CenterScreen
+
+            StartPosition = FormStartPosition.Manual;
+            Bounds = bounds.Value;
+            if (saved.Maximized) WindowState = FormWindowState.Maximized;
+            CenterLoginPanel();
+        }
+
+        private void SaveWindowBounds()
+        {
+            try
+            {
+                var bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                new WindowSettings(bounds.X, bounds.Y, bounds.Width, bounds.Height, WindowState == FormWindowState.Maximized)
+                    .Save(WindowSettings.DefaultPath);
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"⚠️ Không lưu được vị trí cửa sổ: {ex.Message}");
+            }
+        }
+
+        private void CenterLoginPanel()
+        {
+            if (WindowState == FormWindowState.Minimized) return;
+            panelLogin.Left = Math.Max(0, (ClientSize.Width - panelLogin.Width) / 2);
+            panelLogin.Top = Math.Max(lblVersion.Bottom, (ClientSize.Height - panelLogin.Height) / 2);
+        }
+
+        #endregion
 
         #region Đăng nhập & bản quyền
 

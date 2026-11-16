@@ -381,6 +381,7 @@ namespace E_Tax
             panelSearch.Controls.Add(pictureBox2);
             panelSearch.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             panelSearch.ForeColor = Color.FromArgb(0, 117, 214);
+            panelSearch.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             panelSearch.Location = new Point(10, 29);
             panelSearch.Name = "panelSearch";
             panelSearch.Size = new Size(962, 649);
@@ -997,7 +998,7 @@ namespace E_Tax
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);
-            FormBorderStyle = FormBorderStyle.FixedToolWindow;
+            FormBorderStyle = FormBorderStyle.Sizable;
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "E-Tax Invoice Downloader";

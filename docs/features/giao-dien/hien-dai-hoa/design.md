@@ -68,3 +68,6 @@ Prototype: `index.html`, tab "Giao diện".
 |---|---|---|---|
 | T-001.1 | `E-Tax/WindowSettings.cs` (mới, L1–L50) | `record WindowSettings(X,Y,Width,Height,Maximized)`: `Load` (không ném), `Save` (tạo thư mục), `Fit` (kẹp kích thước tối thiểu; null nếu không giao màn hình nào) | Nhớ cửa sổ, an toàn khi rút màn hình phụ |
 | T-001.1 | `E-Tax.Tests/WindowSettingsTests.cs` (mới) | 6 test | TDD |
+| T-001.2 | `E-Tax/Form1.Designer.cs:L384`, `:L1001` | `panelSearch.Anchor` 4 cạnh; `FormBorderStyle = Sizable` | Co giãn theo cửa sổ |
+| T-001.2 | `E-Tax/Form1.cs:L69-L73` (constructor) | `MinimumSize = Size`; `RestoreWindowBounds()`; `Resize → CenterLoginPanel`; `FormClosing → SaveWindowBounds` | Khôi phục trước khi form hiện |
+| T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |
