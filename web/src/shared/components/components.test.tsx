@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { useQuery } from '@tanstack/react-query';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from '../../App';
 import ForbiddenPage from '../../pages/ForbiddenPage';
 import NotFoundPage from '../../pages/NotFoundPage';
@@ -37,6 +38,12 @@ describe('StatusTag', () => {
 });
 
 describe('CopyField', () => {
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  afterEach(() => {
+    if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    else delete (navigator as unknown as Record<string, unknown>).clipboard;
+  });
+
   it('sao chép giá trị vào clipboard và báo thành công', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -60,11 +67,22 @@ describe('CopyField', () => {
 });
 
 describe('QueryState', () => {
+  it('query bị tắt (chưa chạy) thì hiện Skeleton và không gọi children', () => {
+    const children = vi.fn(() => <div>nội dung</div>);
+    function Disabled() {
+      const query = useQuery({ queryKey: ['disabled'], queryFn: () => ['a'], enabled: false });
+      return <QueryState query={query}>{children}</QueryState>;
+    }
+    const { container } = wrap(<Disabled />);
+    expect(children).not.toHaveBeenCalled();
+    expect(container.querySelector('.ant-skeleton')).not.toBeNull();
+  });
+
   it('lỗi thì hiện thông báo và nút Thử lại gọi refetch', async () => {
     const user = userEvent.setup();
     const refetch = vi.fn();
     wrap(
-      <QueryState query={fakeQuery<string[]>({ isLoading: false, isError: true, error: new Error('Hỏng'), refetch } as never)}>
+      <QueryState query={fakeQuery<string[]>({ isPending: false, isError: true, error: new Error('Hỏng'), refetch } as never)}>
         {() => <div>nội dung</div>}
       </QueryState>,
     );
@@ -77,7 +95,7 @@ describe('QueryState', () => {
   it('dữ liệu rỗng thì hiện emptyText', () => {
     wrap(
       <QueryState
-        query={fakeQuery<string[]>({ isLoading: false, isError: false, data: [] })}
+        query={fakeQuery<string[]>({ isPending: false, isError: false, data: [] })}
         isEmpty={(d) => d.length === 0}
         emptyText="Chưa có dữ liệu"
       >
@@ -89,7 +107,7 @@ describe('QueryState', () => {
 
   it('có dữ liệu thì render children', () => {
     wrap(
-      <QueryState query={fakeQuery<string[]>({ isLoading: false, isError: false, data: ['a'] })}>
+      <QueryState query={fakeQuery<string[]>({ isPending: false, isError: false, data: ['a'] })}>
         {(d) => <div>có {d.length} mục</div>}
       </QueryState>,
     );

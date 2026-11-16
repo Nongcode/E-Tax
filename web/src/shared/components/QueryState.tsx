@@ -11,7 +11,7 @@ interface QueryStateProps<T> {
 }
 
 export function QueryState<T>({ query, isEmpty, emptyText, emptyAction, children }: QueryStateProps<T>) {
-  if (query.isLoading) return <Skeleton active />;
+  if (query.isPending) return <Skeleton active />;
   if (query.isError) {
     return (
       <Result

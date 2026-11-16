@@ -53,6 +53,7 @@ function renderApp(initial: string) {
       {
         element: <RootLayout />,
         children: [
+          { path: '/', element: <div>Trang chủ</div> },
           { path: '/dang-nhap', element: <LoginPage /> },
           { path: '/dang-ky', element: <RegisterPage /> },
           { path: '/quen-mat-khau', element: <ForgotPasswordPage /> },
