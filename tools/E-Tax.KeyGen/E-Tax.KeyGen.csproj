@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>E_Tax.KeyGen</RootNamespace>
+    <AssemblyName>E-Tax.KeyGen</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dùng chung định dạng key với app để ký và xác thực không lệch nhau -->
+    <Compile Include="..\..\E-Tax\LicenseKey.cs" Link="LicenseKey.cs" />
+  </ItemGroup>
+
+</Project>

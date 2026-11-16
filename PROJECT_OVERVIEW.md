@@ -9,14 +9,14 @@
 từ cổng **Hóa đơn điện tử của Tổng cục Thuế** (`https://hoadondientu.gdt.gov.vn:30000/`), bằng cách gọi trực tiếp
 các API nội bộ mà trang web đó sử dụng (giả lập trình duyệt qua User-Agent/Referer/Origin).
 
-Có cơ chế bản quyền: dùng thử 30 ngày, kích hoạt bằng mã.
+Có cơ chế bản quyền: dùng thử 30 ngày, kích hoạt bằng key ký số (ECDSA) gắn với mã máy.
 
 ## 2. Công nghệ
 
 | Thành phần | Chi tiết |
 |---|---|
 | Nền tảng | .NET 8 (`net8.0-windows`), WinForms, `Nullable` bật, `ImplicitUsings` bật |
-| Solution | `E-Tax.sln` → 1 project `E-Tax/E-Tax.csproj`, namespace gốc `E_Tax` |
+| Solution | `E-Tax.sln` → app `E-Tax/E-Tax.csproj` (namespace gốc `E_Tax`), `E-Tax.Tests`, tool `tools/E-Tax.KeyGen` |
 | EPPlus 8.2.0 | Tạo file Excel (`ExcelPackage.License.SetNonCommercialPersonal(...)` trong ctor Form1) |
 | PuppeteerSharp 20.2.4 | Convert HTML hóa đơn → PDF (tự tải Chromium lần đầu qua `BrowserFetcher`) |
 | Svg 3.4.7 | Render ảnh captcha SVG → Bitmap |
@@ -44,11 +44,14 @@ E-Tax/
 ├── NotesStore.cs              # Ghi chú theo Id HĐ (%AppData%/E-Tax/notes.json)
 ├── PdfConverter.cs            # HTML → PDF (PuppeteerSharp), 1 trình duyệt cho cả lô
 ├── AppSettings.cs             # Đọc appsettings.json (token blacklist); appsettings.example.json là mẫu
-├── LicenseManager.cs          # static LicenseManager + enum LicenseStatus
+├── LicenseManager.cs          # static LicenseManager + enum LicenseStatus; hằng PublicKeyPem (public key xác thực key)
+├── LicenseKey.cs              # Định dạng key ký số: Create/Verify + enum LicenseKeyResult (link sang KeyGen)
+├── MachineId.cs               # Mã máy = 16 hex đầu SHA-256(HKLM MachineGuid)
 ├── ProcessingForm.cs          # Form "đang xử lý" (ControlBox=false), có UpdateStatus(string)
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
 └── Properties/Resources.*     # Resource mặc định
-E-Tax.Tests/                   # xUnit: NotesStoreTests, InvoiceDetailServiceTests (+ FakeHttpHandler giả HTTP)
+tools/E-Tax.KeyGen/            # Console net8.0 cấp key (init/issue); link E-Tax/LicenseKey.cs
+E-Tax.Tests/                   # xUnit: NotesStoreTests, InvoiceDetailServiceTests, AppSettingsTests, LicenseKeyTests (+ FakeHttpHandler giả HTTP)
 ```
 
 Các `#region` trong `Form1.cs`: Đăng nhập & bản quyền · Gọi API hóa đơn · Excel & PDF · Tìm kiếm & lọc ·
@@ -105,10 +108,17 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 `Form1_Load` → `CheckForLicense()` → `LoadNotesFromFile()` → `LoadCaptchaAsync()`.
 
 `LicenseManager` (Registry `HKCU\Software\ETaxDemoApp`):
-- `IsActivated == "true"` → `Activated`
-- `TrialExpiryDate` (ISO "o") còn hạn → `ValidTrial`; hết → `Expired` (hiện `panelActivation`, khóa `panelLogin`)
+- `IsActivated == "true"` → `Activated` (máy kích hoạt bằng mã master cũ — giữ để không ảnh hưởng khách hiện tại; mã master đã bị xóa khỏi code)
+- `LicenseKey` (chuỗi key) → xác thực lại mỗi lần mở bằng `LicenseKey.Verify(key, MachineId.Get(), UtcNow, PublicKeyPem)`; `Valid` → `Activated`
+- `TrialExpiryDate` (ISO "o") còn hạn → `ValidTrial`; hết → `Expired` (hiện `panelActivation` kèm mã máy + nút "Sao chép", khóa các ô đăng nhập qua `SetLoginInputsEnabled(false)` — không tắt cả `panelLogin` vì `panelActivation` nằm trong đó)
 - Chưa có key → `InitializeTrial()` +30 ngày
-- `Activate(key)` so sánh với hằng `MasterActivationKey` (hard-code trong `LicenseManager.cs`)
+- `Activate(key)` (bỏ khoảng trắng) → `LicenseKeyResult`; `Valid` thì lưu registry `LicenseKey`. Form báo riêng `WrongMachine` / `Expired` / không hợp lệ.
+- Định dạng key: `Base64Url(payloadJson).Base64Url(chữ ký)`, payload `{"machine","customer","expires":"yyyy-MM-dd"|null}`, ECDSA P-256/SHA-256; còn hiệu lực đến hết ngày `expires` (UTC); so mã máy không phân biệt hoa/thường. `Verify` không ném lỗi, dữ liệu rác → `Invalid`.
+
+#### Cấp key cho khách
+1. (Một lần) `dotnet run --project tools/E-Tax.KeyGen -- init <đường-dẫn-ngoài-repo>\etax.private.pem` → dán public key in ra vào `LicenseManager.PublicKeyPem`, build lại app. Hiện code đang chứa **public key DEV** — phải thay trước khi phát hành. Giữ file private key bí mật, sao lưu; không commit (`*.private.pem` đã ignore).
+2. Khách mở app hết hạn → bấm "Sao chép" cạnh **Mã máy** và gửi mã (16 ký tự hex).
+3. `dotnet run --project tools/E-Tax.KeyGen -- issue <private.pem> <mã máy> "<tên khách>" [yyyy-MM-dd]` (bỏ ngày = vĩnh viễn) → gửi chuỗi key in ra cho khách dán vào ô **Mã** → "Kích hoạt".
 
 ### 5.2 Đăng nhập
 `btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
@@ -160,10 +170,10 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 - Dọn dẹp thư mục temp trong `finally`. Build sạch (0 error).
 
 ### Vấn đề nghiêm trọng (bảo mật / pháp lý)
-1. **Mã kích hoạt master hard-code** trong `LicenseManager.cs` — decompile .NET là lấy được ngay. Trial lưu ở HKCU nên xóa key Registry là có thêm 30 ngày. Nên chuyển sang kích hoạt online/ký số (license server metaecom đã có sẵn).
+1. ✅ (2026-11-16) **Mã kích hoạt master** đã bỏ → key ký số ECDSA gắn mã máy, app chỉ chứa public key (xem §5.1). Còn lại: public key hiện là key DEV, chủ dự án phải `init` và thay; máy cũ có `IsActivated=true` vẫn được chấp nhận nên ai sửa Registry giá trị này vẫn qua được (đánh đổi đã duyệt ở D3); trial vẫn ở HKCU (xóa Registry là có thêm 30 ngày); app .NET vẫn có thể bị patch nhị phân — ký số chỉ chống tự sinh key.
 2. ✅ Token blacklist đã chuyển ra `appsettings.json` (2026-11-16). **Còn phải làm:** đổi token phía server metaecom vì token cũ nằm trong lịch sử git; về lâu dài nên gọi qua server trung gian (app desktop luôn có thể bị đọc token).
 3. **EPPlus 8 dùng license NonCommercialPersonal** (`"Your Name"`) trong khi app có bán bản quyền → vi phạm điều khoản EPPlus (Polyform Noncommercial). Cần mua license thương mại hoặc chuyển sang **ClosedXML** (MIT).
-4. Mật khẩu người dùng bị `Trim()` trước khi gửi (mật khẩu có khoảng trắng đầu/cuối sẽ sai).
+4. ✅ (2026-11-16) Mật khẩu không còn bị `Trim()`.
 
 ### Bug / hành vi sai
 

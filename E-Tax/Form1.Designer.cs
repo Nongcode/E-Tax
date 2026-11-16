@@ -60,6 +60,9 @@ namespace E_Tax
             label6 = new Label();
             txtActivationKey = new TextBox();
             label5 = new Label();
+            lblMachineId = new Label();
+            txtMachineId = new TextBox();
+            btnCopyMachineId = new Button();
             panel2 = new Panel();
             panel1 = new Panel();
             picCaptcha = new PictureBox();
@@ -253,6 +256,9 @@ namespace E_Tax
             panelActivation.Controls.Add(label6);
             panelActivation.Controls.Add(txtActivationKey);
             panelActivation.Controls.Add(label5);
+            panelActivation.Controls.Add(lblMachineId);
+            panelActivation.Controls.Add(txtMachineId);
+            panelActivation.Controls.Add(btnCopyMachineId);
             panelActivation.Font = new Font("Segoe UI", 9.75F, FontStyle.Italic, GraphicsUnit.Point, 0);
             panelActivation.Location = new Point(17, 467);
             panelActivation.Name = "panelActivation";
@@ -308,7 +314,39 @@ namespace E_Tax
             label5.Size = new Size(377, 21);
             label5.TabIndex = 0;
             label5.Text = "Bản dùng thử đã hết hạn. Vui lòng liên hệ chủ sở hữu";
-            // 
+            //
+            // lblMachineId
+            //
+            lblMachineId.AutoSize = true;
+            lblMachineId.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lblMachineId.ForeColor = Color.FromArgb(0, 117, 214);
+            lblMachineId.Location = new Point(3, 97);
+            lblMachineId.Name = "lblMachineId";
+            lblMachineId.Size = new Size(55, 17);
+            lblMachineId.TabIndex = 4;
+            lblMachineId.Text = "Mã máy";
+            //
+            // txtMachineId
+            //
+            txtMachineId.Font = new Font("Consolas", 11.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            txtMachineId.Location = new Point(64, 93);
+            txtMachineId.Name = "txtMachineId";
+            txtMachineId.ReadOnly = true;
+            txtMachineId.Size = new Size(232, 25);
+            txtMachineId.TabIndex = 5;
+            //
+            // btnCopyMachineId
+            //
+            btnCopyMachineId.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            btnCopyMachineId.ForeColor = Color.FromArgb(0, 117, 214);
+            btnCopyMachineId.Location = new Point(320, 90);
+            btnCopyMachineId.Name = "btnCopyMachineId";
+            btnCopyMachineId.Size = new Size(75, 30);
+            btnCopyMachineId.TabIndex = 6;
+            btnCopyMachineId.Text = "Sao chép";
+            btnCopyMachineId.UseVisualStyleBackColor = true;
+            btnCopyMachineId.Click += btnCopyMachineId_Click;
+            //
             // panel2
             // 
             panel2.BackColor = Color.FromArgb(0, 117, 214);
@@ -1003,6 +1041,9 @@ namespace E_Tax
         private Label label5;
         private Label label6;
         private Button btnActivate;
+        private Label lblMachineId;
+        private TextBox txtMachineId;
+        private Button btnCopyMachineId;
         private Panel panel1;
         private Panel panel2;
         private Panel panel3;

@@ -302,19 +302,20 @@ namespace E_Tax
                 case LicenseStatus.Activated:
                     this.Text = "E-Tax (Phiên bản đầy đủ)";
                     panelActivation.Visible = false;
-                    panelLogin.Enabled = true;
+                    SetLoginInputsEnabled(true);
                     break;
 
                 case LicenseStatus.ValidTrial:
                     this.Text = "E-Tax (Bản dùng thử)";
                     panelActivation.Visible = false;
-                    panelLogin.Enabled = true;
+                    SetLoginInputsEnabled(true);
                     break;
 
                 case LicenseStatus.Expired:
                     this.Text = "E-Tax (Bản dùng thử đã hết hạn)";
+                    txtMachineId.Text = MachineId.Get();
                     panelActivation.Visible = true;
-                    panelLogin.Enabled = false;
+                    SetLoginInputsEnabled(false);
                     MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm.", "Hết hạn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
             }
@@ -329,14 +330,48 @@ namespace E_Tax
                 return;
             }
 
-            if (LicenseManager.Activate(key))
+            switch (LicenseManager.Activate(key))
             {
-                MessageBox.Show("✅ Kích hoạt thành công! Cảm ơn bạn đã sử dụng sản phẩm.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                CheckForLicense();
+                case LicenseKeyResult.Valid:
+                    MessageBox.Show("✅ Kích hoạt thành công! Cảm ơn bạn đã sử dụng sản phẩm.", "Thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    CheckForLicense();
+                    break;
+                case LicenseKeyResult.WrongMachine:
+                    MessageBox.Show("❌ Mã kích hoạt không dành cho máy này.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    break;
+                case LicenseKeyResult.Expired:
+                    MessageBox.Show("❌ Mã kích hoạt đã hết hạn.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    break;
+                default:
+                    MessageBox.Show("❌ Mã kích hoạt không hợp lệ. Vui lòng thử lại.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    break;
             }
-            else
+        }
+
+        private void btnCopyMachineId_Click(object sender, EventArgs e)
+        {
+            try
             {
-                MessageBox.Show("❌ Mã kích hoạt không hợp lệ. Vui lòng thử lại.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Clipboard.SetText(txtMachineId.Text);
+                MessageBox.Show("Đã sao chép mã máy. Gửi mã này cho chủ sở hữu để nhận mã kích hoạt.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Không sao chép được mã máy: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Bật/tắt các ô đăng nhập. Không tắt cả panelLogin vì panelActivation nằm bên trong,
+        /// tắt panel cha sẽ làm khóa luôn ô nhập mã kích hoạt.
+        /// </summary>
+        private void SetLoginInputsEnabled(bool enabled)
+        {
+            panelLogin.Enabled = true;
+            foreach (Control c in panelLogin.Controls)
+            {
+                if (c != panelActivation)
+                    c.Enabled = enabled;
             }
         }
 
