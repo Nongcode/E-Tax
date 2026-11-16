@@ -800,17 +800,6 @@ namespace E_Tax
             return path;
         }
 
-        private async Task ConvertHtmlToPdfAsync(string htmlPath, string pdfPath)
-        {
-            string chromiumPath = await EnsureChromiumAsync();
-            var launchOptions = new LaunchOptions { Headless = true, ExecutablePath = chromiumPath };
-            await using var browser = await Puppeteer.LaunchAsync(launchOptions);
-            await using var page = await browser.NewPageAsync();
-            await page.GoToAsync("file:///" + htmlPath.Replace('\\', '/'),
-                new NavigationOptions { Timeout = 60000, WaitUntil = new[] { WaitUntilNavigation.Networkidle0 } });
-            await page.PdfAsync(pdfPath, new PdfOptions { Format = PuppeteerSharp.Media.PaperFormat.A4 });
-        }
-
         private static string? FindFirstFile(string directory, string pattern) =>
             Directory.GetFiles(directory, pattern, SearchOption.AllDirectories).FirstOrDefault();
 
@@ -1090,6 +1079,7 @@ namespace E_Tax
                 downloadProgressBar.PerformStep();
 
                 // --- Bước 4: Tải ZIP, giải nén, lấy PDF (hoặc convert HTML) và XML ---
+                await using var pdfConverter = new PdfConverter(EnsureChromiumAsync);
                 int successCount = 0;
                 int convertSuccessCount = 0;
 
@@ -1130,7 +1120,7 @@ namespace E_Tax
                         else if (htmlFile != null)
                         {
                             lblDownloadStatus.Text = $"Convert HTML... ({i + 1}/{invoicesToDownload.Count})";
-                            await ConvertHtmlToPdfAsync(htmlFile, outputPdfPath);
+                            await pdfConverter.ConvertAsync(htmlFile, outputPdfPath);
                             convertSuccessCount++;
                         }
                         else
@@ -1549,6 +1539,8 @@ namespace E_Tax
 
             try
             {
+                await using var pdfConverter = new PdfConverter(EnsureChromiumAsync);
+
                 // --- Tải, giải nén và chuẩn bị file PDF cho từng hóa đơn ---
                 for (int i = 0; i < validInvoices.Count; i++)
                 {
@@ -1592,7 +1584,7 @@ namespace E_Tax
                             lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang convert HTML sang PDF...";
                             try
                             {
-                                await ConvertHtmlToPdfAsync(htmlFile, outputPdfPath);
+                                await pdfConverter.ConvertAsync(htmlFile, outputPdfPath);
                                 finalPdfPaths.Add(outputPdfPath);
                             }
                             catch (Exception exConvert)
