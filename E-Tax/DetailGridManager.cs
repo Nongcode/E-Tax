@@ -1,86 +1,67 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing; // Cần cho Font
-using System.Globalization; // Cần cho CultureInfo khi parse decimal
+using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Headers; // Cần cho AuthenticationHeaderValue
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace E_Tax // Đảm bảo đúng namespace
+namespace E_Tax
 {
     /// <summary>
-    /// Class đại diện cho một dòng dữ liệu chi tiết (sản phẩm/dịch vụ) trong hóa đơn
+    /// Một dòng hàng hóa/dịch vụ của hóa đơn, dùng cho các lưới chi tiết.
     /// </summary>
     public class InvoiceDetailItem
     {
-        // --- PHẦN NÀY ĐÃ ĐẦY ĐỦ, GIỮ NGUYÊN ---
-        [System.ComponentModel.DisplayName("STT")]
+        [DisplayName("STT")]
         public int? STT { get; set; }
-
-        [System.ComponentModel.DisplayName("Ký hiệu")]
+        [DisplayName("Ký hiệu")]
         public string KyHieuHD { get; set; }
-
-        [System.ComponentModel.DisplayName("Số HĐ")]
+        [DisplayName("Số HĐ")]
         public int? SoHD { get; set; }
-
-        [System.ComponentModel.DisplayName("Ngày HĐ")]
+        [DisplayName("Ngày HĐ")]
         public string NgayHD { get; set; }
-
-        [System.ComponentModel.DisplayName("Tên NB")]
+        [DisplayName("Tên NB")]
         public string TenNguoiBan { get; set; }
-
-        [System.ComponentModel.DisplayName("MST NB")]
+        [DisplayName("MST NB")]
         public string MSTNguoiBan { get; set; }
-
-        [System.ComponentModel.DisplayName("Tên SP/DV")]
+        [DisplayName("Tên SP/DV")]
         public string TenSanPham { get; set; }
-
-        [System.ComponentModel.DisplayName("ĐVT")]
+        [DisplayName("ĐVT")]
         public string DonViTinh { get; set; }
-
-        [System.ComponentModel.DisplayName("Số lượng")]
+        [DisplayName("Số lượng")]
         public decimal? SoLuong { get; set; }
-
-        [System.ComponentModel.DisplayName("Đơn giá")]
+        [DisplayName("Đơn giá")]
         public decimal? DonGia { get; set; }
-
-        [System.ComponentModel.DisplayName("Thành tiền")]
+        [DisplayName("Thành tiền")]
         public decimal? ThanhTien { get; set; }
-
-        [System.ComponentModel.DisplayName("Tiền CK")]
+        [DisplayName("Tiền CK")]
         public decimal? TienChietKhau { get; set; }
-
-        [System.ComponentModel.DisplayName("Doanh số")]
+        [DisplayName("Doanh số")]
         public decimal? DoanhSoChuaThue { get; set; }
-
-        [System.ComponentModel.DisplayName("Thuế suất")]
+        [DisplayName("Thuế suất")]
         public string ThueSuat { get; set; }
-
-        [System.ComponentModel.DisplayName("Tiền thuế")]
+        [DisplayName("Tiền thuế")]
         public decimal? TienThueGTGT { get; set; }
-
-        [System.ComponentModel.DisplayName("Tổng TT (HĐ)")]
+        [DisplayName("Tổng TT (HĐ)")]
         public decimal? TongTienThanhToan_HD { get; set; }
-
-        [System.ComponentModel.DisplayName("Số lô")]
+        [DisplayName("Số lô")]
         public string SoLo { get; set; }
-
-        [System.ComponentModel.DisplayName("Hạn SD")]
+        [DisplayName("Hạn SD")]
         public string HanSuDung { get; set; }
-
-        [System.ComponentModel.DisplayName("Ghi chú SP")]
+        [DisplayName("Ghi chú SP")]
         public string GhiChuSanPham { get; set; }
-        // --- KẾT THÚC PHẦN GIỮ NGUYÊN ---
     }
 
     /// <summary>
-    /// Class quản lý việc lấy và hiển thị dữ liệu chi tiết hóa đơn lên DataGridView
+    /// Lấy chi tiết hàng hóa của danh sách hóa đơn và đổ vào các lưới: Chi tiết, BK mua, BK bán, Bảng kê thuế.
     /// </summary>
     public class DetailGridManager
     {
+        private const int ProductPageSize = 50;
+
         private readonly HttpClient _client;
         private readonly DataGridView _dgvDetails;
         private readonly DataGridView _dgvMua;
@@ -89,13 +70,11 @@ namespace E_Tax // Đảm bảo đúng namespace
         private readonly ProgressBar _progressBar;
         private readonly Label _statusLabel;
         private readonly Action<string> _logAction;
-        private readonly string _browserUserAgent;
         private string _jwtToken;
 
-        // --- (Constructor và các hàm cấu hình grid giữ nguyên) ---
         public DetailGridManager(HttpClient client, DataGridView dgvDetails, DataGridView dgvMua,
-         DataGridView dgvBan, DataGridView dgvVatNop, ProgressBar progressBar, Label statusLabel,
-         Action<string> logAction, string userAgent)
+            DataGridView dgvBan, DataGridView dgvVatNop, ProgressBar progressBar, Label statusLabel,
+            Action<string> logAction)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _dgvDetails = dgvDetails ?? throw new ArgumentNullException(nameof(dgvDetails));
@@ -105,446 +84,302 @@ namespace E_Tax // Đảm bảo đúng namespace
             _progressBar = progressBar ?? throw new ArgumentNullException(nameof(progressBar));
             _statusLabel = statusLabel ?? throw new ArgumentNullException(nameof(statusLabel));
             _logAction = logAction ?? throw new ArgumentNullException(nameof(logAction));
-            _browserUserAgent = userAgent ?? throw new ArgumentNullException(nameof(userAgent));
 
-            ConfigureFullDetailGridColumns(_dgvDetails);
-            ConfigureFullDetailGridColumns(_dgvMua);
-            ConfigureFullDetailGridColumns(_dgvBan);
-            ConfigureVatNopGridColumns();
+            ConfigureFullDetailGrid(_dgvDetails);
+            ConfigureFullDetailGrid(_dgvMua);
+            ConfigureFullDetailGrid(_dgvBan);
+            ConfigureVatNopGrid(_dgvVatNop);
         }
 
         public void SetJwtToken(string token)
         {
             _jwtToken = token;
-            _logAction?.Invoke("🔑 Token đã được cập nhật cho DetailGridManager.");
+            _logAction("🔑 Token đã được cập nhật cho DetailGridManager.");
         }
 
-        private void ConfigureFullDetailGridColumns(DataGridView dgv)
+        private static void ApplyReadOnlyStyle(DataGridView dgv)
         {
-            try
-            {
-                if (dgv.InvokeRequired)
-                {
-                    dgv.Invoke(new Action(() => ConfigureFullDetailGridInternal(dgv)));
-                }
-                else
-                {
-                    ConfigureFullDetailGridInternal(dgv);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logAction?.Invoke($"❌ Lỗi khi cấu hình lưới {dgv.Name}: {ex.Message}");
-            }
-        }
-
-        private void ConfigureFullDetailGridInternal(DataGridView dgv)
-        {
-            dgv.AutoGenerateColumns = false;
+            GridColumnHelper.ApplyDefaultStyle(dgv);
             dgv.AllowUserToAddRows = false;
             dgv.ReadOnly = true;
             dgv.RowHeadersVisible = false;
-            dgv.DefaultCellStyle.Font = new Font("Segoe UI", 9);
-            dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-            dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-            dgv.Columns.Clear();
-            AddTextColumn(dgv, "colDetailSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
-            AddTextColumn(dgv, "colDetailKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
-            AddTextColumn(dgv, "colDetailSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
-            AddTextColumn(dgv, "colDetailNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
-            AddTextColumn(dgv, "colDetailTenNB", "Tên NB", nameof(InvoiceDetailItem.TenNguoiBan), 200);
-            AddTextColumn(dgv, "colDetailMSTNB", "MST NB", nameof(InvoiceDetailItem.MSTNguoiBan), 110);
-            AddTextColumn(dgv, "colDetailTenSP", "Tên SP/DV", nameof(InvoiceDetailItem.TenSanPham), 250);
-            AddTextColumn(dgv, "colDetailDVT", "ĐVT", nameof(InvoiceDetailItem.DonViTinh), 50);
-            AddNumericColumn(dgv, "colDetailSoLuong", "Số lượng", nameof(InvoiceDetailItem.SoLuong), 80, "#,##0.##");
-            AddNumericColumn(dgv, "colDetailDonGia", "Đơn giá", nameof(InvoiceDetailItem.DonGia), 100, "#,##0.##");
-            AddNumericColumn(dgv, "colDetailThanhTien", "Thành tiền", nameof(InvoiceDetailItem.ThanhTien), 110, "#,##0");
-            AddNumericColumn(dgv, "colDetailTienCK", "Tiền CK", nameof(InvoiceDetailItem.TienChietKhau), 90, "#,##0");
-            AddNumericColumn(dgv, "colDetailDoanhSo", "Doanh số", nameof(InvoiceDetailItem.DoanhSoChuaThue), 110, "#,##0");
-            AddTextColumn(dgv, "colDetailThueSuat", "Thuế suất", nameof(InvoiceDetailItem.ThueSuat), 60);
-            AddNumericColumn(dgv, "colDetailTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 100, "#,##0");
-            AddNumericColumn(dgv, "colDetailTongTT", "Tổng TT (HĐ)", nameof(InvoiceDetailItem.TongTienThanhToan_HD), 120, "#,##0");
-            AddTextColumn(dgv, "colDetailSoLo", "Số lô", nameof(InvoiceDetailItem.SoLo), 80);
-            AddTextColumn(dgv, "colDetailHSD", "Hạn SD", nameof(InvoiceDetailItem.HanSuDung), 90);
-            AddTextColumn(dgv, "colDetailGhiChuSP", "Ghi chú SP", nameof(InvoiceDetailItem.GhiChuSanPham), 150);
         }
 
-        private void ConfigureVatNopGridColumns()
+        private static void ConfigureFullDetailGrid(DataGridView dgv)
         {
-            try
-            {
-                if (_dgvVatNop.InvokeRequired)
-                {
-                    _dgvVatNop.Invoke(new Action(() => ConfigureVatNopGridInternal()));
-                }
-                else
-                {
-                    ConfigureVatNopGridInternal();
-                }
-            }
-            catch (Exception ex)
-            {
-                _logAction?.Invoke($"❌ Lỗi khi cấu hình lưới {_dgvVatNop.Name}: {ex.Message}");
-            }
+            ApplyReadOnlyStyle(dgv);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailTenNB", "Tên NB", nameof(InvoiceDetailItem.TenNguoiBan), 200);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailMSTNB", "MST NB", nameof(InvoiceDetailItem.MSTNguoiBan), 110);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailTenSP", "Tên SP/DV", nameof(InvoiceDetailItem.TenSanPham), 250);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailDVT", "ĐVT", nameof(InvoiceDetailItem.DonViTinh), 50);
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailSoLuong", "Số lượng", nameof(InvoiceDetailItem.SoLuong), 80, "#,##0.##");
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailDonGia", "Đơn giá", nameof(InvoiceDetailItem.DonGia), 100, "#,##0.##");
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailThanhTien", "Thành tiền", nameof(InvoiceDetailItem.ThanhTien), 110, "#,##0");
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailTienCK", "Tiền CK", nameof(InvoiceDetailItem.TienChietKhau), 90, "#,##0");
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailDoanhSo", "Doanh số", nameof(InvoiceDetailItem.DoanhSoChuaThue), 110, "#,##0");
+            GridColumnHelper.AddTextColumn(dgv, "colDetailThueSuat", "Thuế suất", nameof(InvoiceDetailItem.ThueSuat), 60);
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 100, "#,##0");
+            GridColumnHelper.AddNumericColumn(dgv, "colDetailTongTT", "Tổng TT (HĐ)", nameof(InvoiceDetailItem.TongTienThanhToan_HD), 120, "#,##0");
+            GridColumnHelper.AddTextColumn(dgv, "colDetailSoLo", "Số lô", nameof(InvoiceDetailItem.SoLo), 80);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailHSD", "Hạn SD", nameof(InvoiceDetailItem.HanSuDung), 90);
+            GridColumnHelper.AddTextColumn(dgv, "colDetailGhiChuSP", "Ghi chú SP", nameof(InvoiceDetailItem.GhiChuSanPham), 150);
         }
 
-        private void ConfigureVatNopGridInternal()
+        private static void ConfigureVatNopGrid(DataGridView dgv)
         {
-            DataGridView dgv = _dgvVatNop;
-            dgv.AutoGenerateColumns = false;
-            dgv.AllowUserToAddRows = false;
-            dgv.ReadOnly = true;
-            dgv.RowHeadersVisible = false;
-            dgv.DefaultCellStyle.Font = new Font("Segoe UI", 9);
-            dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-            dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
-            dgv.Columns.Clear();
-            AddTextColumn(dgv, "colVatSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
-            AddTextColumn(dgv, "colVatKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
-            AddTextColumn(dgv, "colVatSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
-            AddTextColumn(dgv, "colVatNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
-            AddTextColumn(dgv, "colVatMSTNB", "MST NB", nameof(InvoiceDetailItem.MSTNguoiBan), 110);
-            AddTextColumn(dgv, "colVatTenSP", "Tên SP/DV", nameof(InvoiceDetailItem.TenSanPham), 300);
-            AddNumericColumn(dgv, "colVatDoanhSo", "Doanh số", nameof(InvoiceDetailItem.DoanhSoChuaThue), 150, "#,##0");
-            AddTextColumn(dgv, "colVatThueSuat", "Thuế suất", nameof(InvoiceDetailItem.ThueSuat), 80);
-            AddNumericColumn(dgv, "colVatTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 150, "#,##0");
+            ApplyReadOnlyStyle(dgv);
+            GridColumnHelper.AddTextColumn(dgv, "colVatSTT", "STT", nameof(InvoiceDetailItem.STT), 40, frozen: true);
+            GridColumnHelper.AddTextColumn(dgv, "colVatKyHieu", "Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), 80);
+            GridColumnHelper.AddTextColumn(dgv, "colVatSoHD", "Số HĐ", nameof(InvoiceDetailItem.SoHD), 80);
+            GridColumnHelper.AddTextColumn(dgv, "colVatNgayHD", "Ngày HĐ", nameof(InvoiceDetailItem.NgayHD), 90);
+            GridColumnHelper.AddTextColumn(dgv, "colVatMSTNB", "MST NB", nameof(InvoiceDetailItem.MSTNguoiBan), 110);
+            GridColumnHelper.AddTextColumn(dgv, "colVatTenSP", "Tên SP/DV", nameof(InvoiceDetailItem.TenSanPham), 300);
+            GridColumnHelper.AddNumericColumn(dgv, "colVatDoanhSo", "Doanh số", nameof(InvoiceDetailItem.DoanhSoChuaThue), 150, "#,##0");
+            GridColumnHelper.AddTextColumn(dgv, "colVatThueSuat", "Thuế suất", nameof(InvoiceDetailItem.ThueSuat), 80);
+            GridColumnHelper.AddNumericColumn(dgv, "colVatTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 150, "#,##0");
         }
 
-        private void AddTextColumn(DataGridView dgv, string name, string header, string dataProperty, int width, bool frozen = false)
+        private void StepProgress()
         {
-            var column = new DataGridViewTextBoxColumn
-            {
-                Name = name,
-                HeaderText = header,
-                DataPropertyName = dataProperty,
-                Width = width,
-                ReadOnly = true,
-                Frozen = frozen
-            };
-            dgv.Columns.Add(column);
+            if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep();
         }
 
-        private void AddNumericColumn(DataGridView dgv, string name, string header, string dataProperty, int width, string format)
+        /// <summary>
+        /// Gọi API chi tiết cho từng hóa đơn (có phân trang sản phẩm) và bind kết quả vào 4 lưới.
+        /// Phải được gọi từ UI thread.
+        /// </summary>
+        public async Task PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
         {
-            var column = new DataGridViewTextBoxColumn
-            {
-                Name = name,
-                HeaderText = header,
-                DataPropertyName = dataProperty,
-                Width = width,
-                ReadOnly = true,
-                DefaultCellStyle = new DataGridViewCellStyle { Format = format, Alignment = DataGridViewContentAlignment.MiddleRight }
-            };
-            dgv.Columns.Add(column);
-        }
-        // --- (Hết phần giữ nguyên) ---
-
-
-        // =================================================================
-        // === HÀM POPULATE ĐÃ SỬA (THÊM VÒNG LẶP LỒNG NHAU) ===
-        // =================================================================
-        public async Task PopulateDetailGridAsync(List<SearchResult> invoiceHeaders, System.Text.StringBuilder logBuilder)
-        {
-            // Bỏ MessageBox ở đây vì logBuilder sẽ hiển thị nó ở cuối
-            logBuilder.AppendLine("--- (Detail Mgr) Bắt đầu PopulateDetailGridAsync ---");
-
-            MethodInvoker clearGridsAction = () => {
-                _dgvDetails.DataSource = null;
-                _dgvMua.DataSource = null;
-                _dgvBan.DataSource = null;
-                _dgvVatNop.DataSource = null;
-                _statusLabel.Text = "Đang chuẩn bị tải chi tiết...";
-                _statusLabel.Visible = true;
-                _progressBar.Style = ProgressBarStyle.Blocks;
-                _progressBar.Maximum = invoiceHeaders?.Count ?? 0;
-                _progressBar.Value = 0;
-                _progressBar.Visible = true;
-            };
-            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(clearGridsAction); else clearGridsAction();
+            _dgvDetails.DataSource = null;
+            _dgvMua.DataSource = null;
+            _dgvBan.DataSource = null;
+            _dgvVatNop.DataSource = null;
+            _statusLabel.Text = "Đang chuẩn bị tải chi tiết...";
+            _statusLabel.Visible = true;
+            _progressBar.Style = ProgressBarStyle.Blocks;
+            _progressBar.Maximum = invoiceHeaders?.Count ?? 0;
+            _progressBar.Value = 0;
+            _progressBar.Visible = true;
 
             if (invoiceHeaders == null || !invoiceHeaders.Any())
             {
-                logBuilder.AppendLine("ℹ️ (Detail Mgr) Không có hóa đơn nào để lấy chi tiết.");
-                MethodInvoker hideProgress = () => { _statusLabel.Visible = false; _progressBar.Visible = false; };
-                if (_statusLabel.InvokeRequired) _statusLabel.Invoke(hideProgress); else hideProgress();
+                _logAction("ℹ️ (Detail Mgr) Không có hóa đơn nào để lấy chi tiết.");
+                _statusLabel.Visible = false;
+                _progressBar.Visible = false;
                 return;
             }
+
             if (string.IsNullOrEmpty(_jwtToken))
             {
-                logBuilder.AppendLine("❌ (Detail Mgr) Lỗi: JWT Token chưa được cung cấp.");
-                MethodInvoker hideProgress = () => { _statusLabel.Text = "Lỗi: Chưa đăng nhập."; _progressBar.Visible = false; };
-                if (_statusLabel.InvokeRequired) _statusLabel.Invoke(hideProgress); else hideProgress();
+                _logAction("❌ (Detail Mgr) Lỗi: JWT Token chưa được cung cấp.");
+                _statusLabel.Text = "Lỗi: Chưa đăng nhập.";
+                _progressBar.Visible = false;
                 return;
             }
 
-            logBuilder.AppendLine($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {invoiceHeaders.Count} hóa đơn...");
-
+            _logAction($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {invoiceHeaders.Count} hóa đơn...");
             var allDetailItems = new List<InvoiceDetailItem>();
             var boughtDetailItems = new List<InvoiceDetailItem>();
             var soldDetailItems = new List<InvoiceDetailItem>();
-            var vatDetailItems = new List<InvoiceDetailItem>();
-
             int currentInvoiceIndex = 0;
             int globalStt = 1;
-            const int pageSize = 50;
 
             foreach (var invoiceHeader in invoiceHeaders)
             {
                 currentInvoiceIndex++;
-                MethodInvoker updateStatusAction = () => {
-                    _statusLabel.Text = $"Đang tải chi tiết HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count})...";
-                };
-                if (_statusLabel.InvokeRequired) _statusLabel.Invoke(updateStatusAction); else updateStatusAction();
+                _statusLabel.Text = $"Đang tải chi tiết HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count})...";
 
-                if (invoiceHeader == null || string.IsNullOrEmpty(invoiceHeader.Ma_so_thue) ||
-                    string.IsNullOrEmpty(invoiceHeader.Ky_hieu_hoa_don) ||
-                    !invoiceHeader.So_hoa_don.HasValue ||
-                    !invoiceHeader.Ky_hieu_ma_so.HasValue)
+                if (invoiceHeader == null || !invoiceHeader.HasLookupKeys())
                 {
-                    logBuilder.AppendLine($"⚠️ (Detail Mgr) Bỏ qua HĐ {invoiceHeader?.Id} do thiếu thông tin.");
-                    MethodInvoker stepProgress = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
-                    if (_progressBar.InvokeRequired) _progressBar.Invoke(stepProgress); else stepProgress();
+                    _logAction($"⚠️ (Detail Mgr) Bỏ qua HĐ {invoiceHeader?.Id} do thiếu thông tin.");
+                    StepProgress();
                     continue;
                 }
 
                 int currentPage = 0;
                 bool keepFetchingDetails = true;
-
                 try
                 {
                     while (keepFetchingDetails)
                     {
-                        MethodInvoker updatePageStatusAction = () => {
-                            _statusLabel.Text = $"Tải HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count}), SP trang {currentPage + 1}...";
-                        };
-                        if (_statusLabel.InvokeRequired) _statusLabel.Invoke(updatePageStatusAction); else updatePageStatusAction();
+                        _statusLabel.Text = $"Tải HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count}), SP trang {currentPage + 1}...";
 
-                        // --- LOG GỠ LỖI MỚI ---
-                        logBuilder.AppendLine($"  -> (Detail Mgr) Đang lấy HĐ {invoiceHeader.So_hoa_don}, Trang SP {currentPage + 1} (Page={currentPage}, Size={pageSize})");
-
-                        string jsonDetail = await GetInvoiceDetailInternalAsync(
-                            invoiceHeader.Ma_so_thue, invoiceHeader.Ky_hieu_hoa_don,
-                            invoiceHeader.So_hoa_don, invoiceHeader.Ky_hieu_ma_so,
-                            currentPage, pageSize
-                        );
-
+                        string jsonDetail = await GetInvoiceDetailInternalAsync(invoiceHeader, currentPage, ProductPageSize);
                         if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
                         {
-                            logBuilder.AppendLine($"  -> ❌ (Detail Mgr) Lỗi lấy chi tiết HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}): {jsonDetail}");
+                            _logAction($"  -> ❌ (Detail Mgr) Lỗi lấy chi tiết HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}): {jsonDetail}");
+                            break;
+                        }
+
+                        using JsonDocument doc = JsonDocument.Parse(jsonDetail);
+                        JsonElement root = InvoiceJson.GetDataElement(doc.RootElement);
+                        JsonElement? productArray = InvoiceJson.FindProductArray(root);
+
+                        if (!productArray.HasValue || productArray.Value.GetArrayLength() == 0)
+                        {
+                            _logAction($"  -> ℹ️ (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}) không có sản phẩm (hdhhdvu).");
+                            break;
+                        }
+
+                        int productsFoundOnThisPage = productArray.Value.GetArrayLength();
+                        foreach (var product in productArray.Value.EnumerateArray())
+                        {
+                            if (product.ValueKind != JsonValueKind.Object) continue;
+
+                            var detailItem = CreateDetailItem(root, product, invoiceHeader);
+                            detailItem.STT = globalStt++;
+                            allDetailItems.Add(detailItem);
+                            if (invoiceHeader.Thong_tin_lien_quan == "Mua vào")
+                                boughtDetailItems.Add(detailItem);
+                            else
+                                soldDetailItems.Add(detailItem);
+                        }
+
+                        if (productsFoundOnThisPage < ProductPageSize)
+                        {
                             keepFetchingDetails = false;
                         }
                         else
                         {
-                            using (JsonDocument doc = JsonDocument.Parse(jsonDetail))
-                            {
-                                JsonElement root = doc.RootElement;
-                                if (root.TryGetProperty("data", out JsonElement dataEl) && dataEl.ValueKind == JsonValueKind.Object) { root = dataEl; }
-
-                                JsonElement? productArray = null;
-                                void FindProductArrayLocal(JsonElement element)
-                                {
-                                    if (productArray.HasValue) return;
-                                    if (element.ValueKind == JsonValueKind.Object)
-                                    {
-                                        if (element.TryGetProperty("hdhhdvu", out var hdhhdvu) && hdhhdvu.ValueKind == JsonValueKind.Array)
-                                        { productArray = hdhhdvu; return; }
-                                        foreach (var innerProp in element.EnumerateObject())
-                                            if (innerProp.Value.ValueKind == JsonValueKind.Object || innerProp.Value.ValueKind == JsonValueKind.Array)
-                                                FindProductArrayLocal(innerProp.Value);
-                                    }
-                                    else if (element.ValueKind == JsonValueKind.Array)
-                                    {
-                                        foreach (var item in element.EnumerateArray()) FindProductArrayLocal(item);
-                                    }
-                                }
-                                FindProductArrayLocal(root);
-
-                                if (productArray.HasValue && productArray.Value.GetArrayLength() > 0)
-                                {
-                                    int productsFoundOnThisPage = productArray.Value.GetArrayLength();
-                                    // --- LOG GỠ LỖI MỚI ---
-                                    logBuilder.AppendLine($"    -> (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}) tìm thấy: {productsFoundOnThisPage} sản phẩm.");
-
-                                    foreach (var product in productArray.Value.EnumerateArray())
-                                    {
-                                        if (product.ValueKind == JsonValueKind.Object)
-                                        {
-                                            var detailItem = new InvoiceDetailItem { /* ... (toàn bộ code gán thuộc tính giữ nguyên) ... */ };
-                                            // (Phần gán thuộc tính đã đầy đủ, tôi rút gọn ở đây cho dễ đọc)
-                                            detailItem.STT = globalStt;
-                                            detailItem.KyHieuHD = GetString(root, "khhdon") ?? invoiceHeader.Ky_hieu_hoa_don;
-                                            detailItem.SoHD = GetInt(root, "shdon") ?? invoiceHeader.So_hoa_don;
-                                            detailItem.NgayHD = FormatNgayLap(GetString(root, "tdlap")) ?? invoiceHeader.Ngay_lap;
-                                            detailItem.TenNguoiBan = GetString(root, "nbten") ?? invoiceHeader.Thong_tin_hoa_don;
-                                            detailItem.MSTNguoiBan = GetString(root, "nbmst") ?? invoiceHeader.Ma_so_thue;
-                                            detailItem.TongTienThanhToan_HD = GetDecimal(root, "tgtttbso") ?? invoiceHeader.Tong_tien_thanh_toan;
-                                            detailItem.TenSanPham = GetString(product, "ten");
-                                            detailItem.DonViTinh = GetString(product, "dvtinh");
-                                            detailItem.SoLuong = GetDecimal(product, "sluong");
-                                            detailItem.DonGia = GetDecimal(product, "dgia");
-                                            detailItem.ThanhTien = GetDecimal(product, "thtien");
-                                            detailItem.TienChietKhau = GetDecimal(product, "stckhau");
-                                            detailItem.DoanhSoChuaThue = GetDecimal(product, "thtcthue");
-                                            detailItem.ThueSuat = GetString(product, "tsuat");
-                                            detailItem.TienThueGTGT = GetDecimal(product, "tthue");
-                                            detailItem.SoLo = GetString(product, "solo");
-                                            detailItem.HanSuDung = GetString(product, "hsd");
-                                            detailItem.GhiChuSanPham = GetString(product, "ghichu");
-
-                                            allDetailItems.Add(detailItem);
-                                            if (invoiceHeader.Thong_tin_lien_quan == "Mua vào")
-                                                boughtDetailItems.Add(detailItem);
-                                            else
-                                                soldDetailItems.Add(detailItem);
-                                            vatDetailItems.Add(detailItem);
-                                            globalStt++;
-                                        }
-                                    }
-
-                                    if (productsFoundOnThisPage < pageSize)
-                                    {
-                                        logBuilder.AppendLine($"    -> (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} đã hết sản phẩm (trả về {productsFoundOnThisPage} < {pageSize}). Dừng.");
-                                        keepFetchingDetails = false;
-                                    }
-                                    else
-                                    {
-                                        currentPage++;
-                                        logBuilder.AppendLine($"    -> (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} có thể còn SP. Chuyển sang trang {currentPage + 1}...");
-                                        await Task.Delay(100);
-                                    }
-                                }
-                                else
-                                {
-                                    logBuilder.AppendLine($"  -> ℹ️ (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}) không có sản phẩm (hdhhdvu). Dừng.");
-                                    keepFetchingDetails = false;
-                                }
-                            }
+                            currentPage++;
+                            await Task.Delay(100);
                         }
                     }
                 }
                 catch (JsonException jsonEx)
                 {
-                    logBuilder.AppendLine($"❌ (Detail Mgr) Lỗi parse JSON HĐ {invoiceHeader.So_hoa_don}: {jsonEx.Message}");
+                    _logAction($"❌ (Detail Mgr) Lỗi parse JSON HĐ {invoiceHeader.So_hoa_don}: {jsonEx.Message}");
                 }
                 catch (Exception ex)
                 {
-                    logBuilder.AppendLine($"❌ (Detail Mgr) Lỗi khác khi xử lý HĐ {invoiceHeader.So_hoa_don}: {ex.ToString()}");
+                    _logAction($"❌ (Detail Mgr) Lỗi khác khi xử lý HĐ {invoiceHeader.So_hoa_don}: {ex}");
                 }
 
-                MethodInvoker stepProgressFinal = () => { if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep(); };
-                if (_progressBar.InvokeRequired) _progressBar.Invoke(stepProgressFinal); else stepProgressFinal();
-
+                StepProgress();
                 await Task.Delay(500);
-            }
-
-            MethodInvoker bindDataAction = () => {
-                try
-                {
-                    _dgvDetails.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(allDetailItems);
-                    _dgvMua.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(boughtDetailItems);
-                    _dgvBan.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(soldDetailItems);
-                    _dgvVatNop.DataSource = new System.ComponentModel.BindingList<InvoiceDetailItem>(vatDetailItems);
-                    logBuilder.AppendLine($"✅ (Detail Mgr) Đã tải: {allDetailItems.Count} dòng chi tiết tổng, {boughtDetailItems.Count} Mua, {soldDetailItems.Count} Bán, {vatDetailItems.Count} VAT.");
-                }
-                catch (Exception bindEx)
-                {
-                    logBuilder.AppendLine($"❌ (Detail Mgr) Lỗi khi gán DataSource: {bindEx.Message}");
-                }
-                finally
-                {
-                    _statusLabel.Text = $"Hiển thị {allDetailItems.Count} dòng chi tiết.";
-                    _statusLabel.Visible = true;
-                    _progressBar.Visible = false;
-
-                    Task.Delay(3000).ContinueWith(t => {
-                        if (_statusLabel.InvokeRequired)
-                            _statusLabel.Invoke(new Action(() => _statusLabel.Visible = false));
-                        else
-                            _statusLabel.Visible = false;
-                    });
-                }
-            };
-            if (_dgvDetails.InvokeRequired) _dgvDetails.Invoke(bindDataAction); else bindDataAction();
-        }
-
-        // =================================================================
-        // === HÀM LẤY CHI TIẾT ĐÃ SỬA (THÊM PAGE VÀ SIZE) ===
-        // =================================================================
-        private async Task<string> GetInvoiceDetailInternalAsync(string nbmst, string khhdon, int? shdon, int? khmshdon, int page = 0, int size = 50)
-        {
-            if (string.IsNullOrEmpty(nbmst) || string.IsNullOrEmpty(khhdon) || !shdon.HasValue || !khmshdon.HasValue)
-            {
-                return "❌ Lỗi nội bộ: Thiếu thông tin HĐ.";
             }
 
             try
             {
-                // THAY ĐỔI: Thêm page và size vào URL
-                string url = $"query/invoices/detail?" +
-                             $"nbmst={Uri.EscapeDataString(nbmst)}&" +
-                             $"khhdon={Uri.EscapeDataString(khhdon)}&" +
-                             $"shdon={shdon.Value}&" +
-                             $"khmshdon={khmshdon.Value}&" +
-                             $"page={page}&" + // <-- ĐÃ THÊM
-                             $"size={size}";   // <-- ĐÃ THÊM
+                _dgvDetails.DataSource = new BindingList<InvoiceDetailItem>(allDetailItems);
+                _dgvMua.DataSource = new BindingList<InvoiceDetailItem>(boughtDetailItems);
+                _dgvBan.DataSource = new BindingList<InvoiceDetailItem>(soldDetailItems);
+                // Bảng kê thuế hiển thị tất cả dòng hàng
+                _dgvVatNop.DataSource = new BindingList<InvoiceDetailItem>(allDetailItems.ToList());
+                _logAction($"✅ (Detail Mgr) Đã tải: {allDetailItems.Count} dòng chi tiết tổng, {boughtDetailItems.Count} Mua, {soldDetailItems.Count} Bán.");
+            }
+            catch (Exception bindEx)
+            {
+                _logAction($"❌ (Detail Mgr) Lỗi khi gán DataSource: {bindEx.Message}");
+            }
+            finally
+            {
+                _statusLabel.Text = $"Hiển thị {allDetailItems.Count} dòng chi tiết.";
+                _statusLabel.Visible = true;
+                _progressBar.Visible = false;
+                _ = HideStatusLabelLaterAsync();
+            }
+        }
 
-                // Ghi log URL này vào hàm gọi (Populate...) để logBuilder bắt được
+        private async Task HideStatusLabelLaterAsync()
+        {
+            await Task.Delay(3000);
+            _statusLabel.Visible = false;
+        }
 
-                using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                req.Headers.UserAgent.ParseAdd(_browserUserAgent);
-                req.Headers.Add("Accept", "application/json");
-                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _jwtToken);
+        private InvoiceDetailItem CreateDetailItem(JsonElement invoice, JsonElement product, SearchResult header)
+        {
+            return new InvoiceDetailItem
+            {
+                KyHieuHD = GetString(invoice, "khhdon") ?? header.Ky_hieu_hoa_don,
+                SoHD = GetInt(invoice, "shdon") ?? header.So_hoa_don,
+                NgayHD = FormatNgayLap(GetString(invoice, "tdlap")) ?? header.Ngay_lap,
+                TenNguoiBan = GetString(invoice, "nbten") ?? header.Thong_tin_hoa_don,
+                MSTNguoiBan = GetString(invoice, "nbmst") ?? header.Ma_so_thue,
+                TongTienThanhToan_HD = GetDecimal(invoice, "tgtttbso") ?? header.Tong_tien_thanh_toan,
+                TenSanPham = GetString(product, "ten"),
+                DonViTinh = GetString(product, "dvtinh"),
+                SoLuong = GetDecimal(product, "sluong"),
+                DonGia = GetDecimal(product, "dgia"),
+                ThanhTien = GetDecimal(product, "thtien"),
+                TienChietKhau = GetDecimal(product, "stckhau"),
+                DoanhSoChuaThue = GetDecimal(product, "thtcthue"),
+                ThueSuat = GetString(product, "tsuat"),
+                TienThueGTGT = GetDecimal(product, "tthue"),
+                SoLo = GetString(product, "solo"),
+                HanSuDung = GetString(product, "hsd"),
+                GhiChuSanPham = GetString(product, "ghichu")
+            };
+        }
+
+        private async Task<string> GetInvoiceDetailInternalAsync(SearchResult invoice, int page, int size)
+        {
+            try
+            {
+                string url = GdtApi.BuildDetailUrl(invoice.Ma_so_thue, invoice.Ky_hieu_hoa_don,
+                    invoice.So_hoa_don!.Value, invoice.Ky_hieu_ma_so!.Value, page, size);
+                using var req = GdtApi.CreateRequest(HttpMethod.Get, url, "application/json", _jwtToken);
 
                 var response = await _client.SendAsync(req);
                 string jsonResponse = await response.Content.ReadAsStringAsync();
-
                 if (!response.IsSuccessStatusCode)
                 {
-                    _logAction?.Invoke($"❌ (Detail Mgr) Lỗi API chi tiết HĐ {shdon}: {response.StatusCode} - {jsonResponse}");
+                    _logAction($"❌ (Detail Mgr) Lỗi API chi tiết HĐ {invoice.So_hoa_don}: {response.StatusCode} - {jsonResponse}");
                     return $"❌ Lỗi từ API ({response.StatusCode}): {jsonResponse}";
                 }
                 return jsonResponse;
             }
-            catch (HttpRequestException httpEx) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi HTTP khi lấy chi tiết HĐ {shdon}: {httpEx.Message}"); return $"❌ Lỗi kết nối: {httpEx.Message}"; }
-            catch (Exception ex) { _logAction?.Invoke($"❌ (Detail Mgr) Lỗi khác khi lấy chi tiết HĐ {shdon}: {ex.ToString()}"); return $"❌ Lỗi hệ thống: {ex.Message}"; }
+            catch (HttpRequestException httpEx)
+            {
+                _logAction($"❌ (Detail Mgr) Lỗi HTTP khi lấy chi tiết HĐ {invoice.So_hoa_don}: {httpEx.Message}");
+                return $"❌ Lỗi kết nối: {httpEx.Message}";
+            }
+            catch (Exception ex)
+            {
+                _logAction($"❌ (Detail Mgr) Lỗi khác khi lấy chi tiết HĐ {invoice.So_hoa_don}: {ex}");
+                return $"❌ Lỗi hệ thống: {ex.Message}";
+            }
         }
 
-
-        // (Các hàm GetString, GetDecimal, GetInt, FormatNgayLap... giữ nguyên)
-        private string GetString(JsonElement element, string propertyName)
+        private static string GetString(JsonElement element, string propertyName)
         {
-            if (element.TryGetProperty(propertyName, out JsonElement prop) && prop.ValueKind == JsonValueKind.String) { return prop.GetString(); }
-            else if (element.TryGetProperty(propertyName, out prop) && prop.ValueKind != JsonValueKind.Null && prop.ValueKind != JsonValueKind.Undefined) { return prop.ToString(); }
+            if (!element.TryGetProperty(propertyName, out JsonElement prop)) return null;
+            if (prop.ValueKind == JsonValueKind.String) return prop.GetString();
+            if (prop.ValueKind != JsonValueKind.Null && prop.ValueKind != JsonValueKind.Undefined) return prop.ToString();
             return null;
         }
-        private decimal? GetDecimal(JsonElement element, string propertyName)
+
+        private static decimal? GetDecimal(JsonElement element, string propertyName)
         {
             if (element.TryGetProperty(propertyName, out JsonElement prop))
             {
-                if (prop.ValueKind == JsonValueKind.Number) { return prop.GetDecimal(); }
-                else if (prop.ValueKind == JsonValueKind.String && decimal.TryParse(prop.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) { return val; }
+                if (prop.ValueKind == JsonValueKind.Number) return prop.GetDecimal();
+                if (prop.ValueKind == JsonValueKind.String &&
+                    decimal.TryParse(prop.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal val)) return val;
             }
             return null;
         }
-        private int? GetInt(JsonElement element, string propertyName)
+
+        private static int? GetInt(JsonElement element, string propertyName)
         {
             if (element.TryGetProperty(propertyName, out JsonElement prop))
             {
-                if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out int intVal)) { return intVal; }
-                else if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out int intValFromString)) { return intValFromString; }
+                if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out int intVal)) return intVal;
+                if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out int intValFromString)) return intValFromString;
             }
             return null;
         }
-        private string FormatNgayLap(string ngayLapJson)
+
+        private static string FormatNgayLap(string ngayLapJson)
         {
             if (DateTime.TryParse(ngayLapJson, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
-            {
                 return dt.ToString("dd/MM/yyyy");
-            }
-            else if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
-            {
+            if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
                 return dt.ToString("dd/MM/yyyy");
-            }
             return ngayLapJson;
         }
     }

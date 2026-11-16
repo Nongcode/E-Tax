@@ -17,9 +17,6 @@ namespace E_Tax
         private System.Windows.Forms.PictureBox picCaptcha;
         private System.Windows.Forms.Button btnRefreshCaptcha;
         private System.Windows.Forms.Button btnLogin;
-        private System.Windows.Forms.Button btnSearch;
-        private System.Windows.Forms.Button btnExportList;
-        private System.Windows.Forms.Button btnExportDetails;
         private System.Windows.Forms.Panel panelLogin;
         private System.Windows.Forms.Panel panelSearch;
         private System.Windows.Forms.Label lblVersion;
@@ -389,7 +386,6 @@ namespace E_Tax
             label1.Size = new Size(61, 20);
             label1.TabIndex = 22;
             label1.Text = "Từ ngày";
-            label1.Click += label1_Click;
             // 
             // dtpFromDate
             // 
@@ -481,7 +477,6 @@ namespace E_Tax
             rbAllInvoices.TabIndex = 2;
             rbAllInvoices.Text = "Tất cả hoá đơn";
             rbAllInvoices.UseVisualStyleBackColor = true;
-            rbAllInvoices.CheckedChanged += rbAllInvoices_CheckedChanged;
             // 
             // rbBought
             // 
@@ -1018,7 +1013,6 @@ namespace E_Tax
         private Label label2;
         private DateTimePicker dtpToDate;
         private DateTimePicker dtpFromDate;
-        private System.Windows.Forms.ProgressBar searchProgressBar;
         private System.Windows.Forms.ProgressBar downloadProgressBar;
         private System.Windows.Forms.Label lblDownloadStatus;
         private GroupBox gbInvoiceType;
@@ -1039,7 +1033,6 @@ namespace E_Tax
         private System.Windows.Forms.TextBox txtGhiChu;
         private System.Windows.Forms.Button btnMoGhiChu;
         private System.Windows.Forms.Label lblTimMST;
-        private System.Windows.Forms.Label lblThang;
         private System.Windows.Forms.TextBox txtTimMST;
         private System.Windows.Forms.Button btnRightSearch;
         private System.Windows.Forms.Button btnXemHD;
@@ -1054,9 +1047,6 @@ namespace E_Tax
         private TabPage tabVATNop;
         private TabPage tabGiamThue;
 
-        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1;
-        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle2;
-        private System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3;
         private TextBox txtKtraMaDoanhNghiep;
     }
 }
