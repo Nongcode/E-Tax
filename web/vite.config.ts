@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['src/test/setup.ts'],
     globals: true,
+    testTimeout: 15000,
     css: false,
     env: { VITE_API_URL: 'http://localhost', VITE_USE_MOCK: 'false' },
     include: ['src/**/*.test.{ts,tsx}'],

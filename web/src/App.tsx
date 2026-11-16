@@ -4,11 +4,17 @@ import viVN from 'antd/locale/vi_VN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { theme } from './theme';
 
-const queryClient = new QueryClient({
+const defaultQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({
+  children,
+  queryClient = defaultQueryClient,
+}: {
+  children: ReactNode;
+  queryClient?: QueryClient;
+}) {
   return (
     <ConfigProvider theme={theme} locale={viVN}>
       <AntApp>
