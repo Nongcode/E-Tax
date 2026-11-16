@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router-dom';
+import { act } from 'react';
+import { RequireAuth, RequireRole } from './auth/guards';
+import AccountLayout from './layouts/AccountLayout';
+import RootLayout from './layouts/RootLayout';
 import { AppProviders } from './App';
 import { routes } from './router';
 import { saveSession } from './auth/session';
@@ -27,9 +31,8 @@ afterEach(() => {
   window.matchMedia = originalMatchMedia;
 });
 
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderAt(path: string, tree: RouteObject[] = routes, queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  const router = createMemoryRouter(tree, { initialEntries: [path] });
   render(
     <AppProviders queryClient={queryClient}>
       <RouterProvider router={router} />
@@ -83,5 +86,72 @@ describe('router', () => {
     loginAs('admin@etax.vn', 'Admin@123');
     renderAt('/tai-khoan');
     expect(await screen.findByText('Không có quyền truy cập')).toBeInTheDocument();
+  });
+
+  it('admin vào /tai-khoan thấy nội dung 403 dành cho khách hàng', async () => {
+    loginAs('admin@etax.vn', 'Admin@123');
+    renderAt('/tai-khoan');
+    expect(await screen.findByText('Trang này chỉ dành cho khách hàng.')).toBeInTheDocument();
+  });
+
+  it('khách vào /quan-tri thấy nội dung 403 dành cho quản trị viên', async () => {
+    loginAs('khach@etax.vn', 'Khach@123');
+    renderAt('/quan-tri');
+    expect(await screen.findByText('Trang này chỉ dành cho quản trị viên.')).toBeInTheDocument();
+  });
+
+  it('lỗi render trong layout giữ menu và tự reset khi đổi route', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    function Boom(): never {
+      throw new Error('boom');
+    }
+    const tree: RouteObject[] = [
+      {
+        element: <RootLayout />,
+        children: [
+          {
+            element: <RequireAuth />,
+            children: [
+              {
+                element: <RequireRole role="customer" />,
+                children: [
+                  {
+                    element: <AccountLayout />,
+                    children: [
+                      { path: '/tai-khoan/loi', element: <Boom /> },
+                      { path: '/tai-khoan/ho-so', element: <div>Nội dung hồ sơ</div> },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    loginAs('khach@etax.vn', 'Khach@123');
+    const router = renderAt('/tai-khoan/loi', tree);
+    expect(await screen.findByText('Đã có lỗi xảy ra')).toBeInTheDocument();
+    expect(screen.getAllByText('Hồ sơ').length).toBeGreaterThan(0);
+    await act(async () => {
+      await router.navigate('/tai-khoan/ho-so');
+    });
+    expect(await screen.findByText('Nội dung hồ sơ')).toBeInTheDocument();
+    expect(screen.queryByText('Đã có lỗi xảy ra')).not.toBeInTheDocument();
+    spy.mockRestore();
+  });
+
+  it('đăng xuất xoá cache truy vấn', async () => {
+    loginAs('khach@etax.vn', 'Khach@123');
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['x'], 1);
+    const router = renderAt('/tai-khoan/ho-so', routes, qc);
+    await screen.findByText('Màn hình đang được xây dựng');
+    expect(qc.getQueryData(['x'])).toBe(1);
+    await act(async () => {
+      screen.getByRole('button', { name: 'Đăng xuất' }).click();
+    });
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(qc.getQueryData(['x'])).toBeUndefined();
   });
 });

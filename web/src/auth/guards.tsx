@@ -14,6 +14,6 @@ export function RequireRole({ role }: { role: Role }) {
   const { user } = useAuth();
   const { pathname, search } = useLocation();
   if (!user) return <Navigate to={'/dang-nhap?next=' + encodeURIComponent(pathname + search)} replace />;
-  if (user.role !== role) return <ForbiddenPage />;
+  if (user.role !== role) return <ForbiddenPage subTitle={role === 'customer' ? 'Trang này chỉ dành cho khách hàng.' : undefined} />;
   return <Outlet />;
 }

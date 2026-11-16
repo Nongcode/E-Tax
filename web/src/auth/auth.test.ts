@@ -29,6 +29,12 @@ describe('resolveAfterLogin', () => {
     expect(resolveAfterLogin(customer, 'https://evil.com')).toBe('/tai-khoan');
     expect(resolveAfterLogin(customer, '/\\evil.com')).toBe('/tai-khoan');
   });
+  it('chặn next chứa ký tự điều khiển hoặc gạch ngược', () => {
+    for (const bad of ['/\t/evil.com', '/\n/evil.com', '/\\evil.com']) {
+      expect(resolveAfterLogin(customer, bad)).toBe('/tai-khoan');
+      expect(resolveAfterLogin(admin, bad)).toBe('/quan-tri');
+    }
+  });
 });
 
 describe('loadSession', () => {

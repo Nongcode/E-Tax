@@ -1,12 +1,12 @@
 import { Button, Result } from 'antd';
 import { Link } from 'react-router-dom';
 
-export default function ForbiddenPage() {
+export default function ForbiddenPage({ subTitle = 'Trang này chỉ dành cho quản trị viên.' }: { subTitle?: string }) {
   return (
     <Result
       status="403"
       title="Không có quyền truy cập"
-      subTitle="Trang này chỉ dành cho quản trị viên."
+      subTitle={subTitle}
       extra={
         <Link to="/">
           <Button type="primary">Về trang chủ</Button>

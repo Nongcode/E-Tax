@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Avatar, Badge, Button, Drawer, Grid, Layout, Menu, Space, Typography } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/context';
+import { ErrorBoundary } from '../shared/ErrorBoundary';
 
 export interface SideNavItem {
   key: string;
@@ -116,7 +117,9 @@ export default function SideNavLayout({ items, theme, title }: Props) {
           </Space>
         </Layout.Header>
         <Layout.Content style={{ padding: 16 }}>
-          <Outlet />
+          <ErrorBoundary key={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </Layout.Content>
       </Layout>
     </Layout>

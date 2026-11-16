@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { App } from 'antd';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as authApi from '../api/auth';
 import { configureClient } from '../api/client';
@@ -15,6 +16,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = App.useApp();
+  const qc = useQueryClient();
+  const qcRef = useRef(qc);
+  qcRef.current = qc;
 
   const locationRef = useRef(location);
   const navigateRef = useRef(navigate);
@@ -30,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onUnauthorized: () => {
       if (!tokenRef.current) return;
       clearSession();
+      qcRef.current.clear();
       tokenRef.current = null;
       setUserState(null);
       const { pathname, search } = locationRef.current;
@@ -39,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const start = useCallback((res: { token: string; user: User }) => {
+    qcRef.current.clear();
     tokenRef.current = res.token;
     saveSession(res);
     setUserState(res.user);
@@ -50,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     clearSession();
+    qcRef.current.clear();
     tokenRef.current = null;
     // Giữ user đến khi router đã sang '/', tránh RequireAuth chen vào chuyển hướng /dang-nhap?next=...
     setLoggingOut(true);

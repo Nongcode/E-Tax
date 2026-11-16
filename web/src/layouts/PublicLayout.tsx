@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/context';
+import { ErrorBoundary } from '../shared/ErrorBoundary';
 
 const navItems = [
   { key: '/', label: <Link to="/">Trang chủ</Link> },
@@ -82,7 +83,9 @@ export default function PublicLayout() {
         />
       </Drawer>
       <Layout.Content>
-        <Outlet />
+        <ErrorBoundary key={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </Layout.Content>
       <Layout.Footer style={{ textAlign: 'center' }}>
         © {new Date().getFullYear()} E-Tax · Hỗ trợ: 0900 000 000
