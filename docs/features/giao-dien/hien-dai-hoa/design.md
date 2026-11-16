@@ -66,4 +66,5 @@ Prototype: `index.html`, tab "Giao diện".
 
 | Task | File:dòng | Thay đổi | Lý do |
 |---|---|---|---|
-| — | — | Chưa bắt đầu (chờ duyệt kế hoạch) | — |
+| T-001.1 | `E-Tax/WindowSettings.cs` (mới, L1–L50) | `record WindowSettings(X,Y,Width,Height,Maximized)`: `Load` (không ném), `Save` (tạo thư mục), `Fit` (kẹp kích thước tối thiểu; null nếu không giao màn hình nào) | Nhớ cửa sổ, an toàn khi rút màn hình phụ |
+| T-001.1 | `E-Tax.Tests/WindowSettingsTests.cs` (mới) | 6 test | TDD |
