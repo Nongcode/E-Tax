@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 import { App as AntApp, ConfigProvider } from 'antd';
 import viVN from 'antd/locale/vi_VN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { RouterProvider } from 'react-router-dom';
 import { theme } from './theme';
+import { router } from './router';
 
 const defaultQueryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -27,7 +29,7 @@ export function AppProviders({
 export default function App() {
   return (
     <AppProviders>
-      <h1>E-Tax</h1>
+      <RouterProvider router={router} />
     </AppProviders>
   );
 }
