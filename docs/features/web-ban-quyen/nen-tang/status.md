@@ -10,10 +10,10 @@
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Nền tảng web |
 | Bước Superpowers | subagent-driven-development (người dùng chọn 2026-11-16) |
-| Task đang làm | T-001.7 |
-| **Bước tiếp theo** | T-001.7 mockDb: khách hàng và số liệu (admin) |
+| Task đang làm | T-001.8 |
+| **Bước tiếp theo** | T-001.8 MSW handlers và các hàm api/* |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-16 23:44 |
+| Cập nhật lần cuối | 2026-11-16 23:46 |
 | Ghi chú dở dang | Sổ SDD: `.superpowers/sdd/plan/progress.md` (git-ignored) |
 
 ## File chính
@@ -37,8 +37,8 @@
 | T-001.4 | mockDb: lưu trữ, seed, xác thực, gói, cài đặt | ✅ DONE | ✅ vitest 38/38, lint, build. Bỏ qua Playwright: chưa có màn hình | c38887c, review sạch |
 | T-001.5 | mockDb: đơn hàng và xác nhận thanh toán | ✅ DONE | ✅ vitest 52/52, lint, build. Bỏ qua Playwright: chưa có màn hình | c2a03a3, review sạch |
 | T-001.6 | mockDb: bản quyền và máy | ✅ DONE | ✅ vitest 62/62, lint, build. Bỏ qua Playwright: chưa có màn hình | 9c409d7, review sạch |
-| T-001.7 | mockDb: khách hàng và số liệu (admin) | 🔄 DOING | | |
-| T-001.8 | MSW handlers và các hàm `api/*` | ⬜ TODO | | R16 |
+| T-001.7 | mockDb: khách hàng và số liệu (admin) | ✅ DONE | ✅ vitest 69/69, lint, build. Bỏ qua Playwright: chưa có màn hình | f2bbfad, review sạch |
+| T-001.8 | MSW handlers và các hàm `api/*` | 🔄 DOING | | |
 | T-001.9 | Phiên đăng nhập, bảo vệ route, trang đăng nhập/đăng ký/quên mật khẩu | ⬜ TODO | | |
 | T-001.10 | Thành phần dùng chung, 404/403, ErrorBoundary | ⬜ TODO | | |
 | T-001.11 | Layout, router, công cụ dev, e2e TC-05 | ⬜ TODO | | Playwright + ảnh chụp |
@@ -53,6 +53,7 @@
 | 2026-11-16 23:37 | `npm run test && npm run lint && npm run build` (T-001.4) | ✅ 38/38, lint, build OK | |
 | 2026-11-16 23:41 | `npm run test && npm run lint && npm run build` (T-001.5) | ✅ 52/52, lint, build OK | |
 | 2026-11-16 23:44 | `npm run test && npm run lint && npm run build` (T-001.6) | ✅ 62/62, lint, build OK | |
+| 2026-11-16 23:46 | `npm run test && npm run lint && npm run build` (T-001.7) | ✅ 69/69, lint, build OK | |
 
 ## Nhật ký phiên
 
@@ -64,3 +65,4 @@
 - 2026-11-16 23:37 — T-001.4 xong (c38887c): 14 test mockDb (R1–R3, R16, R18, R20, storage hỏng, email hoa thường). Thông báo: UNAUTHORIZED 'Vui lòng đăng nhập để tiếp tục', PLAN_NOT_FOUND 'Không tìm thấy gói'.
 - 2026-11-16 23:41 — T-001.5 xong (c2a03a3): 14 test đơn hàng (R4–R6, R15, R17, QR, cộng tháng cuối tháng). NOT_FOUND 'Không tìm thấy dữ liệu'.
 - 2026-11-16 23:44 — T-001.6 xong (9c409d7): 10 test bản quyền (R7–R15, mã máy có khoảng trắng/chữ thường). Tách licenses.ts, errors.ts.
+- 2026-11-16 23:46 — T-001.7 xong (f2bbfad): 7 test admin (R19, khoá → R3/R20, số liệu tháng). mockDb hoàn tất R1–R20.

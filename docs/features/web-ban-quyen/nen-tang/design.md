@@ -77,6 +77,8 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/mocks/mockDb.ts | `createOrder`, `getOrder`, `adminConfirmOrder`, `buildQrUrl`, `effectiveOrderStatus`, `toPublicLicense` | Đơn hàng, QR VietQR, xác nhận → sinh bản quyền (R4–R6, R15, R17) |
 | web/src/mocks/errors.ts | `MockError` | Lỗi nghiệp vụ giả lập (status, code, message) |
 | web/src/mocks/licenses.ts | `listLicenses`, `addActivation`, `removeActivation`, `extendLicense`, `revokeLicense`, `toPublicLicense`, `effectiveLicenseStatus` | Bản quyền và máy (R7–R15) |
+| web/src/mocks/admin.ts | `adminListUsers`, `adminGetUser`, `adminSetUserStatus`, `stats` | Khách hàng và số liệu quản trị (R19) |
+| web/src/mocks/views.ts | `toPublicUser`, `effectiveOrderStatus` | Hàm chuyển dữ liệu lưu → dữ liệu trả ra |
 
 ## Nhật ký sửa đổi
 
@@ -90,3 +92,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.4 | web/src/mocks/ (mới) | mockDb: seed, đăng ký/đăng nhập, hồ sơ, đổi mật khẩu, gói, cài đặt (R1–R3, R16, R18, R20) | Nền giả lập backend |
 | T-001.5 | web/src/mocks/mockDb.ts | Đơn hàng và xác nhận thanh toán; load() kiểm tra đủ cấu trúc | Luồng mua gói |
 | T-001.6 | web/src/mocks/licenses.ts, errors.ts (mới), mockDb.ts | Bản quyền, thêm/gỡ máy, gia hạn, thu hồi | Tách file cho gọn mockDb.ts |
+| T-001.7 | web/src/mocks/admin.ts, views.ts (mới), mockDb.ts | Khách hàng, khoá/mở, số liệu tháng | Trang quản trị |
