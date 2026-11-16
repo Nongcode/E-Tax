@@ -67,6 +67,8 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/App.tsx | `AppProviders`, `App` | ConfigProvider(vi_VN) → AntApp → QueryClientProvider |
 | web/src/main.tsx | — | dayjs locale vi, render App |
 | web/src/test/setup.ts | — | jest-dom, polyfill matchMedia/ResizeObserver, dọn localStorage |
+| web/src/shared/format.ts | `formatVnd`, `formatDate`, `formatDateTime` | Tiền `1.200.000 ₫`, ngày DD/MM/YYYY, null → "Trọn đời" |
+| web/src/shared/validators.ts | `normalizeMachineId`, `isValidMachineId`, `isValidTaxCode`, `isValidPhone`, `MACHINE_ID_MESSAGE` | Kiểm tra mã máy 16 hex, MST, SĐT |
 
 ## Nhật ký sửa đổi
 
@@ -75,3 +77,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | Task | File:dòng | Thay đổi | Lý do |
 |---|---|---|---|
 | T-001.1 | web/ (mới) | Khung Vite + React 18 + antd 5 + Vitest + ESLint | Nền cho mọi màn hình |
+| T-001.2 | web/src/shared/format.ts, validators.ts (mới) | Hàm định dạng và kiểm tra | Dùng chung cho mọi màn hình và mockDb |
