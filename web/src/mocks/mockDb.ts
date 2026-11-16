@@ -1,12 +1,15 @@
 import dayjs from 'dayjs';
 import type {
   Activation,
+  AdminLicense,
+  AdminLicenseDetail,
   AdminOrder,
   AppRelease,
   AuthResponse,
   BankSettings,
   ChangePasswordInput,
   License,
+  LicenseDetail,
   LicenseStatus,
   LoginInput,
   Order,
@@ -18,20 +21,14 @@ import type {
   RegisterInput,
   User,
 } from '../api/types';
+import { MockError } from './errors';
+import * as lic from './licenses';
 import { createSeed } from './seed';
 
-export const STORAGE_KEY = 'etax-mockdb-v1';
+export { MockError } from './errors';
+export { effectiveLicenseStatus, toPublicLicense } from './licenses';
 
-export class MockError extends Error {
-  status: number;
-  code: string;
-  constructor(status: number, code: string, message: string) {
-    super(message);
-    this.name = 'MockError';
-    this.status = status;
-    this.code = code;
-  }
-}
+export const STORAGE_KEY = 'etax-mockdb-v1';
 
 /** Mật khẩu lưu thô, chỉ dùng cho giả lập. */
 export interface DbState {
@@ -66,9 +63,17 @@ export interface MockDb {
   adminListOrders(f: { status?: OrderStatus; q?: string }): AdminOrder[];
   adminConfirmOrder(adminId: string, id: string, note?: string): { order: Order; license: License };
   adminCancelOrder(id: string, note?: string): Order;
+  listLicenses(userId: string): License[];
+  getLicense(userId: string, id: string): LicenseDetail;
+  addActivation(userId: string, licenseId: string, i: { machineId: string; machineName: string }): Activation;
+  removeActivation(userId: string, licenseId: string, actId: string): void;
+  adminListLicenses(f: { status?: LicenseStatus; q?: string }): AdminLicense[];
+  adminGetLicense(id: string): AdminLicenseDetail;
+  revokeLicense(id: string): License;
+  extendLicense(id: string, months: number): License;
 }
 
-type StoredLicense = DbState['licenses'][number];
+type StoredLicense = lic.StoredLicense;
 
 export function buildQrUrl(bank: BankSettings, amount: number, content: string): string {
   return `https://img.vietqr.io/image/${bank.bankBin}-${bank.accountNo}-compact2.png?amount=${amount}&addInfo=${content}&accountName=${encodeURIComponent(bank.accountName)}`;
@@ -77,16 +82,6 @@ export function buildQrUrl(bank: BankSettings, amount: number, content: string):
 /** R5: đơn pending quá hạn được coi là expired khi đọc, không ghi lại. */
 export function effectiveOrderStatus(o: Order, now: Date): OrderStatus {
   return o.status === 'pending' && new Date(o.expiresAt).getTime() < now.getTime() ? 'expired' : o.status;
-}
-
-/** Dựng License công khai: R7 (active quá hạn thì expired) và activeMachines tính khi đọc. */
-export function toPublicLicense(s: DbState, l: StoredLicense, now: Date): License {
-  const expired = l.status === 'active' && l.expiresAt !== null && new Date(l.expiresAt).getTime() < now.getTime();
-  return {
-    ...l,
-    status: expired ? 'expired' : l.status,
-    activeMachines: s.activations.filter((a) => a.licenseId === l.id && a.revokedAt === null).length,
-  };
 }
 
 const normEmail = (e: string) => e.trim().toLowerCase();
@@ -387,12 +382,45 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
       };
       s.licenses.push(license);
       save(s);
-      return { order: viewOrder(o), license: toPublicLicense(s, license, now()) };
+      return { order: viewOrder(o), license: lic.toPublicLicense(s, license, now()) };
     },
 
     adminCancelOrder(id, note) {
       const s = load();
       return cancel(s, findOrder(s, id), note);
+    },
+
+    listLicenses: (userId) => lic.listLicenses(load(), now(), userId),
+    getLicense: (userId, id) => lic.getLicense(load(), now(), userId, id),
+
+    addActivation(userId, licenseId, i) {
+      const s = load();
+      const act = lic.addActivation(s, now(), userId, licenseId, i);
+      save(s);
+      return act;
+    },
+
+    removeActivation(userId, licenseId, actId) {
+      const s = load();
+      lic.removeActivation(s, now(), userId, licenseId, actId);
+      save(s);
+    },
+
+    adminListLicenses: (f) => lic.adminListLicenses(load(), now(), f),
+    adminGetLicense: (id) => lic.adminGetLicense(load(), now(), id),
+
+    revokeLicense(id) {
+      const s = load();
+      const l = lic.revokeLicense(s, now(), id);
+      save(s);
+      return l;
+    },
+
+    extendLicense(id, months) {
+      const s = load();
+      const l = lic.extendLicense(s, now(), id, months);
+      save(s);
+      return l;
     },
   };
 }
