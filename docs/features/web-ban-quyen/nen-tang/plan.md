@@ -399,7 +399,7 @@
     - Thao tác `void` trả `new HttpResponse(null, {status: 204})`.
     - `POST /auth/forgot-password` luôn 204.
   - `browser.ts`: `export const mockDb = createMockDb(localStorage)`, `export const worker = setupWorker(...createHandlers(mockDb, { delayMs: 300 }))`.
-  - `test/server.ts`: `useMockServer(): { db: () => MockDb }`. Hàm này đăng ký `beforeAll(listen({onUnhandledRequest:'error'}))`, `beforeEach` tạo db mới trên `createMemoryStorage()` rồi `server.resetHandlers(...createHandlers(db))`, và `afterAll(close)`.
+  - `test/server.ts`: `setupMockServer(): { db: () => MockDb }`. Hàm này đăng ký `beforeAll(listen({onUnhandledRequest:'error'}))`, `beforeEach` tạo db mới trên `createMemoryStorage()` rồi `server.resetHandlers(...createHandlers(db))`, và `afterAll(close)`.
   - Hàm API, mỗi hàm một dòng `apiFetch`, đúng bảng API của spec:
     - `auth.ts`: `register(i)`, `login(i)`, `getMe()`, `forgotPassword(email)`, `updateProfile(i)`, `changePassword(i)`.
     - `plans.ts`: `getPlans()`, `getAppLatest()`.
@@ -414,7 +414,7 @@
       - `getBankSettings()`, `saveBankSettings(b)`, `getAppSettings()`, `saveAppSettings(a)`.
       - Query string tạo bằng `URLSearchParams`, bỏ tham số rỗng.
 
-- [ ] **Step 1: Viết test `api.test.ts`.** Dùng `useMockServer()` và `configureClient({getToken: () => token, onUnauthorized: vi.fn()})`.
+- [ ] **Step 1: Viết test `api.test.ts`.** Dùng `setupMockServer()` và `configureClient({getToken: () => token, onUnauthorized: vi.fn()})`.
   - Chưa đăng nhập: `getPlans()` có 4 phần tử. `getOrders()` reject `401 UNAUTHORIZED`.
   - `login` khách rồi `createOrder('p6')` cho `amount 500000`. Sau đó `getOrders()` có 3 phần tử.
   - Khách gọi `getStats()` thì reject `403 FORBIDDEN`.
@@ -437,7 +437,7 @@
 - Test: `web/src/auth/auth.test.ts`, `web/src/features/auth/auth-pages.test.tsx`
 
 **Interfaces:**
-- Consumes: `api/auth.ts`, `configureClient` (Task 3, 8), validators (Task 2), `useMockServer` (Task 8).
+- Consumes: `api/auth.ts`, `configureClient` (Task 3, 8), validators (Task 2), `setupMockServer` (Task 8).
 - Produces:
   - `loadSession(): {token: string; user: User} | null`: JSON hỏng thì xoá key và trả `null`.
   - `saveSession(s)`, `clearSession()`
@@ -561,7 +561,7 @@
     - `testDir: 'tests/e2e'`, `use.baseURL 'http://localhost:5174'`, chỉ project `chromium`;
     - `webServer: { command: 'npm run dev -- --port 5174 --strictPort', url: 'http://localhost:5174', reuseExistingServer: true }`.
 
-- [ ] **Step 1: Viết test `router.test.tsx`.** Dùng `createMemoryRouter(routes, {initialEntries})`, `AppProviders`, `useMockServer`.
+- [ ] **Step 1: Viết test `router.test.tsx`.** Dùng `createMemoryRouter(routes, {initialEntries})`, `AppProviders`, `setupMockServer`.
   - `/khong-co` thì thấy "Không tìm thấy trang".
   - `/bang-gia` thì thấy header "E-Tax" và nút "Đăng nhập".
   - Sau khi `saveSession` khách (dùng `login` từ mockDb), `/tai-khoan/ban-quyen` hiện menu "Bản quyền" ở trạng thái chọn (`.ant-menu-item-selected` chứa "Bản quyền") và ComingSoon "Bản quyền".

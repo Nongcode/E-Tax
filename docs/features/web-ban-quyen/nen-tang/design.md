@@ -83,6 +83,11 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/mocks/browser.ts | `mockDb`, `worker` | Giả lập trong trình duyệt (localStorage, trễ 300ms) |
 | web/src/api/{auth,plans,orders,licenses,admin}.ts | mỗi endpoint một hàm | Lớp gọi API cho màn hình |
 | web/src/test/server.ts | `setupMockServer()` | MSW setupServer + mockDb mới cho mỗi test |
+| web/src/auth/session.ts | `loadSession`, `saveSession`, `clearSession` | Phiên `{token,user}` ở localStorage `etax-session` |
+| web/src/auth/AuthProvider.tsx, context.ts | `AuthProvider`, `useAuth` | login/register/logout/refreshMe; 401 có token → xoá phiên, cảnh báo, về /dang-nhap?next=… |
+| web/src/auth/guards.tsx, redirect.ts | `RequireAuth`, `RequireRole`, `safeNext` | Bảo vệ route theo đăng nhập/vai trò; chỉ chuyển tới đường dẫn nội bộ |
+| web/src/features/auth/*.tsx | `LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `AuthCard` | Trang đăng nhập/đăng ký/quên mật khẩu (Card 400px) |
+| web/src/pages/ForbiddenPage.tsx | `ForbiddenPage` | Trang 403 (bản tối thiểu, hoàn thiện ở T-001.10) |
 
 ## Nhật ký sửa đổi
 
@@ -98,3 +103,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.6 | web/src/mocks/licenses.ts, errors.ts (mới), mockDb.ts | Bản quyền, thêm/gỡ máy, gia hạn, thu hồi | Tách file cho gọn mockDb.ts |
 | T-001.7 | web/src/mocks/admin.ts, views.ts (mới), mockDb.ts | Khách hàng, khoá/mở, số liệu tháng | Trang quản trị |
 | T-001.8 | web/src/mocks/handlers.ts, browser.ts, web/src/api/*.ts, web/src/test/server.ts, web/public/mockServiceWorker.js (mới) | Nối mockDb với hợp đồng API | Màn hình gọi API thật sự qua MSW |
+| T-001.9 | web/src/auth/, web/src/features/auth/, web/src/pages/ForbiddenPage.tsx (mới); web/src/api/client.ts, App.tsx | Phiên đăng nhập, bảo vệ route, 3 trang xác thực; 401 muộn sau đăng xuất bị bỏ qua; đăng xuất về '/' | Nền cho khu tài khoản và quản trị |

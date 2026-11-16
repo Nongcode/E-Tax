@@ -10,10 +10,10 @@
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Nền tảng web |
 | Bước Superpowers | subagent-driven-development (người dùng chọn 2026-11-16) |
-| Task đang làm | T-001.9 |
-| **Bước tiếp theo** | T-001.9 Phiên đăng nhập, bảo vệ route, trang đăng nhập/đăng ký |
+| Task đang làm | T-001.10 |
+| **Bước tiếp theo** | T-001.10 Thành phần dùng chung, 404/403, ErrorBoundary |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-16 23:51 |
+| Cập nhật lần cuối | 2026-11-17 00:01 |
 | Ghi chú dở dang | Sổ SDD: `.superpowers/sdd/plan/progress.md` (git-ignored) |
 
 ## File chính
@@ -39,8 +39,8 @@
 | T-001.6 | mockDb: bản quyền và máy | ✅ DONE | ✅ vitest 62/62, lint, build. Bỏ qua Playwright: chưa có màn hình | 9c409d7, review sạch |
 | T-001.7 | mockDb: khách hàng và số liệu (admin) | ✅ DONE | ✅ vitest 69/69, lint, build. Bỏ qua Playwright: chưa có màn hình | f2bbfad, review sạch |
 | T-001.8 | MSW handlers và các hàm `api/*` | ✅ DONE | ✅ vitest 75/75, lint, build. Bỏ qua Playwright: chưa có màn hình | 9d510ff, 968a85d (đổi tên setupMockServer), review sạch |
-| T-001.9 | Phiên đăng nhập, bảo vệ route, trang đăng nhập/đăng ký/quên mật khẩu | 🔄 DOING | | |
-| T-001.10 | Thành phần dùng chung, 404/403, ErrorBoundary | ⬜ TODO | | |
+| T-001.9 | Phiên đăng nhập, bảo vệ route, trang đăng nhập/đăng ký/quên mật khẩu | ✅ DONE | ✅ vitest 92/92, lint, build. Playwright để T-001.11 (chưa có router/dev server) | 5f8019a, 433b234 (sửa 401 muộn, đăng xuất), review sạch |
+| T-001.10 | Thành phần dùng chung, 404/403, ErrorBoundary | 🔄 DOING | | |
 | T-001.11 | Layout, router, công cụ dev, e2e TC-05 | ⬜ TODO | | Playwright + ảnh chụp |
 
 ## Kết quả test gần nhất
@@ -55,6 +55,7 @@
 | 2026-11-16 23:44 | `npm run test && npm run lint && npm run build` (T-001.6) | ✅ 62/62, lint, build OK | |
 | 2026-11-16 23:46 | `npm run test && npm run lint && npm run build` (T-001.7) | ✅ 69/69, lint, build OK | |
 | 2026-11-16 23:51 | `npm run test && npm run lint && npm run build` (T-001.8) | ✅ 75/75, lint, build OK | |
+| 2026-11-17 00:01 | `npm run test && npm run lint && npm run build` (T-001.9) | ✅ 92/92, lint, build OK | |
 
 ## Nhật ký phiên
 
@@ -68,3 +69,4 @@
 - 2026-11-16 23:44 — T-001.6 xong (9c409d7): 10 test bản quyền (R7–R15, mã máy có khoảng trắng/chữ thường). Tách licenses.ts, errors.ts.
 - 2026-11-16 23:46 — T-001.7 xong (f2bbfad): 7 test admin (R19, khoá → R3/R20, số liệu tháng). mockDb hoàn tất R1–R20.
 - 2026-11-16 23:51 — T-001.8 xong (9d510ff, 968a85d): 34 handler khớp bảng API, 6 test qua MSW. Đổi tên useMockServer → setupMockServer để không vướng luật react-hooks.
+- 2026-11-17 00:01 — T-001.9 xong (5f8019a, 433b234): phiên đăng nhập, RequireAuth/RequireRole, 3 trang xác thực. Review: 3 lỗi Important (401 muộn sau đăng xuất, đăng xuất về /dang-nhap, thiếu test hết phiên) đã sửa.
