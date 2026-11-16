@@ -63,6 +63,8 @@ namespace E_Tax
                 lblDownloadStatus,
                 AppendLog);
 
+            StyleMainGrid();
+
             panelLogin.Visible = true;
             panelSearch.Visible = false;
 
@@ -94,6 +96,19 @@ namespace E_Tax
             _notes.Load();
             dgvMain.AutoGenerateColumns = false;
             await LoadCaptchaAsync();
+        }
+
+        /// <summary>
+        /// dgvMain cấu hình cột trong Designer nên không đi qua GridColumnHelper — áp theme và định dạng tiền ở đây.
+        /// </summary>
+        private void StyleMainGrid()
+        {
+            UiTheme.StyleGrid(dgvMain);
+            foreach (var column in new[] { colDgvTienChuaThue, colDgvTienThue, colDgvTongTien })
+            {
+                column.DefaultCellStyle.Format = "#,##0";
+                column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            }
         }
 
         #region Cửa sổ

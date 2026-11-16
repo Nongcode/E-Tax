@@ -11,9 +11,7 @@ namespace E_Tax
         public static void ApplyDefaultStyle(DataGridView dgv)
         {
             dgv.AutoGenerateColumns = false;
-            dgv.DefaultCellStyle.Font = new Font("Segoe UI", 9);
-            dgv.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-            dgv.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(240, 240, 240);
+            UiTheme.StyleGrid(dgv);
             dgv.Columns.Clear();
         }
 

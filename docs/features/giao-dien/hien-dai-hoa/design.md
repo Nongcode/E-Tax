@@ -70,4 +70,8 @@ Prototype: `index.html`, tab "Giao diện".
 | T-001.1 | `E-Tax.Tests/WindowSettingsTests.cs` (mới) | 6 test | TDD |
 | T-001.2 | `E-Tax/Form1.Designer.cs:L384`, `:L1001` | `panelSearch.Anchor` 4 cạnh; `FormBorderStyle = Sizable` | Co giãn theo cửa sổ |
 | T-001.2 | `E-Tax/Form1.cs:L69-L73` (constructor) | `MinimumSize = Size`; `RestoreWindowBounds()`; `Resize → CenterLoginPanel`; `FormClosing → SaveWindowBounds` | Khôi phục trước khi form hiện |
+| T-001.3 | `E-Tax/UiTheme.cs` (mới) | Hằng màu `Accent/HeaderText/GridLine/RowAlt/Selection/SelectionText`; `StyleGrid(dgv)`: tiêu đề 34px khoá, nền Accent; dòng 28px; kẻ ngang; không viền; padding ngang 6px; Segoe UI 9 | Style dùng chung |
+| T-001.3 | `E-Tax/GridColumnHelper.cs:L14` `ApplyDefaultStyle` | Gọi `UiTheme.StyleGrid` thay cho font/màu xen kẽ cũ | `dgvDetails`, `dgvMua`, `dgvBan`, `dgvVatNop`, `dgvGiamThue` nhận theme qua đây |
+| T-001.3 | `E-Tax/Form1.cs:L66`, `:L101-L113` `StyleMainGrid` | `UiTheme.StyleGrid(dgvMain)`; 3 cột tiền `#,##0` căn phải | `dgvMain` cấu hình trong Designer |
+| T-001.3 | `E-Tax.Tests/UiThemeTests.cs` (mới) | `StyleGrid_AppliesTheme`, `ApplyDefaultStyle_UsesTheme` | TDD |
 | T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |
