@@ -88,6 +88,12 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/auth/guards.tsx, redirect.ts | `RequireAuth`, `RequireRole`, `safeNext` | Bảo vệ route theo đăng nhập/vai trò; chỉ chuyển tới đường dẫn nội bộ |
 | web/src/features/auth/*.tsx | `LoginPage`, `RegisterPage`, `ForgotPasswordPage`, `AuthCard` | Trang đăng nhập/đăng ký/quên mật khẩu (Card 400px) |
 | web/src/pages/ForbiddenPage.tsx | `ForbiddenPage` | Trang 403 (bản tối thiểu, hoàn thiện ở T-001.10) |
+| web/src/shared/components/CopyField.tsx | `CopyField` | Hiện giá trị + nút "Sao chép"; báo "Đã sao chép" / lỗi clipboard |
+| web/src/shared/components/StatusTag.tsx | `StatusTag` | Nhãn trạng thái đơn/bản quyền theo bảng màu |
+| web/src/shared/components/PageHeader.tsx | `PageHeader` | Tiêu đề trang, nút quay lại, `extra` |
+| web/src/shared/components/QueryState.tsx | `QueryState` | Đang tải (cả query chưa chạy) / lỗi + "Thử lại" / trống / dữ liệu |
+| web/src/shared/ErrorBoundary.tsx | `ErrorBoundary` | Bắt lỗi render, nút "Tải lại trang" |
+| web/src/pages/NotFoundPage.tsx, ForbiddenPage.tsx | `NotFoundPage`, `ForbiddenPage` | Trang 404 / 403, nút "Về trang chủ" |
 
 ## Nhật ký sửa đổi
 
@@ -104,3 +110,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.7 | web/src/mocks/admin.ts, views.ts (mới), mockDb.ts | Khách hàng, khoá/mở, số liệu tháng | Trang quản trị |
 | T-001.8 | web/src/mocks/handlers.ts, browser.ts, web/src/api/*.ts, web/src/test/server.ts, web/public/mockServiceWorker.js (mới) | Nối mockDb với hợp đồng API | Màn hình gọi API thật sự qua MSW |
 | T-001.9 | web/src/auth/, web/src/features/auth/, web/src/pages/ForbiddenPage.tsx (mới); web/src/api/client.ts, App.tsx | Phiên đăng nhập, bảo vệ route, 3 trang xác thực; 401 muộn sau đăng xuất bị bỏ qua; đăng xuất về '/' | Nền cho khu tài khoản và quản trị |
+| T-001.10 | web/src/shared/components/, ErrorBoundary.tsx, pages/NotFoundPage.tsx (mới); pages/ForbiddenPage.tsx | Thành phần dùng chung và trang lỗi; QueryState coi query chưa chạy là đang tải | Dùng lại ở mọi màn hình |
