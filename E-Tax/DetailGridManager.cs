@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -60,9 +59,7 @@ namespace E_Tax
     /// </summary>
     public class DetailGridManager
     {
-        private const int ProductPageSize = 50;
-
-        private readonly HttpClient _client;
+        private readonly InvoiceDetailService _detailService;
         private readonly DataGridView _dgvDetails;
         private readonly DataGridView _dgvMua;
         private readonly DataGridView _dgvBan;
@@ -70,13 +67,12 @@ namespace E_Tax
         private readonly ProgressBar _progressBar;
         private readonly Label _statusLabel;
         private readonly Action<string> _logAction;
-        private string _jwtToken;
 
-        public DetailGridManager(HttpClient client, DataGridView dgvDetails, DataGridView dgvMua,
+        internal DetailGridManager(InvoiceDetailService detailService, DataGridView dgvDetails, DataGridView dgvMua,
             DataGridView dgvBan, DataGridView dgvVatNop, ProgressBar progressBar, Label statusLabel,
             Action<string> logAction)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
+            _detailService = detailService ?? throw new ArgumentNullException(nameof(detailService));
             _dgvDetails = dgvDetails ?? throw new ArgumentNullException(nameof(dgvDetails));
             _dgvMua = dgvMua ?? throw new ArgumentNullException(nameof(dgvMua));
             _dgvBan = dgvBan ?? throw new ArgumentNullException(nameof(dgvBan));
@@ -89,12 +85,6 @@ namespace E_Tax
             ConfigureFullDetailGrid(_dgvMua);
             ConfigureFullDetailGrid(_dgvBan);
             ConfigureVatNopGrid(_dgvVatNop);
-        }
-
-        public void SetJwtToken(string token)
-        {
-            _jwtToken = token;
-            _logAction("🔑 Token đã được cập nhật cho DetailGridManager.");
         }
 
         private static void ApplyReadOnlyStyle(DataGridView dgv)
@@ -143,14 +133,9 @@ namespace E_Tax
             GridColumnHelper.AddNumericColumn(dgv, "colVatTienThue", "Tiền thuế", nameof(InvoiceDetailItem.TienThueGTGT), 150, "#,##0");
         }
 
-        private void StepProgress()
-        {
-            if (_progressBar.Value < _progressBar.Maximum) _progressBar.PerformStep();
-        }
-
         /// <summary>
-        /// Gọi API chi tiết cho từng hóa đơn (có phân trang sản phẩm) và bind kết quả vào 4 lưới.
-        /// Phải được gọi từ UI thread.
+        /// Tải chi tiết (song song có giới hạn, có cache) cho danh sách hóa đơn và bind kết quả vào 4 lưới.
+        /// Dòng hàng được dựng theo đúng thứ tự danh sách để STT ổn định. Phải được gọi từ UI thread.
         /// </summary>
         public async Task PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
         {
@@ -173,59 +158,49 @@ namespace E_Tax
                 return;
             }
 
-            if (string.IsNullOrEmpty(_jwtToken))
+            int total = invoiceHeaders.Count;
+            _logAction($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {total} hóa đơn (tối đa {InvoiceDetailService.MaxConcurrency} request đồng thời)...");
+            var allPages = await _detailService.PrefetchAsync(invoiceHeaders, done =>
             {
-                _logAction("❌ (Detail Mgr) Lỗi: JWT Token chưa được cung cấp.");
-                _statusLabel.Text = "Lỗi: Chưa đăng nhập.";
-                _progressBar.Visible = false;
-                return;
-            }
+                _progressBar.Value = Math.Min(done, _progressBar.Maximum);
+                _statusLabel.Text = $"Đang tải chi tiết HĐ ({done}/{total})...";
+            });
 
-            _logAction($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {invoiceHeaders.Count} hóa đơn...");
             var allDetailItems = new List<InvoiceDetailItem>();
             var boughtDetailItems = new List<InvoiceDetailItem>();
             var soldDetailItems = new List<InvoiceDetailItem>();
-            int currentInvoiceIndex = 0;
             int globalStt = 1;
 
-            foreach (var invoiceHeader in invoiceHeaders)
+            for (int i = 0; i < total; i++)
             {
-                currentInvoiceIndex++;
-                _statusLabel.Text = $"Đang tải chi tiết HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count})...";
-
+                var invoiceHeader = invoiceHeaders[i];
                 if (invoiceHeader == null || !invoiceHeader.HasLookupKeys())
                 {
                     _logAction($"⚠️ (Detail Mgr) Bỏ qua HĐ {invoiceHeader?.Id} do thiếu thông tin.");
-                    StepProgress();
                     continue;
                 }
 
-                int currentPage = 0;
-                bool keepFetchingDetails = true;
+                var pages = allPages[i];
+                if (pages == null)
+                {
+                    _logAction($"  -> ❌ (Detail Mgr) Không lấy được chi tiết HĐ {invoiceHeader.So_hoa_don}.");
+                    continue;
+                }
+
                 try
                 {
-                    while (keepFetchingDetails)
+                    foreach (string jsonDetail in pages)
                     {
-                        _statusLabel.Text = $"Tải HĐ ({currentInvoiceIndex}/{invoiceHeaders.Count}), SP trang {currentPage + 1}...";
-
-                        string jsonDetail = await GetInvoiceDetailInternalAsync(invoiceHeader, currentPage, ProductPageSize);
-                        if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
-                        {
-                            _logAction($"  -> ❌ (Detail Mgr) Lỗi lấy chi tiết HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}): {jsonDetail}");
-                            break;
-                        }
-
                         using JsonDocument doc = JsonDocument.Parse(jsonDetail);
                         JsonElement root = InvoiceJson.GetDataElement(doc.RootElement);
                         JsonElement? productArray = InvoiceJson.FindProductArray(root);
 
                         if (!productArray.HasValue || productArray.Value.GetArrayLength() == 0)
                         {
-                            _logAction($"  -> ℹ️ (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} (Trang {currentPage + 1}) không có sản phẩm (hdhhdvu).");
-                            break;
+                            _logAction($"  -> ℹ️ (Detail Mgr) HĐ {invoiceHeader.So_hoa_don} không có sản phẩm (hdhhdvu).");
+                            continue;
                         }
 
-                        int productsFoundOnThisPage = productArray.Value.GetArrayLength();
                         foreach (var product in productArray.Value.EnumerateArray())
                         {
                             if (product.ValueKind != JsonValueKind.Object) continue;
@@ -238,16 +213,6 @@ namespace E_Tax
                             else
                                 soldDetailItems.Add(detailItem);
                         }
-
-                        if (productsFoundOnThisPage < ProductPageSize)
-                        {
-                            keepFetchingDetails = false;
-                        }
-                        else
-                        {
-                            currentPage++;
-                            await Task.Delay(100);
-                        }
                     }
                 }
                 catch (JsonException jsonEx)
@@ -258,9 +223,6 @@ namespace E_Tax
                 {
                     _logAction($"❌ (Detail Mgr) Lỗi khác khi xử lý HĐ {invoiceHeader.So_hoa_don}: {ex}");
                 }
-
-                StepProgress();
-                await Task.Delay(500);
             }
 
             try
@@ -314,35 +276,6 @@ namespace E_Tax
                 HanSuDung = GetString(product, "hsd"),
                 GhiChuSanPham = GetString(product, "ghichu")
             };
-        }
-
-        private async Task<string> GetInvoiceDetailInternalAsync(SearchResult invoice, int page, int size)
-        {
-            try
-            {
-                string url = GdtApi.BuildDetailUrl(invoice.Ma_so_thue, invoice.Ky_hieu_hoa_don,
-                    invoice.So_hoa_don!.Value, invoice.Ky_hieu_ma_so!.Value, page, size);
-                using var req = GdtApi.CreateRequest(HttpMethod.Get, url, "application/json", _jwtToken);
-
-                var response = await _client.SendAsync(req);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logAction($"❌ (Detail Mgr) Lỗi API chi tiết HĐ {invoice.So_hoa_don}: {response.StatusCode} - {jsonResponse}");
-                    return $"❌ Lỗi từ API ({response.StatusCode}): {jsonResponse}";
-                }
-                return jsonResponse;
-            }
-            catch (HttpRequestException httpEx)
-            {
-                _logAction($"❌ (Detail Mgr) Lỗi HTTP khi lấy chi tiết HĐ {invoice.So_hoa_don}: {httpEx.Message}");
-                return $"❌ Lỗi kết nối: {httpEx.Message}";
-            }
-            catch (Exception ex)
-            {
-                _logAction($"❌ (Detail Mgr) Lỗi khác khi lấy chi tiết HĐ {invoice.So_hoa_don}: {ex}");
-                return $"❌ Lỗi hệ thống: {ex.Message}";
-            }
         }
 
         private static string GetString(JsonElement element, string propertyName)

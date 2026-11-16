@@ -34,7 +34,8 @@ E-Tax/
 ├── Program.cs                 # Entry point → Application.Run(new Form1())
 ├── Form1.cs        (~2130 dòng) # Logic chính: login, search, export, download, print, notes, blacklist (chia #region)
 ├── Form1.Designer.cs (~1050)  # Layout UI (panelLogin, panelActivation, panelSearch, tabControlMain, ...)
-├── DetailGridManager.cs (~390)# Lấy chi tiết hàng hóa của từng HĐ, đổ vào 4 lưới chi tiết; class InvoiceDetailItem
+├── DetailGridManager.cs (~320)# Dựng dòng hàng từ InvoiceDetailService, đổ vào 4 lưới chi tiết; class InvoiceDetailItem
+├── InvoiceDetailService.cs   # API detail: phân trang SP (50/trang), cache theo Id, song song tối đa 3 request, thử lại 429/5xx
 ├── SearchResult.cs            # enum InvoiceType, SearchResult (+ HasLookupKeys(), FileIdentifier), SearchResponse
 ├── GdtApi.cs                  # Hằng URL/User-Agent; CreateRequest(...) set header chung; BuildDetailUrl(...)
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
@@ -47,6 +48,7 @@ E-Tax/
 ├── ProcessingForm.cs          # Form "đang xử lý" (ControlBox=false), có UpdateStatus(string)
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
 └── Properties/Resources.*     # Resource mặc định
+E-Tax.Tests/                   # xUnit: NotesStoreTests, InvoiceDetailServiceTests (+ FakeHttpHandler giả HTTP)
 ```
 
 Các `#region` trong `Form1.cs`: Đăng nhập & bản quyền · Gọi API hóa đơn · Excel & PDF · Tìm kiếm & lọc ·
@@ -63,7 +65,7 @@ Mọi request tạo qua `GdtApi.CreateRequest(method, url, accept, jwtToken?, wi
 | `security-taxpayer/authenticate` | POST | `LoginAsync` | Body `{username, password, cvalue, ckey}` → token từ cookie `jwt` hoặc field `token` |
 | `query/invoices/sold` | GET | `FetchSearchPageAsync` | HĐ bán ra |
 | `query/invoices/purchase` | GET | `FetchSearchPageAsync` | HĐ mua vào (thêm `;ttxly==5` vào search) |
-| `query/invoices/detail` | GET | `GetInvoiceDetailAsync` (Form1), `GetInvoiceDetailInternalAsync` (DetailGridManager) | URL từ `GdtApi.BuildDetailUrl` (+ `page,size` trong DetailGridManager) → mảng hàng hóa `hdhhdvu` (`InvoiceJson.FindProductArray`) |
+| `query/invoices/detail` | GET | `GetInvoiceDetailAsync` (Form1), `InvoiceDetailService.GetDetailPagesAsync` (lưới chi tiết) | URL từ `GdtApi.BuildDetailUrl` (+ `page,size=50` trong service) → mảng hàng hóa `hdhhdvu` (`InvoiceJson.FindProductArray`) |
 | `query/invoices/export-xml` | GET | `DownloadSingleInvoiceZipAsync` | Trả file ZIP (XML + HTML/PDF thể hiện) |
 
 Query string tạo bởi `BuildSearchQuery(from, to, type, page, size)`:
@@ -99,7 +101,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 ## 5. Luồng chức năng (UI → hàm xử lý)
 
 ### 5.1 Khởi động & bản quyền
-`Form1()` → tạo `HttpClient` (CookieContainer), `DetailGridManager`, cấu hình lưới giảm thuế.
+`Form1()` → tạo `HttpClient` (CookieContainer), `InvoiceDetailService` (token lấy qua `() => jwtToken`), `DetailGridManager`, cấu hình lưới giảm thuế.
 `Form1_Load` → `CheckForLicense()` → `LoadNotesFromFile()` → `LoadCaptchaAsync()`.
 
 `LicenseManager` (Registry `HKCU\Software\ETaxDemoApp`):
@@ -109,7 +111,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 - `Activate(key)` so sánh với hằng `MasterActivationKey` (hard-code trong `LicenseManager.cs`)
 
 ### 5.2 Đăng nhập
-`btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer, gọi `_detailGridManager.SetJwtToken`. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
+`btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
 
 ### 5.3 Tìm kiếm (`btnLeftSearch_Click`) — chức năng trung tâm
 Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`.
@@ -117,11 +119,12 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
    chia lát 30 ngày; mỗi lát lặp trang (size 50) cho Bán ra / Mua vào độc lập (`FetchSearchPageAsync` trả false khi hết trang hoặc lỗi).
 2. Gắn `Loai_hoa_don = "Bán ra"/"Mua vào"`, dedupe theo `Id`, sort `Ngay_lap` desc, `So_hoa_don` asc → `_latestResults`. Trang lỗi gom vào `FailedChunks`.
 3. `BindMainGrid()` bind `dgvMain` (tab **Tổng hợp**); bind `dgvGiamThue` (tab có text **"VAT nộp"**).
-4. `DetailGridManager.PopulateDetailGridAsync` → gọi `detail` cho **từng** HĐ (delay 500ms/HĐ) → bind:
+4. `DetailGridManager.PopulateDetailGridAsync` → `InvoiceDetailService.PrefetchAsync` (song song tối đa `MaxConcurrency = 3`, không delay cố định; progress qua `onCompleted`) → dựng dòng **theo thứ tự danh sách** (STT ổn định) từ mọi trang → bind:
    - `dgvDetails` (tab **Chi tiết**) — tất cả dòng hàng
    - `dgvMua` (tab **Bk mua**) — dòng của HĐ "Mua vào"
    - `dgvBan` (tab **BK bán**) — còn lại
    - `dgvVatNop` (tab có text **"Bảng kê Thuế"**) — tất cả, ít cột
+   Đầu `btnLeftSearch_Click` gọi `_detailService.ClearCache()`; trong phiên tìm kiếm, chi tiết đã tải được dùng lại (cache theo `Id`, chỉ cache kết quả thành công đủ trang).
 5. Hiển thị `ProcessingForm` trong lúc chạy; `this.Enabled = false`.
 
 > Lưu ý tên: `tabVATNop` hiển thị "Bảng kê Thuế" (chứa `dgvVatNop`), còn `tabGiamThue` hiển thị "VAT nộp" (chứa `dgvGiamThue`). Tên biến và text bị lệch nhau.
@@ -165,7 +168,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 ### Bug / hành vi sai
 
 ### Hiệu năng
-- Chi tiết HĐ gọi tuần tự + `Task.Delay(500)` mỗi HĐ (DetailGridManager) → 1000 HĐ ≈ >8 phút chỉ riêng delay. Tìm kiếm luôn kéo chi tiết toàn bộ dù người dùng chỉ cần danh sách.
+- ✅ (2026-11-16) Chi tiết HĐ: bỏ gọi tuần tự + `Task.Delay(500)`/HĐ → `InvoiceDetailService` gọi song song tối đa 3 request, thử lại 429/5xx (1s, 2s). Còn lại: tìm kiếm luôn kéo chi tiết toàn bộ dù người dùng chỉ cần danh sách.
 - `SaveOriginalInvoicesAsync` gọi lại `detail` cho mọi HĐ (lần 2) để làm Excel chi tiết thay vì dùng dữ liệu đã có.
 - Chromium (~150MB) tải lúc runtime (cần Internet, lần đầu rất chậm). ✅ Đã dùng chung 1 trình duyệt cho cả lô.
 
@@ -181,7 +184,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 1. Sửa license EPPlus (hoặc chuyển ClosedXML), bỏ secret hard-code, cơ chế kích hoạt an toàn hơn.
 2. ✅ (2026-11-16) Ghi log ra file; sửa thông báo in và thông báo hoàn tất tìm kiếm.
 3. Tách lớp: `GdtApiClient` (captcha/login/search/detail/download + header chung), `InvoiceSearchService` (chia lát 30 ngày + phân trang, dùng chung cho Search & Tải gốc), `ExcelExporter`, `PdfService` (dùng chung 1 browser Puppeteer), `NotesStore`.
-4. Cache chi tiết HĐ đã lấy (theo `Id`) để Export/Tải gốc không gọi lại API; cân nhắc gọi song song có giới hạn (SemaphoreSlim 3–5) thay vì delay cố định.
+4. ✅ (2026-11-16) Cache chi tiết HĐ theo `Id` + gọi song song có giới hạn (`InvoiceDetailService`).
 5. ✅ (2026-11-16) Đã thêm `Loai_hoa_don` thay vì ghi đè `Thong_tin_lien_quan`.
 6. Dọn warning nullable còn lại.
 
@@ -189,6 +192,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 - Thêm cột cho lưới chi tiết: sửa `InvoiceDetailItem` + `ConfigureFullDetailGrid`/`ConfigureVatNopGrid` + `CreateDetailItem` (DetailGridManager.cs).
 - Thêm cột cho danh sách: `SearchResult` (SearchResult.cs) + cột `dgvMain` trong Designer (tên cột dạng `colDgv*`, `AutoGenerateColumns=false`) + `ExportSearchResultsToExcelAsync`.
 - Cột Excel chi tiết: chỉ sửa `InvoiceJson.DetailExportColumns` (dùng chung cho Excel 1 HĐ và Excel tổng hợp); cột số → `InvoiceJson.IsNumericColumn`.
+- Lấy chi tiết HĐ (phân trang, cache, retry, số request đồng thời): chỉ sửa `InvoiceDetailService` (hằng `ProductPageSize`, `MaxConcurrency`); test ở `E-Tax.Tests/InvoiceDetailServiceTests.cs`.
 - Logic search: chỉ sửa `SearchInvoicesAsync` / `FetchSearchPageAsync`.
 - Thêm NCC tra cứu: `BuildTraCuuLink` (switch theo `ngcnhat` lowercase).
 - Đổi điều kiện lọc HĐ mua vào: `BuildSearchQuery` (`;ttxly==5`).

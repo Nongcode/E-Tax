@@ -23,6 +23,7 @@ namespace E_Tax
         private readonly AppSettings _settings = AppSettings.Load(AppSettings.DefaultPath);
         private readonly CookieContainer cookieContainer = new CookieContainer();
         private readonly HttpClient client;
+        private readonly InvoiceDetailService _detailService;
         private readonly DetailGridManager _detailGridManager;
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
 
@@ -53,8 +54,9 @@ namespace E_Tax
                 BaseAddress = new Uri(GdtApi.BaseUrl)
             };
 
+            _detailService = new InvoiceDetailService(client, () => jwtToken, AppendLog);
             _detailGridManager = new DetailGridManager(
-                client,
+                _detailService,
                 dgvDetails,
                 dgvMua,
                 dgvBan,
@@ -205,8 +207,6 @@ namespace E_Tax
 
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
-
-                    _detailGridManager.SetJwtToken(jwtToken);
 
                     txtUser.Clear();
                     txtPass.Clear();
@@ -822,6 +822,7 @@ namespace E_Tax
                 return;
             }
 
+            _detailService.ClearCache();
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
