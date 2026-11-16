@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using E_Tax;
 
 namespace E_Tax.Tests
@@ -55,6 +55,31 @@ namespace E_Tax.Tests
             var settings = new WindowSettings(100, 50, 400, 300, false);
 
             Assert.Equal(new Rectangle(100, 50, 1000, 725), WindowSettings.Fit(settings, OneScreen, Minimum));
+        }
+
+        [Fact]
+        public void Fit_TitleBarAboveScreen_ReturnsNull()
+        {
+            // Phần thân còn chạm màn hình nhưng thanh tiêu đề ở ngoài → không kéo được cửa sổ
+            var settings = new WindowSettings(100, -600, 1280, 800, false);
+
+            Assert.Null(WindowSettings.Fit(settings, OneScreen, Minimum));
+        }
+
+        [Fact]
+        public void Fit_LargerThanScreen_ShrinksToWorkingArea()
+        {
+            var settings = new WindowSettings(0, 0, 3840, 2100, false);
+
+            Assert.Equal(new Rectangle(0, 0, 1920, 1040), WindowSettings.Fit(settings, OneScreen, Minimum));
+        }
+
+        [Fact]
+        public void ClampMinimum_SmallScreen_FitsWorkingArea()
+        {
+            // Laptop 1366x768: vùng làm việc cao ~728px
+            Assert.Equal(new Size(1000, 728), WindowSettings.ClampMinimum(new Size(1000, 747), new Rectangle(0, 0, 1366, 728)));
+            Assert.Equal(new Size(1000, 725), WindowSettings.ClampMinimum(new Size(1000, 725), new Rectangle(0, 0, 1920, 1040)));
         }
 
         [Fact]

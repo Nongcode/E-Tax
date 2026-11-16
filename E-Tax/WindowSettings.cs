@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Text.Json;
 
 namespace E_Tax
@@ -35,15 +35,30 @@ namespace E_Tax
         }
 
         /// <summary>
-        /// Vùng cửa sổ để khôi phục (không nhỏ hơn minimum), hoặc null nếu không giao với màn hình nào
-        /// (vd: màn hình phụ đã rút) — khi đó để cửa sổ mở giữa màn hình chính.
+        /// Kích thước tối thiểu không vượt vùng làm việc của màn hình (vd laptop 1366x768).
+        /// </summary>
+        public static Size ClampMinimum(Size design, Rectangle workingArea) =>
+            new(Math.Min(design.Width, workingArea.Width), Math.Min(design.Height, workingArea.Height));
+
+        /// <summary>
+        /// Vùng cửa sổ để khôi phục (không nhỏ hơn minimum, không lớn hơn màn hình chứa nó), hoặc null nếu
+        /// thanh tiêu đề không nằm trên màn hình nào (vd: màn hình phụ đã rút) — khi đó để cửa sổ mở giữa màn hình chính.
         /// </summary>
         public static Rectangle? Fit(WindowSettings settings, IReadOnlyList<Rectangle> workingAreas, Size minimum)
         {
-            var bounds = new Rectangle(settings.X, settings.Y,
-                Math.Max(settings.Width, minimum.Width), Math.Max(settings.Height, minimum.Height));
+            int width = Math.Max(settings.Width, minimum.Width);
+            int height = Math.Max(settings.Height, minimum.Height);
 
-            return workingAreas.Any(area => area.IntersectsWith(bounds)) ? bounds : null;
+            // Thanh tiêu đề phải thấy được thì mới kéo cửa sổ bằng chuột được
+            var titleBar = new Rectangle(settings.X, settings.Y, width, TitleBarHeight);
+            foreach (var area in workingAreas)
+            {
+                if (area.IntersectsWith(titleBar))
+                    return new Rectangle(settings.X, settings.Y, Math.Min(width, area.Width), Math.Min(height, area.Height));
+            }
+            return null;
         }
+
+        private const int TitleBarHeight = 30;
     }
 }

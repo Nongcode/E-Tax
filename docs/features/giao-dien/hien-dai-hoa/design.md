@@ -84,4 +84,8 @@ Prototype: `index.html`, tab "Giao diện".
 | T-001.5 | `E-Tax/Form1.cs:L101-L109` `Form1_Load`, `:L112-L158` `ShowDemoData` (`#if DEBUG`) | `ETAX_UI_DEMO=1` → 60 HĐ mẫu (30 bán/30 mua), bỏ đăng nhập, focus bảng; `=progress` → hiện thêm thanh tiến độ 24/60 | Chụp màn hình chính không cần cổng thuế; không có trong Release |
 | T-001.5 | `E-Tax/Form1.cs:L68-L69` | `downloadProgressBar`/`lblDownloadStatus.BringToFront()` | Sửa lỗi có sẵn: bị `mainSplitContainer` che |
 | T-001.5 | `E-Tax/Form1.cs:L166-L168` `StyleMainGrid` | `FullRowSelect`; `colDgvThongTinHD` `Fill`, tối thiểu 200 | Dòng chọn nổi bật; lấp chiều ngang khi phóng to |
+| T-001.6 | `E-Tax/WindowSettings.cs` `ClampMinimum`, `Fit` | Tối thiểu ≤ vùng làm việc; `Fit` đòi thanh tiêu đề 30px trên màn hình, thu kích thước về vùng làm việc | Fix review: laptop 1366×768, cửa sổ mất thanh tiêu đề |
+| T-001.6 | `E-Tax/Form1.Designer.cs` | `ClientSize` 984×686 (như cũ); `panelSearch`/`panelLogin` cao 649 → 627; `statusBar` y=664 | Cửa sổ 1000×725 |
+| T-001.6 | `E-Tax/Form1.cs:L75` | `MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea)` | |
+| T-001.6 | `E-Tax/Form1.cs:L928`, `:L989` | `UpdateInvoiceSummary(shown)` — khi lọc MST hiện "Lọc x/y HĐ — …" | Thanh trạng thái khớp bảng |
 | T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |

@@ -64,7 +64,6 @@ namespace E_Tax
             }
         }
 
-        /// <summary>Xác thực key; nếu hợp lệ thì lưu vào registry (giá trị <c>LicenseKey</c>).</summary>
         /// <summary>
         /// Ngày hết hạn dùng thử (UTC) đã lưu, hoặc null nếu chưa có / không đọc được.
         /// </summary>
@@ -82,6 +81,7 @@ namespace E_Tax
             return null;
         }
 
+        /// <summary>Xác thực key; nếu hợp lệ thì lưu vào registry (giá trị <c>LicenseKey</c>).</summary>
         public static LicenseKeyResult Activate(string userProvidedKey)
         {
             // Bỏ khoảng trắng/xuống dòng lẫn vào khi dán key

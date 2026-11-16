@@ -72,7 +72,7 @@ namespace E_Tax
             panelSearch.Visible = false;
 
             // Kích thước thiết kế là kích thước tối thiểu; khôi phục vị trí lần trước trước khi form hiện
-            MinimumSize = Size;
+            MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea);
             RestoreWindowBounds();
             Resize += (_, _) => CenterLoginPanel();
             FormClosing += (_, _) => SaveWindowBounds();
@@ -922,9 +922,13 @@ namespace E_Tax
             }
         }
 
-        private void UpdateInvoiceSummary()
+        /// <summary>
+        /// Thanh trạng thái theo danh sách đang hiển thị (mặc định toàn bộ kết quả; khi lọc MST thì theo kết quả lọc).
+        /// </summary>
+        private void UpdateInvoiceSummary(IReadOnlyCollection<SearchResult>? shown = null)
         {
-            lblStatusInvoices.Text = InvoiceSummary.Compute(_latestResults).Format();
+            string text = InvoiceSummary.Compute(shown ?? _latestResults).Format();
+            lblStatusInvoices.Text = shown == null ? text : $"Lọc {shown.Count}/{_latestResults.Count} HĐ — {text}";
         }
 
         /// <summary>
@@ -973,6 +977,7 @@ namespace E_Tax
                 dgvMain.DataSource = null;
                 dgvMain.DataSource = _latestResults;
                 UpdateGridRowNumbers();
+                UpdateInvoiceSummary();
                 return;
             }
 
@@ -981,6 +986,7 @@ namespace E_Tax
                 .ToList();
 
             dgvMain.DataSource = null;
+            UpdateInvoiceSummary(filteredResults);
             if (filteredResults.Any())
             {
                 dgvMain.DataSource = filteredResults;

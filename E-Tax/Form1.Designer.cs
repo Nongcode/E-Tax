@@ -233,7 +233,7 @@ namespace E_Tax
             panelLogin.Controls.Add(btnLogin);
             panelLogin.Location = new Point(289, 26);
             panelLogin.Name = "panelLogin";
-            panelLogin.Size = new Size(471, 649);
+            panelLogin.Size = new Size(471, 627);
             panelLogin.TabIndex = 0;
             // 
             // pictureBox1
@@ -389,7 +389,7 @@ namespace E_Tax
             panelSearch.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             panelSearch.Location = new Point(10, 29);
             panelSearch.Name = "panelSearch";
-            panelSearch.Size = new Size(962, 649);
+            panelSearch.Size = new Size(962, 627);
             panelSearch.TabIndex = 1;
             // 
             // mainSplitContainer
@@ -1001,7 +1001,7 @@ namespace E_Tax
             statusBar.BackColor = Color.FromArgb(243, 244, 246);
             statusBar.Font = new Font("Segoe UI", 9F);
             statusBar.Items.AddRange(new ToolStripItem[] { lblStatusInvoices, lblStatusUser, lblStatusLicense });
-            statusBar.Location = new Point(0, 686);
+            statusBar.Location = new Point(0, 664);
             statusBar.Name = "statusBar";
             statusBar.Size = new Size(984, 22);
             statusBar.SizingGrip = true;
@@ -1028,7 +1028,7 @@ namespace E_Tax
             // Form1
             // 
             BackColor = Color.White;
-            ClientSize = new Size(984, 708);
+            ClientSize = new Size(984, 686);
             Controls.Add(statusBar);
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
