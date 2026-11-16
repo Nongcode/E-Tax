@@ -65,7 +65,7 @@ Mọi request tạo qua `GdtApi.CreateRequest(method, url, accept, jwtToken?, wi
 | `security-taxpayer/authenticate` | POST | `LoginAsync` | Body `{username, password, cvalue, ckey}` → token từ cookie `jwt` hoặc field `token` |
 | `query/invoices/sold` | GET | `FetchSearchPageAsync` | HĐ bán ra |
 | `query/invoices/purchase` | GET | `FetchSearchPageAsync` | HĐ mua vào (thêm `;ttxly==5` vào search) |
-| `query/invoices/detail` | GET | `GetInvoiceDetailAsync` (Form1), `InvoiceDetailService.GetDetailPagesAsync` (lưới chi tiết) | URL từ `GdtApi.BuildDetailUrl` (+ `page,size=50` trong service) → mảng hàng hóa `hdhhdvu` (`InvoiceJson.FindProductArray`) |
+| `query/invoices/detail` | GET | `InvoiceDetailService.GetDetailPagesAsync` / `PrefetchAsync` (lưới chi tiết, Excel chi tiết, Tra cứu) | URL từ `GdtApi.BuildDetailUrl(..., page, 50)`, lặp trang đến khi < 50 SP → mảng hàng hóa `hdhhdvu` (`InvoiceJson.FindProductArray`) |
 | `query/invoices/export-xml` | GET | `DownloadSingleInvoiceZipAsync` | Trả file ZIP (XML + HTML/PDF thể hiện) |
 
 Query string tạo bởi `BuildSearchQuery(from, to, type, page, size)`:
@@ -133,11 +133,11 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 | Nút | Hàm | Làm gì |
 |---|---|---|
 | Tải danh sách HĐ (`btnExportDS`) | `ExportSearchResultsToExcelAsync(_latestResults)` | Excel 16 cột từ danh sách đã có |
-| Tải chi tiết HĐ (`btnExportChiTiet`) | `InvoiceJson.BuildDetailRows` + `SetDetailCellValue` | Excel hàng hóa của **1** HĐ đang chọn |
+| Tải chi tiết HĐ (`btnExportChiTiet`) | `GetDetailPagesAsync` → `BuildDetailRows(pages)` (gộp mọi trang) + `SetDetailCellValue` | Excel hàng hóa của **1** HĐ đang chọn |
 | Xem HĐ (`btnXemHD`) | `DownloadSingleInvoiceZipAsync` → giải nén temp → mở HTML/PDF bằng app mặc định | |
 | In pdf (`btnCnKoPdf`) | handler + `PrintPdfFilesAsync` / `SavePdfFilesToFolder` | Với các dòng đang chọn: tải ZIP → lấy PDF hoặc `PdfConverter.ConvertAsync` → có máy in thì `Verb="print"`, không thì chọn thư mục lưu PDF |
-| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
-| Cột "Tải" trong `dgvMain` (`colDgvTraCuu`) | `dgvMain_CellContentClick` → `BuildTraCuuLink` → `TraCuuForm` | Lấy `mhdon` (mã tra cứu) + `ngcnhat` (NCC: tvan_misa/bkav/vnpt/viettel/thaison) → link tra cứu |
+| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết (`ExportInvoiceDetailsToExcelAsync`: `PrefetchAsync` dùng lại cache, gộp mọi trang) + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
+| Cột "Tải" trong `dgvMain` (`colDgvTraCuu`) | `dgvMain_CellContentClick` → `GetDetailPagesAsync` (trang đầu) → `BuildTraCuuLink` → `TraCuuForm` | Lấy `mhdon` (mã tra cứu) + `ngcnhat` (NCC: tvan_misa/bkav/vnpt/viettel/thaison) → link tra cứu |
 | Tìm kiếm MST ng bán (`btnRightSearch`) | lọc `_latestResults` theo `Ma_so_thue.Contains` | Chỉ lọc `dgvMain` |
 | Ghi chú (`btnMoGhiChu`) | `NotesStore` → `%AppData%/E-Tax/notes.json` (lần đầu tự chép `notes.json` cũ cạnh exe) | Tự load khi đổi dòng (`dgvMain_SelectionChanged`) |
 | Ktra DN Mua Lẻ (`btnKtraDNMuaLe`) | gọi API blacklist metaecom | MST lấy từ `txtKtraMaDoanhNghiep` (tự điền khi chọn dòng) |
@@ -169,7 +169,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 
 ### Hiệu năng
 - ✅ (2026-11-16) Chi tiết HĐ: bỏ gọi tuần tự + `Task.Delay(500)`/HĐ → `InvoiceDetailService` gọi song song tối đa 3 request, thử lại 429/5xx (1s, 2s). Còn lại: tìm kiếm luôn kéo chi tiết toàn bộ dù người dùng chỉ cần danh sách.
-- `SaveOriginalInvoicesAsync` gọi lại `detail` cho mọi HĐ (lần 2) để làm Excel chi tiết thay vì dùng dữ liệu đã có.
+- ✅ (2026-11-16) Excel chi tiết (Tải tất cả HĐ Gốc) dùng lại cache của `InvoiceDetailService`, bỏ `Task.Delay(150)`/HĐ; Excel chi tiết giờ đủ mọi trang (> 50 dòng hàng).
 - Chromium (~150MB) tải lúc runtime (cần Internet, lần đầu rất chậm). ✅ Đã dùng chung 1 trình duyệt cho cả lô.
 
 ### Chất lượng code / bảo trì
@@ -192,7 +192,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 - Thêm cột cho lưới chi tiết: sửa `InvoiceDetailItem` + `ConfigureFullDetailGrid`/`ConfigureVatNopGrid` + `CreateDetailItem` (DetailGridManager.cs).
 - Thêm cột cho danh sách: `SearchResult` (SearchResult.cs) + cột `dgvMain` trong Designer (tên cột dạng `colDgv*`, `AutoGenerateColumns=false`) + `ExportSearchResultsToExcelAsync`.
 - Cột Excel chi tiết: chỉ sửa `InvoiceJson.DetailExportColumns` (dùng chung cho Excel 1 HĐ và Excel tổng hợp); cột số → `InvoiceJson.IsNumericColumn`.
-- Lấy chi tiết HĐ (phân trang, cache, retry, số request đồng thời): chỉ sửa `InvoiceDetailService` (hằng `ProductPageSize`, `MaxConcurrency`); test ở `E-Tax.Tests/InvoiceDetailServiceTests.cs`.
+- Lấy chi tiết HĐ (phân trang, cache, retry, số request đồng thời): chỉ sửa `InvoiceDetailService` (dùng chung cho lưới, Excel chi tiết, Tra cứu; trả `null` khi lỗi, nơi gọi hiện `DetailFetchError`) (hằng `ProductPageSize`, `MaxConcurrency`); test ở `E-Tax.Tests/InvoiceDetailServiceTests.cs`.
 - Logic search: chỉ sửa `SearchInvoicesAsync` / `FetchSearchPageAsync`.
 - Thêm NCC tra cứu: `BuildTraCuuLink` (switch theo `ngcnhat` lowercase).
 - Đổi điều kiện lọc HĐ mua vào: `BuildSearchQuery` (`;ttxly==5`).

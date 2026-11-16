@@ -459,48 +459,6 @@ namespace E_Tax
         }
 
         /// <summary>
-        /// Gọi API chi tiết một hóa đơn. Trả về JSON, hoặc chuỗi bắt đầu bằng "❌" nếu lỗi.
-        /// </summary>
-        private async Task<string> GetInvoiceDetailAsync(SearchResult invoice)
-        {
-            if (!invoice.HasLookupKeys())
-            {
-                return "❌ Lỗi: Thiếu thông tin cần thiết để lấy chi tiết hóa đơn.";
-            }
-            if (string.IsNullOrEmpty(jwtToken))
-            {
-                return "❌ Lỗi: Chưa đăng nhập hoặc token không hợp lệ.";
-            }
-
-            try
-            {
-                string url = GdtApi.BuildDetailUrl(invoice.Ma_so_thue, invoice.Ky_hieu_hoa_don,
-                    invoice.So_hoa_don!.Value, invoice.Ky_hieu_ma_so!.Value);
-                using var req = GdtApi.CreateRequest(HttpMethod.Get, url, "application/json", jwtToken);
-
-                var response = await client.SendAsync(req);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    AppendLog($"❌ Lỗi API chi tiết: {jsonResponse}");
-                    return $"❌ Lỗi từ API ({response.StatusCode}): {jsonResponse}";
-                }
-                return jsonResponse;
-            }
-            catch (HttpRequestException httpEx)
-            {
-                AppendLog($"❌ Lỗi HTTP khi lấy chi tiết: {httpEx.Message}");
-                return $"❌ Lỗi kết nối: {httpEx.Message}";
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Lỗi không mong muốn khi lấy chi tiết: {ex}");
-                return $"❌ Lỗi hệ thống: {ex.Message}";
-            }
-        }
-
-        /// <summary>
         /// Tải file ZIP gốc (XML + bản thể hiện) của một hóa đơn vào thư mục saveDirectory.
         /// Trả về đường dẫn file ZIP, hoặc null nếu lỗi.
         /// </summary>
@@ -638,6 +596,23 @@ namespace E_Tax
             AppendLog($"✅ Đã tạo file Excel danh sách tại: {filePath}");
         }
 
+        private const string DetailFetchError =
+            "❌ Không lấy được chi tiết hóa đơn từ cổng thuế (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối). Xem log để biết thêm.";
+
+        /// <summary>
+        /// Gộp dòng hàng của mọi trang chi tiết một hóa đơn (mỗi trang tối đa 50 sản phẩm).
+        /// </summary>
+        private static List<Dictionary<string, string>> BuildDetailRows(IReadOnlyList<string> pages)
+        {
+            var rows = new List<Dictionary<string, string>>();
+            foreach (string json in pages)
+            {
+                using var doc = JsonDocument.Parse(json);
+                rows.AddRange(InvoiceJson.BuildDetailRows(InvoiceJson.GetDataElement(doc.RootElement)));
+            }
+            return rows;
+        }
+
         /// <summary>
         /// Lấy chi tiết hàng hóa của nhiều hóa đơn và xuất ra một file Excel tổng hợp.
         /// </summary>
@@ -652,25 +627,28 @@ namespace E_Tax
             var detailsList = new List<Dictionary<string, string>>();
             int globalStt = 1;
 
-            foreach (var invoice in invoices)
+            // Dùng lại chi tiết đã tải (cache), HĐ chưa có thì tải song song
+            var allPages = await _detailService.PrefetchAsync(invoices);
+
+            for (int i = 0; i < invoices.Count; i++)
             {
+                var invoice = invoices[i];
                 if (invoice == null || !invoice.HasLookupKeys())
                 {
                     AppendLog($"⚠️ (Excel Chi Tiết) Bỏ qua hóa đơn ID {invoice?.Id} vì thiếu thông tin MST/KHHĐ/SHĐ/KHMHS.");
                     continue;
                 }
 
+                var pages = allPages[i];
+                if (pages == null)
+                {
+                    AppendLog($"❌ (Excel Chi Tiết) Lỗi khi lấy chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don} (xem log phía trên).");
+                    continue;
+                }
+
                 try
                 {
-                    string jsonDetail = await GetInvoiceDetailAsync(invoice);
-                    if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
-                    {
-                        AppendLog($"❌ (Excel Chi Tiết) Lỗi khi lấy chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}: {jsonDetail}");
-                        continue;
-                    }
-
-                    using var doc = JsonDocument.Parse(jsonDetail);
-                    foreach (var row in InvoiceJson.BuildDetailRows(InvoiceJson.GetDataElement(doc.RootElement)))
+                    foreach (var row in BuildDetailRows(pages))
                     {
                         row["stt"] = (globalStt++).ToString();
                         detailsList.Add(row);
@@ -680,8 +658,6 @@ namespace E_Tax
                 {
                     AppendLog($"❌ (Excel Chi Tiết) Lỗi khi xử lý chi tiết HĐ {invoice.Ky_hieu_hoa_don}-{invoice.So_hoa_don}: {ex.Message}");
                 }
-
-                await Task.Delay(150);
             }
 
             if (!detailsList.Any())
@@ -1408,14 +1384,13 @@ namespace E_Tax
 
             try
             {
-                string detailJson = await GetInvoiceDetailAsync(selectedInvoice);
-                if (string.IsNullOrEmpty(detailJson) || detailJson.StartsWith("❌"))
+                var pages = await _detailService.GetDetailPagesAsync(selectedInvoice);
+                if (pages == null)
                 {
-                    throw new Exception(string.IsNullOrEmpty(detailJson) ? "API không trả về dữ liệu chi tiết." : detailJson);
+                    throw new Exception(DetailFetchError);
                 }
 
-                using var doc = JsonDocument.Parse(detailJson);
-                var detailRows = InvoiceJson.BuildDetailRows(InvoiceJson.GetDataElement(doc.RootElement));
+                var detailRows = BuildDetailRows(pages);
                 var columns = InvoiceJson.DetailExportColumns;
 
                 using var package = new ExcelPackage();
@@ -1793,12 +1768,13 @@ namespace E_Tax
 
             try
             {
-                string jsonDetail = await GetInvoiceDetailAsync(selectedInvoice);
-                if (string.IsNullOrEmpty(jsonDetail) || jsonDetail.StartsWith("❌"))
+                var pages = await _detailService.GetDetailPagesAsync(selectedInvoice);
+                if (pages == null || pages.Count == 0)
                 {
-                    MessageBox.Show($"Lỗi khi lấy chi tiết hóa đơn:\n{jsonDetail}", "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show($"Lỗi khi lấy chi tiết hóa đơn:\n{DetailFetchError.Substring(2)}", "Lỗi API", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
+                string jsonDetail = pages[0];
 
                 string maTraCuu = "";
                 string nhaCungCap = "";
