@@ -4,6 +4,8 @@ import type {
   AdminLicense,
   AdminLicenseDetail,
   AdminOrder,
+  AdminStats,
+  AdminUserDetail,
   AppRelease,
   AuthResponse,
   BankSettings,
@@ -20,12 +22,17 @@ import type {
   ProfileInput,
   RegisterInput,
   User,
+  UserStatus,
+  UserSummary,
 } from '../api/types';
 import { MockError } from './errors';
+import * as admin from './admin';
 import * as lic from './licenses';
 import { createSeed } from './seed';
+import { effectiveOrderStatus, toPublicUser } from './views';
 
 export { MockError } from './errors';
+export { effectiveOrderStatus } from './views';
 export { effectiveLicenseStatus, toPublicLicense } from './licenses';
 
 export const STORAGE_KEY = 'etax-mockdb-v1';
@@ -71,6 +78,10 @@ export interface MockDb {
   adminGetLicense(id: string): AdminLicenseDetail;
   revokeLicense(id: string): License;
   extendLicense(id: string, months: number): License;
+  adminListUsers(q?: string): UserSummary[];
+  adminGetUser(id: string): AdminUserDetail;
+  adminSetUserStatus(adminId: string, id: string, status: UserStatus): User;
+  stats(): AdminStats;
 }
 
 type StoredLicense = lic.StoredLicense;
@@ -79,21 +90,10 @@ export function buildQrUrl(bank: BankSettings, amount: number, content: string):
   return `https://img.vietqr.io/image/${bank.bankBin}-${bank.accountNo}-compact2.png?amount=${amount}&addInfo=${content}&accountName=${encodeURIComponent(bank.accountName)}`;
 }
 
-/** R5: đơn pending quá hạn được coi là expired khi đọc, không ghi lại. */
-export function effectiveOrderStatus(o: Order, now: Date): OrderStatus {
-  return o.status === 'pending' && new Date(o.expiresAt).getTime() < now.getTime() ? 'expired' : o.status;
-}
-
 const normEmail = (e: string) => e.trim().toLowerCase();
 const unauthorized = () => new MockError(401, 'UNAUTHORIZED', 'Vui lòng đăng nhập để tiếp tục');
 const notFound = () => new MockError(404, 'NOT_FOUND', 'Không tìm thấy dữ liệu');
 const notPending = () => new MockError(409, 'ORDER_NOT_PENDING', 'Đơn không còn ở trạng thái chờ thanh toán');
-
-function toPublicUser(u: User & { password: string }): User {
-  const pub: User & { password?: string } = { ...u };
-  delete pub.password;
-  return pub;
-}
 
 export function createMockDb(storage: Storage, now: () => Date = () => new Date()): MockDb {
   function save(s: DbState): void {
@@ -422,5 +422,17 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
       save(s);
       return l;
     },
+
+    adminListUsers: (q) => admin.adminListUsers(load(), q),
+    adminGetUser: (id) => admin.adminGetUser(load(), now(), id),
+
+    adminSetUserStatus(adminId, id, status) {
+      const s = load();
+      const u = admin.adminSetUserStatus(s, adminId, id, status);
+      save(s);
+      return u;
+    },
+
+    stats: () => admin.stats(load(), now()),
   };
 }
