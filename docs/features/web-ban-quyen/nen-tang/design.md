@@ -74,6 +74,7 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/mocks/memoryStorage.ts | `createMemoryStorage` | Storage trong bộ nhớ cho test |
 | web/src/mocks/seed.ts | `createSeed(now)` | Dữ liệu mẫu: admin, khách, 4 gói, 2 đơn, bản quyền l-1, máy a-1, ngân hàng, phiên bản app |
 | web/src/mocks/mockDb.ts | `createMockDb`, `MockError`, `DbState`, `MockDb` | Quy tắc nghiệp vụ giả lập, lưu localStorage `etax-mockdb-v1`; hỏng → nạp seed |
+| web/src/mocks/mockDb.ts | `createOrder`, `getOrder`, `adminConfirmOrder`, `buildQrUrl`, `effectiveOrderStatus`, `toPublicLicense` | Đơn hàng, QR VietQR, xác nhận → sinh bản quyền (R4–R6, R15, R17) |
 
 ## Nhật ký sửa đổi
 
@@ -85,3 +86,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.2 | web/src/shared/format.ts, validators.ts (mới) | Hàm định dạng và kiểm tra | Dùng chung cho mọi màn hình và mockDb |
 | T-001.3 | web/src/api/types.ts, client.ts (mới) | Kiểu dữ liệu và hàm gọi API | Mọi màn hình gọi qua apiFetch |
 | T-001.4 | web/src/mocks/ (mới) | mockDb: seed, đăng ký/đăng nhập, hồ sơ, đổi mật khẩu, gói, cài đặt (R1–R3, R16, R18, R20) | Nền giả lập backend |
+| T-001.5 | web/src/mocks/mockDb.ts | Đơn hàng và xác nhận thanh toán; load() kiểm tra đủ cấu trúc | Luồng mua gói |
