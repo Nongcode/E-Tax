@@ -61,7 +61,12 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 
 ## Vị trí code
 
-Chưa có. Điền khi làm.
+| File | Symbol | Vai trò |
+|---|---|---|
+| web/src/theme.ts | `theme` | colorPrimary #0075D6, borderRadius 8, phông Segoe UI/Inter |
+| web/src/App.tsx | `AppProviders`, `App` | ConfigProvider(vi_VN) → AntApp → QueryClientProvider |
+| web/src/main.tsx | — | dayjs locale vi, render App |
+| web/src/test/setup.ts | — | jest-dom, polyfill matchMedia/ResizeObserver, dọn localStorage |
 
 ## Nhật ký sửa đổi
 
@@ -69,4 +74,4 @@ Chưa có. Điền khi làm.
 
 | Task | File:dòng | Thay đổi | Lý do |
 |---|---|---|---|
-| — | — | Chưa bắt đầu | — |
+| T-001.1 | web/ (mới) | Khung Vite + React 18 + antd 5 + Vitest + ESLint | Nền cho mọi màn hình |
