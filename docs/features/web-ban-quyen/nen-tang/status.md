@@ -7,14 +7,14 @@
 
 | Mục | Giá trị |
 |---|---|
-| Trạng thái | 🟡 IN_PROGRESS |
+| Trạng thái | ✅ DONE |
 | Yêu cầu đang làm | CR-001 — Nền tảng web |
-| Bước Superpowers | subagent-driven-development (người dùng chọn 2026-11-16) |
+| Bước Superpowers | finishing-a-development-branch — chờ người dùng chọn cách tích hợp nhánh |
 | Task đang làm | — |
-| **Bước tiếp theo** | Review toàn nhánh (requesting-code-review) |
+| **Bước tiếp theo** | Người dùng chọn tích hợp nhánh; sau đó writing-plans cho trang-cong-khai |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-17 00:18 |
-| Ghi chú dở dang | Sổ SDD: `.superpowers/sdd/plan/progress.md` (git-ignored) |
+| Cập nhật lần cuối | 2026-11-17 00:31 |
+| Ghi chú dở dang | Lỗi nhỏ để sau: xem mục "Review tổng" trong Nhật ký phiên |
 
 ## File chính
 
@@ -27,7 +27,7 @@
 
 ## Yêu cầu
 
-### CR-001 — Nền tảng web · 🟡 IN_PROGRESS · 2026-11-16
+### CR-001 — Nền tảng web · ✅ DONE · 2026-11-17
 
 | ID | Task | Trạng thái | Test | Ghi chú |
 |---|---|---|---|---|
@@ -58,6 +58,7 @@
 | 2026-11-17 00:01 | `npm run test && npm run lint && npm run build` (T-001.9) | ✅ 92/92, lint, build OK | |
 | 2026-11-17 00:07 | `npm run test && npm run lint && npm run build` (T-001.10) | ✅ 102/102, lint, build OK, không stderr | |
 | 2026-11-17 00:18 | `npm run test && npm run lint && npm run build && npm run e2e` (T-001.11) | ✅ 108/108, lint, build, e2e 4/4; grep MSW trong dist = 0 | Ảnh: screenshots/T-001.11-*.png |
+| 2026-11-17 00:31 | Kiểm tra cuối: `npm run test`, `lint`, `build`, `e2e`, grep giả lập trong dist | ✅ 113/113 (không stderr), lint 0, build không cảnh báo, e2e 4/4, grep = 0 | Sau sửa review tổng (6d5bc75) |
 
 ## Nhật ký phiên
 
@@ -74,3 +75,6 @@
 - 2026-11-17 00:01 — T-001.9 xong (5f8019a, 433b234): phiên đăng nhập, RequireAuth/RequireRole, 3 trang xác thực. Review: 3 lỗi Important (401 muộn sau đăng xuất, đăng xuất về /dang-nhap, thiếu test hết phiên) đã sửa.
 - 2026-11-17 00:07 — T-001.10 xong (31f7d4f, 8ddfcb3): CopyField, StatusTag, PageHeader, QueryState, ErrorBoundary, 404/403. Review đạt; sửa QueryState với query chưa chạy, dọn test (clipboard, route '/').
 - 2026-11-17 00:18 — T-001.11 xong (dcbaec5, f8529be): layout, router, công cụ dev, e2e 4/4, 4 ảnh chụp. Review: bỏ nâng ngưỡng chunk → tách chunk; /tai-khoan thêm RequireRole customer theo bảng Route.
+- 2026-11-17 00:31 — Review tổng (opus): sẵn sàng sau khi sửa. Đã sửa 4 lỗi Important (6d5bc75): `next` chứa ký tự điều khiển → màn lỗi vĩnh viễn; xoá cache React Query khi đăng xuất/hết phiên/đăng nhập; ErrorBoundary theo từng layout và reset khi đổi route; nội dung 403 theo vai trò. Lỗi nhỏ để sau: menu ngăn kéo tự mở lại sau khi đổi cỡ cửa sổ; phiên hỏng dạng `{user:{}}` làm vỡ layout; mockDb thiếu kiểm tra đầu vào (gia hạn tháng âm, khoá admin khác, giá/số máy, JSON hỏng → 500) — cần ghi "kiểm tra phía server" vào spec trước khi làm API C#; mã lỗi INVALID_MACHINE_NAME/LICENSE_PERMANENT chưa có trong spec; tham số đường dẫn chưa encode; retry cả lỗi 4xx; worker.start() lỗi trên HTTP LAN → trắng trang.
+- 2026-11-17 00:31 — verification-before-completion: 113/113, lint, build, e2e 4/4, dist không chứa giả lập. CR-001 nen-tang ✅ DONE.
+- 2026-11-17 00:32 — Bỏ qua Playwright mở index.html lần cuối: chỉ đổi chữ nhãn tiến độ; trình duyệt MCP chặn file:// và không được phép chạy máy chủ tĩnh tạm.

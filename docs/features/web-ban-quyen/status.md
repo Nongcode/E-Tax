@@ -9,12 +9,12 @@
 |---|---|
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Dựng web bán bản quyền (giao diện + API giả lập) |
-| Bước Superpowers | writing-plans (nen-tang) — plan đã viết, chờ người dùng duyệt và chọn cách thực hiện |
+| Bước Superpowers | nen-tang xong (finishing-a-development-branch) — chờ chọn tích hợp nhánh |
 | Task đang làm | — |
-| **Bước tiếp theo** | Người dùng duyệt nen-tang/plan.md và chọn Subagent-driven / Native, rồi làm nen-tang T-001.1 |
+| **Bước tiếp theo** | writing-plans cho trang-cong-khai (cần người dùng duyệt) |
 | Branch | feature/web-ban-quyen (tạo từ feature/giao-dien-hien-dai) |
-| Cập nhật lần cuối | 2026-11-16 23:55 |
-| Ghi chú dở dang | Chưa có code. Chưa cài thư viện nào |
+| Cập nhật lần cuối | 2026-11-17 00:31 |
+| Ghi chú dở dang | Code ở `web/`; nen-tang xong 11 task |
 
 ## File chính
 
@@ -22,14 +22,14 @@
 |---|---|
 | docs/features/web-ban-quyen/design.md | Spec gốc: kiến trúc, dữ liệu, hợp đồng API, quy tắc R1–R20, route, test |
 | docs/features/web-ban-quyen/index.html | Prototype các màn hình chính |
-| web/ (chưa tạo) | Mã nguồn React |
+| web/ | Mã nguồn React (xem nen-tang/design.md) |
 
 ## Chức năng con
 
 | Chức năng con | Trạng thái | Bước tiếp theo |
 |---|---|---|
-| [nen-tang](nen-tang/status.md) | 🟡 IN_PROGRESS | Plan 11 task chờ duyệt |
-| [trang-cong-khai](trang-cong-khai/status.md) | ⬜ TODO | Sau nen-tang |
+| [nen-tang](nen-tang/status.md) | ✅ DONE | 11 task, review tổng đã sửa |
+| [trang-cong-khai](trang-cong-khai/status.md) | ⬜ TODO | Tiếp theo: writing-plans |
 | [tai-khoan-khach](tai-khoan-khach/status.md) | ⬜ TODO | Sau nen-tang |
 | [quan-tri](quan-tri/status.md) | ⬜ TODO | Sau tai-khoan-khach (dùng đơn do khách tạo) |
 
@@ -53,3 +53,4 @@
 
 - 2026-11-16 23:15 — Brainstorming xong 4 phần thiết kế, người dùng duyệt từng phần. Tạo nhánh, viết spec design.md (cha + 4 con) và prototype index.html.
 - 2026-11-16 23:55 — Người dùng duyệt spec. Bổ sung R18–R20, `OrderDetail.licenseId`, `License.activeMachines`. Viết plan nen-tang (11 task).
+- 2026-11-17 00:31 — nen-tang ✅ DONE: 11 task theo subagent-driven-development, review tổng (opus) đã sửa 4 lỗi. 113 test, e2e 4/4.
