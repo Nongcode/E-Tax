@@ -64,6 +64,9 @@ namespace E_Tax
                 AppendLog);
 
             StyleMainGrid();
+            // mainSplitContainer (Dock Fill) đứng trên cùng nên che thanh tiến độ tải — đưa lên trước
+            downloadProgressBar.BringToFront();
+            lblDownloadStatus.BringToFront();
 
             panelLogin.Visible = true;
             panelSearch.Visible = false;
@@ -95,8 +98,63 @@ namespace E_Tax
             CheckForLicense();
             _notes.Load();
             dgvMain.AutoGenerateColumns = false;
+#if DEBUG
+            string? demo = Environment.GetEnvironmentVariable("ETAX_UI_DEMO");
+            if (demo is "1" or "progress")
+            {
+                ShowDemoData(showProgress: demo == "progress");
+                return;
+            }
+#endif
             await LoadCaptchaAsync();
         }
+
+#if DEBUG
+        /// <summary>
+        /// Chỉ bản Debug: bỏ đăng nhập, nạp 60 HĐ mẫu để chụp màn hình chính mà không cần cổng thuế (CR-001).
+        /// </summary>
+        private void ShowDemoData(bool showProgress)
+        {
+            string[] sellers = { "Công ty TNHH Thương mại An Phát", "Công ty CP Công nghệ Minh Long", "Công ty TNHH Dịch vụ Hoàng Gia", "Công ty CP Vận tải Sài Gòn", "Công ty TNHH Văn phòng phẩm Hồng Hà" };
+            var random = new Random(42);
+            _latestResults = Enumerable.Range(0, 60).Select(i =>
+            {
+                decimal beforeTax = random.Next(5, 5000) * 10_000m;
+                decimal tax = beforeTax * (i % 3 == 0 ? 0.08m : 0.1m);
+                return new SearchResult
+                {
+                    Id = $"demo-{i}",
+                    Ma_so_thue = $"03{random.Next(10_000_000, 99_999_999)}",
+                    Ky_hieu_ma_so = 1,
+                    Ky_hieu_hoa_don = i % 2 == 0 ? "C26TAA" : "C26TBB",
+                    So_hoa_don = 1000 + i,
+                    Ngay_lap = new DateTime(2026, 10, 31).AddDays(-i / 2).ToString("yyyy-MM-ddTHH:mm:ss"),
+                    Thong_tin_hoa_don = sellers[i % sellers.Length],
+                    Tong_tien_chua_thue = beforeTax,
+                    Tong_tien_thue = tax,
+                    Tong_tien_thanh_toan = beforeTax + tax,
+                    Loai_hoa_don = i % 2 == 0 ? "Bán ra" : "Mua vào"
+                };
+            }).ToList();
+
+            panelLogin.Visible = false;
+            panelSearch.Visible = true;
+            lblStatusUser.Text = "👤 demo";
+            BindMainGrid();
+            dgvGiamThue.DataSource = _latestResults;
+            // Phím gõ lạc vào cửa sổ demo chỉ di chuyển dòng, không bấm nút gọi API
+            ActiveControl = dgvMain;
+
+            if (showProgress)
+            {
+                downloadProgressBar.Maximum = _latestResults.Count;
+                downloadProgressBar.Value = 24;
+                lblDownloadStatus.Text = $"Đang tải 24/{_latestResults.Count}...";
+                downloadProgressBar.Visible = true;
+                lblDownloadStatus.Visible = true;
+            }
+        }
+#endif
 
         /// <summary>
         /// dgvMain cấu hình cột trong Designer nên không đi qua GridColumnHelper — áp theme và định dạng tiền ở đây.
@@ -104,6 +162,10 @@ namespace E_Tax
         private void StyleMainGrid()
         {
             UiTheme.StyleGrid(dgvMain);
+            // Chọn cả dòng: nút In pdf vốn đọc SelectedRows để in nhiều hóa đơn
+            dgvMain.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            colDgvThongTinHD.MinimumWidth = 200;
+            colDgvThongTinHD.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             foreach (var column in new[] { colDgvTienChuaThue, colDgvTienThue, colDgvTongTien })
             {
                 column.DefaultCellStyle.Format = "#,##0";

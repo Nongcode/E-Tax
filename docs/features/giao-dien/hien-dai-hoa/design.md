@@ -81,4 +81,7 @@ Prototype: `index.html`, tab "Giao diện".
 | T-001.4 | `E-Tax/Form1.cs:L360`, `:L388` `ShowLicenseStatus` | Ô bản quyền: xanh "Đầy đủ" / cam "Dùng thử: còn N ngày" / đỏ "đã hết hạn"; `lblVersion` theo bản quyền | Sửa lỗi `lblVersion` luôn ghi "dùng thử" |
 | T-001.4 | `E-Tax/Form1.cs:L784`, `:L863`, `:L874` | `UpdateInvoiceSummary()` khi xóa kết quả lúc bắt đầu tìm và trong `BindMainGrid` | |
 | T-001.4 | `E-Tax/LicenseManager.cs` `GetTrialExpiry()` | Đọc `TrialExpiryDate` (UTC), null nếu thiếu/lỗi | Số ngày dùng thử còn lại |
+| T-001.5 | `E-Tax/Form1.cs:L101-L109` `Form1_Load`, `:L112-L158` `ShowDemoData` (`#if DEBUG`) | `ETAX_UI_DEMO=1` → 60 HĐ mẫu (30 bán/30 mua), bỏ đăng nhập, focus bảng; `=progress` → hiện thêm thanh tiến độ 24/60 | Chụp màn hình chính không cần cổng thuế; không có trong Release |
+| T-001.5 | `E-Tax/Form1.cs:L68-L69` | `downloadProgressBar`/`lblDownloadStatus.BringToFront()` | Sửa lỗi có sẵn: bị `mainSplitContainer` che |
+| T-001.5 | `E-Tax/Form1.cs:L166-L168` `StyleMainGrid` | `FullRowSelect`; `colDgvThongTinHD` `Fill`, tối thiểu 200 | Dòng chọn nổi bật; lấp chiều ngang khi phóng to |
 | T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |
