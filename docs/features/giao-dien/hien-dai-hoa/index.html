@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hiện đại hóa giao diện — E-Tax</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1d2330; --muted: #667085; --border: #e3e6ea;
+    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --err: #dc2626; --changed: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --surface: #1b1f27; --text: #e6e8ec; --muted: #98a2b3; --border: #2c323d;
+      --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --changed: #3b3214;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  .meta { color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .s-doing { color: var(--warn); } .s-done { color: var(--ok); } .s-todo { color: var(--muted); } .s-blocked { color: var(--err); }
+  nav { display: flex; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  nav button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap; }
+  nav button[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  section[hidden] { display: none; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .next { border-left: 4px solid var(--warn); }
+  .legend { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .changed { outline: 2px dashed var(--warn); outline-offset: 2px; background: var(--changed); }
+
+  /* ===== Prototype: mô phỏng cửa sổ WinForms (luôn nền sáng như app thật) ===== */
+  .win { --w-accent: #0075D6; border: 1px solid #c9ced6; border-radius: 8px; overflow: hidden; background: #fff; color: #1d2330;
+         font: 12px/1.4 "Segoe UI", system-ui, sans-serif; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+  .win-title { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
+  .win-title .t { flex: 1; }
+  .win-title .ctl { display: flex; gap: 14px; color: #555; }
+  .win-body { padding: 10px; display: grid; grid-template-columns: 1fr 260px; gap: 10px; }
+  .filters { display: grid; gap: 8px; }
+  .filters .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .win input[type=text], .win .date { border: 1px solid #cbd5e1; border-radius: 4px; padding: 3px 6px; min-width: 120px; background: #fff; }
+  .wbtn { background: var(--w-accent); color: #fff; border: 0; border-radius: 4px; padding: 5px 10px; font: inherit; }
+  .wbtn.sec { background: #fff; color: var(--w-accent); border: 1px solid var(--w-accent); }
+  .group { border: 1px solid #d1d5db; border-radius: 4px; padding: 8px; }
+  .group legend, .group .gt { font-weight: 600; color: var(--w-accent); margin-bottom: 6px; display: block; }
+  .tabs { grid-column: 1 / -1; }
+  .tabhead { display: flex; gap: 2px; border-bottom: 1px solid #d1d5db; }
+  .tabhead span { padding: 5px 12px; border: 1px solid #d1d5db; border-bottom: 0; border-radius: 4px 4px 0 0; background: #f9fafb; }
+  .tabhead span.on { background: #fff; font-weight: 600; margin-bottom: -1px; }
+  .grid-wrap { overflow-x: auto; border: 1px solid #e5e7eb; border-top: 0; max-height: 260px; }
+  .dgv { width: max-content; min-width: 100%; border-collapse: collapse; }
+  .dgv th { background: var(--w-accent); color: #fff; text-transform: none; font-size: 12px; font-weight: 600; height: 34px; padding: 0 8px; border: 0; white-space: nowrap; position: sticky; top: 0; vertical-align: middle; }
+  .dgv td { height: 28px; padding: 0 8px; border: 0; border-bottom: 1px solid #e5e7eb; white-space: nowrap; vertical-align: middle; background: #fff; }
+  .dgv tr:nth-child(even) td { background: #f8fafc; }
+  .dgv tr.sel td { background: #dbeafe; }
+  .dgv .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .dgv .frozen { position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 #e5e7eb; }
+  .dgv th.frozen { z-index: 2; }
+  .win .changed { background: transparent; }
+  .statusbar { display: flex; gap: 0; background: #f3f4f6; color: #374151; border-top: 1px solid #e5e7eb; font-size: 12px; }
+  .statusbar > span { padding: 4px 12px; border-right: 1px solid #e5e7eb; white-space: nowrap; }
+  .statusbar .spring { flex: 1; }
+  .lic-ok { color: #16a34a; font-weight: 600; } .lic-trial { color: #d97706; font-weight: 600; } .lic-exp { color: #dc2626; font-weight: 600; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .old .dgv th { background: #f0f0f0; color: #000; font-weight: 700; border: 1px solid #ccc; height: 22px; }
+  .old .dgv td { height: 22px; border: 1px solid #ddd; }
+  .old .dgv tr:nth-child(even) td { background: #f0f0f0; }
+  .old .dgv tr.sel td { background: #0078d7; color: #fff; }
+  @media (max-width: 800px) { .win-body { grid-template-columns: 1fr; } .compare { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { main, header { padding: 16px; } nav { padding: 0 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hiện đại hóa giao diện</h1>
+  <div class="meta">
+    <span>Module: <code>giao-dien</code></span>
+    <span>Trạng thái: <span class="badge s-doing">🟡 IN_PROGRESS</span></span>
+    <span>Yêu cầu: CR-001 (chờ duyệt kế hoạch)</span>
+    <span>Cập nhật: 2026-11-16 13:45</span>
+  </div>
+</header>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-tab="ui">Giao diện</button>
+  <button role="tab" aria-selected="false" data-tab="func">Chức năng &amp; API</button>
+  <button role="tab" aria-selected="false" data-tab="progress">Tiến độ</button>
+</nav>
+
+<main>
+  <section id="ui">
+    <p class="legend">Prototype màn hình chính với dữ liệu mẫu (mô phỏng, không phải ảnh app). Vùng viền vàng nét đứt = thay đổi trong CR-001. Kéo ngang bảng để thấy cột cố định.</p>
+    <div class="win" data-testid="prototype">
+      <div class="win-title"><span class="t">E-Tax (Phiên bản đầy đủ)</span><span class="ctl changed" title="Có nút phóng to; kéo giãn được">▁ ▢ ✕</span></div>
+      <div class="win-body">
+        <div class="filters">
+          <div class="row"><label>Từ ngày <span class="date">01/10/2026</span></label><label>Đến ngày <span class="date">31/10/2026</span></label></div>
+          <div class="row group"><label><input type="radio" name="t" checked> Bán ra</label><label><input type="radio" name="t"> Mua vào</label><label><input type="radio" name="t"> Tất cả</label><span style="flex:1"></span><button class="wbtn">Tìm kiếm</button></div>
+          <div class="row"><button class="wbtn sec">Xem HĐ</button><button class="wbtn sec">In</button><button class="wbtn sec">Tải chi tiết HĐ</button><button class="wbtn sec">Tải danh sách HĐ</button><button class="wbtn sec">Tải tất cả HĐ Gốc</button></div>
+        </div>
+        <div class="group"><span class="gt">Người bán</span>
+          <input type="text" placeholder="Mã số thuế…" style="width:100%"><br><br>
+          <button class="wbtn" style="width:100%">Kiểm tra DN mua lẻ</button><br><br>
+          Tìm MST: <input type="text" style="width:120px"> <button class="wbtn sec">Tìm</button>
+        </div>
+        <div class="tabs">
+          <div class="tabhead"><span class="on">Tổng hợp</span><span>Chi tiết</span><span>Bk mua</span><span>BK bán</span><span>Bảng kê Thuế</span><span>VAT nộp</span></div>
+          <div class="grid-wrap changed">
+            <table class="dgv">
+              <thead><tr><th class="frozen">Ký hiệu HĐ</th><th>Số HĐ</th><th>Mã số thuế</th><th>Ngày lập</th><th>Loại HĐ</th><th class="num">Tổng chưa thuế</th><th class="num">Tổng thuế</th><th class="num">Tổng thanh toán</th><th>Trạng thái</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="statusbar changed" data-testid="statusbar">
+        <span class="spring" id="sum"></span>
+        <span>👤 0101234567-001</span>
+        <span class="lic-ok">✔ Bản quyền: Đầy đủ</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h2>So sánh style bảng</h2>
+      <div class="compare">
+        <div class="old"><div class="legend">Hiện tại</div><div class="grid-wrap"><table class="dgv"><thead><tr><th>Số HĐ</th><th>Mã số thuế</th><th>Tổng thanh toán</th></tr></thead><tbody><tr><td>101</td><td>0101234561</td><td>1250000</td></tr><tr class="sel"><td>102</td><td>0101234562</td><td>2500000</td></tr><tr><td>103</td><td>0101234563</td><td>3750000</td></tr></tbody></table></div></div>
+        <div class="win" style="box-shadow:none"><div class="legend" style="padding:0 0 0 2px">Sau CR-001</div><div class="grid-wrap"><table class="dgv"><thead><tr><th>Số HĐ</th><th>Mã số thuế</th><th class="num">Tổng thanh toán</th></tr></thead><tbody><tr><td>101</td><td>0101234561</td><td class="num">1.250.000</td></tr><tr class="sel"><td>102</td><td>0101234562</td><td class="num">2.500.000</td></tr><tr><td>103</td><td>0101234563</td><td class="num">3.750.000</td></tr></tbody></table></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Thanh trạng thái theo trạng thái</h2>
+      <div class="win" style="box-shadow:none">
+        <div class="statusbar"><span class="spring">Chưa có dữ liệu</span><span>👤 —</span><span class="lic-trial">⏳ Dùng thử: còn 12 ngày</span></div>
+        <div class="statusbar"><span class="spring">Chưa có dữ liệu</span><span>👤 —</span><span class="lic-exp">⛔ Dùng thử đã hết hạn</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="func" hidden>
+    <div class="card">
+      <h2>Chức năng (CR-001)</h2>
+      <table>
+        <thead><tr><th>Chức năng</th><th>Mô tả</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+          <tr><td>Cửa sổ co giãn</td><td>Phóng to / kéo giãn, tối thiểu 1000×725; đăng nhập luôn ở giữa</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>Nhớ cửa sổ</td><td>Vị trí, kích thước, phóng to lưu ở <code>%AppData%\E-Tax\window.json</code>; ngoài màn hình → về giữa</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>Bảng hiện đại</td><td><code>UiTheme.StyleGrid</code> cho 6 bảng: tiêu đề xanh, dòng 28px, kẻ ngang, chọn xanh nhạt, số căn phải</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>Thanh trạng thái</td><td>Số HĐ + tổng thanh toán theo Bán ra/Mua vào, tài khoản, bản quyền</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>Chế độ demo (Debug)</td><td><code>ETAX_UI_DEMO=1</code> → màn hình chính với dữ liệu mẫu để chụp ảnh; không có trong Release</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>API</h2>
+      <p>Không thêm và không đổi API. Thanh trạng thái tính từ dữ liệu tìm kiếm đã có (<code>_latestResults</code>).</p>
+    </div>
+  </section>
+
+  <section id="progress" hidden>
+    <div class="card next">
+      <h2>Bước tiếp theo</h2>
+      <p>Chờ duyệt kế hoạch. Sau đó: T-001.1, viết <code>WindowSettingsTests</code> (5 test) và chạy để thấy fail.</p>
+    </div>
+    <div class="card">
+      <h2>CR-001 — Nhóm 1: cửa sổ co giãn, bảng hiện đại, thanh trạng thái</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Task</th><th>Trạng thái</th><th>Test</th></tr></thead>
+        <tbody>
+          <tr><td>T-001.1</td><td>Lưu/khôi phục vị trí cửa sổ (TDD)</td><td><span class="badge s-todo">⬜ TODO</span></td><td>xUnit</td></tr>
+          <tr><td>T-001.2</td><td>Cửa sổ co giãn, căn giữa đăng nhập</td><td><span class="badge s-todo">⬜ TODO</span></td><td>Ảnh TC-01..04</td></tr>
+          <tr><td>T-001.3</td><td>Style bảng hiện đại (UiTheme)</td><td><span class="badge s-todo">⬜ TODO</span></td><td>xUnit + ảnh TC-05</td></tr>
+          <tr><td>T-001.4</td><td>Thanh trạng thái</td><td><span class="badge s-todo">⬜ TODO</span></td><td>xUnit + ảnh TC-06</td></tr>
+          <tr><td>T-001.5</td><td>Chế độ demo chỉ Debug</td><td><span class="badge s-todo">⬜ TODO</span></td><td>Chạy demo; Release không chứa</td></tr>
+          <tr><td>T-001.6</td><td>Kiểm thử tổng thể + tài liệu</td><td><span class="badge s-todo">⬜ TODO</span></td><td>TC-01..07</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+  const tabs = document.querySelectorAll('nav [role="tab"]');
+  function show(id) {
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+    document.querySelectorAll('main > section').forEach(s => { s.hidden = s.id !== id; });
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+  if (location.hash && document.getElementById(location.hash.slice(1))) show(location.hash.slice(1));
+
+  // Dữ liệu mẫu cho prototype
+  const fmt = n => n.toLocaleString('vi-VN');
+  const body = document.getElementById('rows');
+  let sold = [0, 0], bought = [0, 0];
+  for (let i = 1; i <= 12; i++) {
+    const net = 1250000 * i, tax = net / 10, total = net + tax, isSold = i % 2 === 1;
+    if (isSold) { sold[0]++; sold[1] += total; } else { bought[0]++; bought[1] += total; }
+    const tr = document.createElement('tr');
+    if (i === 3) tr.className = 'sel';
+    tr.innerHTML = `<td class="frozen">C26TAA</td><td>${100 + i}</td><td>010123456${i % 10}</td><td>${String(i).padStart(2, '0')}/10/2026</td>` +
+      `<td>${isSold ? 'Bán ra' : 'Mua vào'}</td><td class="num">${fmt(net)}</td><td class="num">${fmt(tax)}</td><td class="num">${fmt(total)}</td><td>Hóa đơn mới</td>`;
+    body.appendChild(tr);
+  }
+  document.getElementById('sum').textContent =
+    `Bán ra: ${sold[0]} HĐ · ${fmt(sold[1])} ₫   |   Mua vào: ${bought[0]} HĐ · ${fmt(bought[1])} ₫`;
+</script>
+</body>
+</html>
