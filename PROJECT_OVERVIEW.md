@@ -22,6 +22,8 @@ Có cơ chế bản quyền: dùng thử 30 ngày, kích hoạt bằng mã.
 | Svg 3.4.7 | Render ảnh captcha SVG → Bitmap |
 | System.Text.Json | Parse toàn bộ JSON (không dùng Newtonsoft) |
 
+Test: `dotnet test` (project `E-Tax.Tests`, xUnit, `InternalsVisibleTo`).
+
 Build: `dotnet build E-Tax.sln` (csproj có target `KillProcessBeforeBuild` chạy `taskkill /IM E-Tax.exe /F` trước khi build).
 
 ## 3. Cấu trúc file
@@ -38,6 +40,7 @@ E-Tax/
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
 ├── GridColumnHelper.cs        # Style + tạo cột text/số cho DataGridView cấu hình bằng code
 ├── Logger.cs                  # Ghi log ra file theo ngày (%LocalAppData%/E-Tax/logs)
+├── NotesStore.cs              # Ghi chú theo Id HĐ (%AppData%/E-Tax/notes.json)
 ├── LicenseManager.cs          # static LicenseManager + enum LicenseStatus
 ├── ProcessingForm.cs          # Form "đang xử lý" (ControlBox=false), có UpdateStatus(string)
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
@@ -131,7 +134,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 | Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
 | Cột "Tải" trong `dgvMain` (`colDgvTraCuu`) | `dgvMain_CellContentClick` → `BuildTraCuuLink` → `TraCuuForm` | Lấy `mhdon` (mã tra cứu) + `ngcnhat` (NCC: tvan_misa/bkav/vnpt/viettel/thaison) → link tra cứu |
 | Tìm kiếm MST ng bán (`btnRightSearch`) | lọc `_latestResults` theo `Ma_so_thue.Contains` | Chỉ lọc `dgvMain` |
-| Ghi chú (`btnMoGhiChu`) | `_invoiceNotes[Id] = txtGhiChu.Text` → `notes.json` (cạnh exe) | Tự load khi đổi dòng (`dgvMain_SelectionChanged`) |
+| Ghi chú (`btnMoGhiChu`) | `NotesStore` → `%AppData%/E-Tax/notes.json` (lần đầu tự chép `notes.json` cũ cạnh exe) | Tự load khi đổi dòng (`dgvMain_SelectionChanged`) |
 | Ktra DN Mua Lẻ (`btnKtraDNMuaLe`) | gọi API blacklist metaecom | MST lấy từ `txtKtraMaDoanhNghiep` (tự điền khi chọn dòng) |
 
 ### 5.5 Tiện ích
@@ -158,7 +161,6 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 4. Mật khẩu người dùng bị `Trim()` trước khi gửi (mật khẩu có khoảng trắng đầu/cuối sẽ sai).
 
 ### Bug / hành vi sai
-- `notes.json` lưu tại `Application.StartupPath` — nếu cài vào `Program Files` sẽ không ghi được. Nên dùng `%AppData%`.
 
 ### Hiệu năng
 - Chi tiết HĐ gọi tuần tự + `Task.Delay(500)` mỗi HĐ (DetailGridManager) → 1000 HĐ ≈ >8 phút chỉ riêng delay. Tìm kiếm luôn kéo chi tiết toàn bộ dù người dùng chỉ cần danh sách.

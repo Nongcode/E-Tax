@@ -24,12 +24,11 @@ namespace E_Tax
         private readonly CookieContainer cookieContainer = new CookieContainer();
         private readonly HttpClient client;
         private readonly DetailGridManager _detailGridManager;
-        private readonly string _notesFilePath = Path.Combine(Application.StartupPath, "notes.json");
+        private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
 
         private string jwtToken = "";
         private string captchaKey = "";
         private List<SearchResult> _latestResults = new List<SearchResult>();
-        private Dictionary<string, string> _invoiceNotes = new Dictionary<string, string>();
         private string? _chromiumExecutablePath;
 
         public Form1()
@@ -87,7 +86,7 @@ namespace E_Tax
         private async void Form1_Load(object sender, EventArgs e)
         {
             CheckForLicense();
-            LoadNotesFromFile();
+            _notes.Load();
             dgvMain.AutoGenerateColumns = false;
             await LoadCaptchaAsync();
         }
@@ -1961,46 +1960,11 @@ namespace E_Tax
 
         #region Ghi chú
 
-        private void LoadNotesFromFile()
-        {
-            try
-            {
-                if (File.Exists(_notesFilePath))
-                {
-                    string json = File.ReadAllText(_notesFilePath);
-                    _invoiceNotes = JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new Dictionary<string, string>();
-                }
-                else
-                {
-                    _invoiceNotes = new Dictionary<string, string>();
-                }
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Lỗi khi tải file ghi chú: {ex.Message}");
-                _invoiceNotes = new Dictionary<string, string>();
-            }
-        }
-
-        private void SaveNotesToFile()
-        {
-            try
-            {
-                string json = JsonSerializer.Serialize(_invoiceNotes, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_notesFilePath, json);
-            }
-            catch (Exception ex)
-            {
-                AppendLog($"❌ Lỗi khi lưu file ghi chú: {ex.Message}");
-                MessageBox.Show($"Không thể lưu file ghi chú: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
         private void dgvMain_SelectionChanged(object sender, EventArgs e)
         {
             if (dgvMain.CurrentRow?.DataBoundItem is SearchResult selectedInvoice)
             {
-                txtGhiChu.Text = _invoiceNotes.TryGetValue(selectedInvoice.Id, out string? note) ? note : "";
+                txtGhiChu.Text = _notes.Get(selectedInvoice.Id);
                 txtKtraMaDoanhNghiep.Text = selectedInvoice.Ma_so_thue;
             }
             else
@@ -2018,8 +1982,17 @@ namespace E_Tax
                 return;
             }
 
-            _invoiceNotes[selectedInvoice.Id] = txtGhiChu.Text;
-            SaveNotesToFile();
+            _notes.Set(selectedInvoice.Id, txtGhiChu.Text);
+            try
+            {
+                _notes.Save();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi khi lưu file ghi chú: {ex.Message}");
+                MessageBox.Show($"Không thể lưu file ghi chú: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             MessageBox.Show("Đã lưu ghi chú thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
