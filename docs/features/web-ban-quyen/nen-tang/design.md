@@ -94,6 +94,16 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/shared/components/QueryState.tsx | `QueryState` | Đang tải (cả query chưa chạy) / lỗi + "Thử lại" / trống / dữ liệu |
 | web/src/shared/ErrorBoundary.tsx | `ErrorBoundary` | Bắt lỗi render, nút "Tải lại trang" |
 | web/src/pages/NotFoundPage.tsx, ForbiddenPage.tsx | `NotFoundPage`, `ForbiddenPage` | Trang 404 / 403, nút "Về trang chủ" |
+| web/src/router.tsx | `routes`, `router` | Cây route theo bảng Route: RootLayout → Public / auth / RequireAuth+RequireRole customer → AccountLayout / RequireAuth+RequireRole admin → AdminLayout / 404 |
+| web/src/layouts/RootLayout.tsx | `RootLayout` | AuthProvider + ErrorBoundary + DevToolbar + Outlet |
+| web/src/layouts/PublicLayout.tsx | `PublicLayout` | Header 64px (logo, menu, Đăng nhập/Mua ngay hoặc avatar), Drawer < 768px, footer |
+| web/src/layouts/SideNavLayout.tsx | `SideNavLayout` | Sider 220px ≥ 992px, nhỏ hơn thì Drawer (nút "Mở menu"); mục chọn theo pathname |
+| web/src/layouts/AccountLayout.tsx, AdminLayout.tsx | `AccountLayout`, `AdminLayout` | Menu khách (sáng) / quản trị (tối, badge đơn chờ) |
+| web/src/features/placeholder/ComingSoon.tsx | `ComingSoon` | Giữ chỗ "Màn hình đang được xây dựng" |
+| web/src/dev/DevToolbar.tsx | `DevToolbar` | Chỉ khi VITE_USE_MOCK: đặt lại dữ liệu, đăng nhập nhanh khách/admin |
+| web/src/main.tsx | — | Bật MSW worker khi VITE_USE_MOCK rồi mới render |
+| web/vite.config.ts | `manualChunks` | Tách react / antd / antd-rc / antd-icons / vendor (< 500 kB mỗi chunk) |
+| web/playwright.config.ts, web/tests/e2e/nen-tang.spec.ts | — | e2e TC-05a/b, login-admin, mobile-drawer (cổng 5174) |
 
 ## Nhật ký sửa đổi
 
@@ -111,3 +121,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.8 | web/src/mocks/handlers.ts, browser.ts, web/src/api/*.ts, web/src/test/server.ts, web/public/mockServiceWorker.js (mới) | Nối mockDb với hợp đồng API | Màn hình gọi API thật sự qua MSW |
 | T-001.9 | web/src/auth/, web/src/features/auth/, web/src/pages/ForbiddenPage.tsx (mới); web/src/api/client.ts, App.tsx | Phiên đăng nhập, bảo vệ route, 3 trang xác thực; 401 muộn sau đăng xuất bị bỏ qua; đăng xuất về '/' | Nền cho khu tài khoản và quản trị |
 | T-001.10 | web/src/shared/components/, ErrorBoundary.tsx, pages/NotFoundPage.tsx (mới); pages/ForbiddenPage.tsx | Thành phần dùng chung và trang lỗi; QueryState coi query chưa chạy là đang tải | Dùng lại ở mọi màn hình |
+| T-001.11 | web/src/layouts/, router.tsx, dev/, features/placeholder/, playwright.config.ts, tests/e2e/ (mới); App.tsx, main.tsx, vite.config.ts | Layout, router, công cụ dev, e2e; /tai-khoan chỉ cho khách (theo bảng Route); tách chunk | Khung điều hướng cho các chức năng con |
