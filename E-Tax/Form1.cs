@@ -184,7 +184,7 @@ namespace E_Tax
         private async void btnLogin_Click(object sender, EventArgs e)
         {
             string username = txtUser.Text.Trim();
-            string password = txtPass.Text.Trim();
+            string password = txtPass.Text;
             string captchaValue = txtCaptcha.Text.Trim();
 
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(captchaValue))
