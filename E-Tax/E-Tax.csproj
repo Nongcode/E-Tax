@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="EPPlus" Version="8.2.0" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="PuppeteerSharp" Version="20.2.4" />
     <PackageReference Include="Svg" Version="3.4.7" />
   </ItemGroup>

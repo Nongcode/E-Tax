@@ -5,8 +5,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using OfficeOpenXml;
-using OfficeOpenXml.Style;
 using PuppeteerSharp;
 using Svg;
 
@@ -64,7 +62,6 @@ namespace E_Tax
                 downloadProgressBar,
                 lblDownloadStatus,
                 AppendLog);
-            ExcelPackage.License.SetNonCommercialPersonal("Your Name");
 
             panelLogin.Visible = true;
             panelSearch.Visible = false;
@@ -553,81 +550,7 @@ namespace E_Tax
                 return;
             }
 
-            string[] headers =
-            {
-                "Mã số thuế", "Ký hiệu mã số", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày lập",
-                "Thông tin hóa đơn", "Tổng tiền chưa thuế", "Tổng tiền thuế", "Tổng tiền chiết khấu",
-                "Tổng tiền phí", "Tổng tiền thanh toán", "Đơn vị tiền tệ",
-                "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Loại hóa đơn"
-            };
-
-            using var package = new ExcelPackage();
-            var ws = package.Workbook.Worksheets.Add("DanhSachHoaDon");
-
-            ws.Cells[1, 1].Value = "DANH SÁCH HÓA ĐƠN";
-            ws.Cells[1, 1, 1, headers.Length].Merge = true;
-            ws.Cells[1, 1].Style.Font.Size = 16;
-            ws.Cells[1, 1].Style.Font.Bold = true;
-            ws.Cells[1, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-            ws.Cells[2, 1].Value = $"Ngày xuất: {DateTime.Now:dd/MM/yyyy HH:mm}";
-            ws.Cells[2, 1, 2, headers.Length].Merge = true;
-            ws.Cells[2, 1].Style.Font.Italic = true;
-
-            const int headerRow = 4;
-            for (int i = 0; i < headers.Length; i++)
-                ws.Cells[headerRow, i + 1].Value = headers[i].ToUpper();
-
-            using (var headerRange = ws.Cells[headerRow, 1, headerRow, headers.Length])
-            {
-                headerRange.Style.Font.Name = "Calibri";
-                headerRange.Style.Font.Size = 12;
-                headerRange.Style.Font.Bold = true;
-                headerRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                headerRange.Style.Fill.BackgroundColor.SetColor(Color.LightBlue);
-                headerRange.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                headerRange.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-                SetThinBorders(headerRange);
-            }
-
-            int row = headerRow + 1;
-            for (int i = 0; i < results.Count; i++)
-            {
-                var item = results[i];
-                ws.Cells[row, 1].Value = item.Ma_so_thue;
-                ws.Cells[row, 2].Value = item.Ky_hieu_ma_so;
-                ws.Cells[row, 3].Value = item.Ky_hieu_hoa_don;
-                ws.Cells[row, 4].Value = item.So_hoa_don;
-                ws.Cells[row, 5].Value = item.Ngay_lap;
-                ws.Cells[row, 6].Value = item.Thong_tin_hoa_don;
-                ws.Cells[row, 7].Value = item.Tong_tien_chua_thue;
-                ws.Cells[row, 8].Value = item.Tong_tien_thue;
-                ws.Cells[row, 9].Value = item.Tong_tien_chiet_khau;
-                ws.Cells[row, 10].Value = item.Tong_tien_phi?.Sum() ?? 0;
-                ws.Cells[row, 11].Value = item.Tong_tien_thanh_toan;
-                ws.Cells[row, 12].Value = item.Don_vi_tien_te;
-                ws.Cells[row, 13].Value = item.Trang_thai_hoa_don;
-                ws.Cells[row, 14].Value = item.Ket_qua_kiem_tra_hoa_don;
-                ws.Cells[row, 15].Value = item.Hoa_don_lien_quan;
-                ws.Cells[row, 16].Value = item.Loai_hoa_don;
-
-                ws.Cells[row, 7, row, 11].Style.Numberformat.Format = "#,##0";
-
-                // Màu xen kẽ
-                if (i % 2 == 0)
-                {
-                    ws.Cells[row, 1, row, headers.Length].Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    ws.Cells[row, 1, row, headers.Length].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(240, 240, 240));
-                }
-                row++;
-            }
-
-            using (var dataRange = ws.Cells[headerRow, 1, row - 1, headers.Length])
-            {
-                SetThinBorders(dataRange);
-            }
-
-            ws.Cells[ws.Dimension.Address].AutoFitColumns();
-            await package.SaveAsAsync(new FileInfo(filePath));
+            await Task.Run(() => ExcelExporter.ExportSearchResults(results, filePath));
             AppendLog($"✅ Đã tạo file Excel danh sách tại: {filePath}");
         }
 
@@ -698,87 +621,12 @@ namespace E_Tax
             if (!detailsList.Any())
             {
                 AppendLog("⚠️ (Excel Chi Tiết) Không có chi tiết sản phẩm nào từ các hóa đơn hợp lệ để xuất Excel.");
-                using var emptyPackage = new ExcelPackage(new FileInfo(filePath));
-                var emptyWs = emptyPackage.Workbook.Worksheets.Add("Lỗi");
-                emptyWs.Cells["A1"].Value = "Không tìm thấy chi tiết hàng hóa/dịch vụ nào từ các hóa đơn đã tìm.";
-                await emptyPackage.SaveAsync();
+                await Task.Run(() => ExcelExporter.ExportDetailSummary(detailsList, filePath));
                 return;
             }
 
-            var columns = InvoiceJson.DetailExportColumns;
-            using var package = new ExcelPackage();
-            var ws = package.Workbook.Worksheets.Add("Chi Tiết Hóa Đơn");
-
-            ws.Cells["A1"].Value = "CHI TIẾT HÓA ĐƠN";
-            ws.Cells["A1"].Style.Font.Size = 18;
-            ws.Cells["A1"].Style.Font.Bold = true;
-            ws.Cells["A1"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-            ws.Cells["A2"].Value = $"Ngày tạo: {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
-            ws.Cells["A2"].Style.Font.Italic = true;
-            ws.Cells["A2"].Style.Font.Color.SetColor(Color.DarkGray);
-            ws.Cells["A2"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-            ws.Cells[1, 1, 2, columns.Length].Merge = true;
-
-            const int headerRow = 4;
-            for (int i = 0; i < columns.Length; i++)
-            {
-                var cell = ws.Cells[headerRow, i + 1];
-                cell.Value = columns[i].Header;
-                cell.Style.Font.Bold = true;
-                cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                cell.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 255, 204));
-                cell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                cell.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-            }
-
-            int rowIndex = headerRow + 1;
-            foreach (var rowData in detailsList)
-            {
-                for (int c = 0; c < columns.Length; c++)
-                {
-                    rowData.TryGetValue(columns[c].Key, out var value);
-                    SetDetailCellValue(ws.Cells[rowIndex, c + 1], columns[c].Key, value);
-                    ws.Cells[rowIndex, c + 1].Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                }
-                rowIndex++;
-            }
-
-            if (ws.Dimension != null)
-            {
-                ws.Cells[ws.Dimension.Address].AutoFitColumns();
-            }
-            ws.Cells.Style.Font.Name = "Segoe UI";
-            ws.Cells.Style.Font.Size = 10;
-
-            await package.SaveAsAsync(new FileInfo(filePath));
+            await Task.Run(() => ExcelExporter.ExportDetailSummary(detailsList, filePath));
             AppendLog($"✅ (Excel Chi Tiết) Đã tạo file Excel chi tiết tổng hợp tại: {filePath}");
-        }
-
-        /// <summary>
-        /// Ghi giá trị vào ô Excel; cột tiền/số lượng được chuyển sang số và định dạng #,##0.
-        /// </summary>
-        private static void SetDetailCellValue(ExcelRange cell, string key, string? value)
-        {
-            if (value != null && InvoiceJson.IsNumericColumn(key) &&
-                decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal numValue))
-            {
-                cell.Value = numValue;
-                cell.Style.Numberformat.Format = "#,##0";
-                cell.Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-            }
-            else
-            {
-                cell.Value = value;
-            }
-        }
-
-        private static void SetThinBorders(ExcelRange range)
-        {
-            range.Style.Border.Top.Style = ExcelBorderStyle.Thin;
-            range.Style.Border.Bottom.Style = ExcelBorderStyle.Thin;
-            range.Style.Border.Left.Style = ExcelBorderStyle.Thin;
-            range.Style.Border.Right.Style = ExcelBorderStyle.Thin;
         }
 
         /// <summary>
@@ -1426,57 +1274,8 @@ namespace E_Tax
                 }
 
                 var detailRows = BuildDetailRows(pages);
-                var columns = InvoiceJson.DetailExportColumns;
-
-                using var package = new ExcelPackage();
-                var ws = package.Workbook.Worksheets.Add("ChiTietHoaDon");
-
-                int currentRow = 1;
-                ws.Cells[currentRow, 1].Value = "Chi tiết hàng hóa/dịch vụ";
-                ws.Cells[currentRow, 1].Style.Font.Bold = true;
-                ws.Cells[currentRow, 1].Style.Font.Size = 14;
-                ws.Cells[currentRow, 1, currentRow, 15].Merge = true;
-                ws.Cells[currentRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-                currentRow += 2;
-
-                int headerRow = currentRow;
-                for (int i = 0; i < columns.Length; i++)
-                {
-                    var cell = ws.Cells[headerRow, i + 1];
-                    cell.Value = columns[i].Header;
-                    cell.Style.Font.Bold = true;
-                    cell.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                    cell.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-                    cell.Style.Border.BorderAround(ExcelBorderStyle.Thin);
-                }
-                currentRow++;
-
-                if (detailRows.Any())
-                {
-                    foreach (var rowData in detailRows)
-                    {
-                        for (int c = 0; c < columns.Length; c++)
-                        {
-                            rowData.TryGetValue(columns[c].Key, out var value);
-                            SetDetailCellValue(ws.Cells[currentRow, c + 1], columns[c].Key, value);
-                        }
-                        currentRow++;
-                    }
-
-                    using var dataRange = ws.Cells[headerRow, 1, currentRow - 1, columns.Length];
-                    SetThinBorders(dataRange);
-                }
-                else
-                {
-                    ws.Cells[currentRow, 1].Value = "Không tìm thấy chi tiết hàng hóa/dịch vụ (mảng 'hdhhdvu').";
-                    ws.Cells[currentRow, 1, currentRow, columns.Length].Merge = true;
-                }
-
-                ws.Cells[ws.Dimension.Address].AutoFitColumns();
-                ws.Cells.Style.Font.Name = "Segoe UI";
-                ws.Cells.Style.Font.Size = 10;
-
-                await package.SaveAsAsync(new FileInfo(sfd.FileName));
+                string filePath = sfd.FileName;
+                await Task.Run(() => ExcelExporter.ExportSingleInvoiceDetail(detailRows, filePath));
 
                 MessageBox.Show($"Đã xuất thành công chi tiết hóa đơn vào file:\n{sfd.FileName}", "Xuất thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

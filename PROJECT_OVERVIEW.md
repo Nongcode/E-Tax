@@ -17,7 +17,7 @@ Có cơ chế bản quyền: dùng thử 30 ngày, kích hoạt bằng key ký s
 |---|---|
 | Nền tảng | .NET 8 (`net8.0-windows`), WinForms, `Nullable` bật, `ImplicitUsings` bật |
 | Solution | `E-Tax.sln` → app `E-Tax/E-Tax.csproj` (namespace gốc `E_Tax`), `E-Tax.Tests`, tool `tools/E-Tax.KeyGen` |
-| EPPlus 8.2.0 | Tạo file Excel (`ExcelPackage.License.SetNonCommercialPersonal(...)` trong ctor Form1) |
+| ClosedXML 0.105.1 | Tạo file Excel (MIT, không cần license key) — toàn bộ trong `ExcelExporter.cs` |
 | PuppeteerSharp 20.2.4 | Convert HTML hóa đơn → PDF (tự tải Chromium lần đầu qua `BrowserFetcher`) |
 | Svg 3.4.7 | Render ảnh captcha SVG → Bitmap |
 | System.Text.Json | Parse toàn bộ JSON (không dùng Newtonsoft) |
@@ -32,13 +32,14 @@ Build: `dotnet build E-Tax.sln` (csproj có target `KillProcessBeforeBuild` ch�
 E-Tax.sln
 E-Tax/
 ├── Program.cs                 # Entry point → Application.Run(new Form1())
-├── Form1.cs        (~2130 dòng) # Logic chính: login, search, export, download, print, notes, blacklist (chia #region)
+├── Form1.cs        (~1890 dòng) # Logic chính: login, search, export, download, print, notes, blacklist (chia #region)
 ├── Form1.Designer.cs (~1050)  # Layout UI (panelLogin, panelActivation, panelSearch, tabControlMain, ...)
 ├── DetailGridManager.cs (~320)# Dựng dòng hàng từ InvoiceDetailService, đổ vào 4 lưới chi tiết; class InvoiceDetailItem
 ├── InvoiceDetailService.cs   # API detail: phân trang SP (50/trang), cache theo Id, song song tối đa 3 request, thử lại 429/5xx
 ├── SearchResult.cs            # enum InvoiceType, SearchResult (+ HasLookupKeys(), FileIdentifier), SearchResponse
 ├── GdtApi.cs                  # Hằng URL/User-Agent; CreateRequest(...) set header chung; BuildDetailUrl(...)
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
+├── ExcelExporter.cs            # ClosedXML: ExportSearchResults (DS 16 cột), ExportDetailSummary (chi tiết tổng hợp), ExportSingleInvoiceDetail (1 HĐ) — chỉ ghi file
 ├── GridColumnHelper.cs        # Style + tạo cột text/số cho DataGridView cấu hình bằng code
 ├── Logger.cs                  # Ghi log ra file theo ngày (%LocalAppData%/E-Tax/logs)
 ├── NotesStore.cs              # Ghi chú theo Id HĐ (%AppData%/E-Tax/notes.json)
@@ -51,7 +52,7 @@ E-Tax/
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
 └── Properties/Resources.*     # Resource mặc định
 tools/E-Tax.KeyGen/            # Console net8.0 cấp key (init/issue); link E-Tax/LicenseKey.cs
-E-Tax.Tests/                   # xUnit: NotesStoreTests, InvoiceDetailServiceTests, AppSettingsTests, LicenseKeyTests (+ FakeHttpHandler giả HTTP)
+E-Tax.Tests/                   # xUnit: NotesStoreTests, InvoiceDetailServiceTests (+ FakeHttpHandler), AppSettingsTests, LicenseKeyTests, ExcelExporterTests
 ```
 
 Các `#region` trong `Form1.cs`: Đăng nhập & bản quyền · Gọi API hóa đơn · Excel & PDF · Tìm kiếm & lọc ·
@@ -142,11 +143,11 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 ### 5.4 Các nút thao tác trên kết quả
 | Nút | Hàm | Làm gì |
 |---|---|---|
-| Tải danh sách HĐ (`btnExportDS`) | `ExportSearchResultsToExcelAsync(_latestResults)` | Excel 16 cột từ danh sách đã có |
-| Tải chi tiết HĐ (`btnExportChiTiet`) | `GetDetailPagesAsync` → `BuildDetailRows(pages)` (gộp mọi trang) + `SetDetailCellValue` | Excel hàng hóa của **1** HĐ đang chọn |
+| Tải danh sách HĐ (`btnExportDS`) | `ExportSearchResultsToExcelAsync(_latestResults)` → `ExcelExporter.ExportSearchResults` | Excel 16 cột từ danh sách đã có |
+| Tải chi tiết HĐ (`btnExportChiTiet`) | `GetDetailPagesAsync` → `BuildDetailRows(pages)` (gộp mọi trang) → `ExcelExporter.ExportSingleInvoiceDetail` | Excel hàng hóa của **1** HĐ đang chọn |
 | Xem HĐ (`btnXemHD`) | `DownloadSingleInvoiceZipAsync` → giải nén temp → mở HTML/PDF bằng app mặc định | |
 | In pdf (`btnCnKoPdf`) | handler + `PrintPdfFilesAsync` / `SavePdfFilesToFolder` | Với các dòng đang chọn: tải ZIP → lấy PDF hoặc `PdfConverter.ConvertAsync` → có máy in thì `Verb="print"`, không thì chọn thư mục lưu PDF |
-| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết (`ExportInvoiceDetailsToExcelAsync`: `PrefetchAsync` dùng lại cache, gộp mọi trang) + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
+| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết (`ExportInvoiceDetailsToExcelAsync`: `PrefetchAsync` dùng lại cache, gộp mọi trang, đánh STT → `ExcelExporter.ExportDetailSummary`) + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
 | Cột "Tải" trong `dgvMain` (`colDgvTraCuu`) | `dgvMain_CellContentClick` → `GetDetailPagesAsync` (trang đầu) → `BuildTraCuuLink` → `TraCuuForm` | Lấy `mhdon` (mã tra cứu) + `ngcnhat` (NCC: tvan_misa/bkav/vnpt/viettel/thaison) → link tra cứu |
 | Tìm kiếm MST ng bán (`btnRightSearch`) | lọc `_latestResults` theo `Ma_so_thue.Contains` | Chỉ lọc `dgvMain` |
 | Ghi chú (`btnMoGhiChu`) | `NotesStore` → `%AppData%/E-Tax/notes.json` (lần đầu tự chép `notes.json` cũ cạnh exe) | Tự load khi đổi dòng (`dgvMain_SelectionChanged`) |
@@ -172,7 +173,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 ### Vấn đề nghiêm trọng (bảo mật / pháp lý)
 1. ✅ (2026-11-16) **Mã kích hoạt master** đã bỏ → key ký số ECDSA gắn mã máy, app chỉ chứa public key (xem §5.1). Còn lại: public key hiện là key DEV, chủ dự án phải `init` và thay; máy cũ có `IsActivated=true` vẫn được chấp nhận nên ai sửa Registry giá trị này vẫn qua được (đánh đổi đã duyệt ở D3); trial vẫn ở HKCU (xóa Registry là có thêm 30 ngày); app .NET vẫn có thể bị patch nhị phân — ký số chỉ chống tự sinh key.
 2. ✅ Token blacklist đã chuyển ra `appsettings.json` (2026-11-16). **Còn phải làm:** đổi token phía server metaecom vì token cũ nằm trong lịch sử git; về lâu dài nên gọi qua server trung gian (app desktop luôn có thể bị đọc token).
-3. **EPPlus 8 dùng license NonCommercialPersonal** (`"Your Name"`) trong khi app có bán bản quyền → vi phạm điều khoản EPPlus (Polyform Noncommercial). Cần mua license thương mại hoặc chuyển sang **ClosedXML** (MIT).
+3. ✅ (2026-11-16) Đã bỏ EPPlus (license NonCommercialPersonal không hợp lệ cho app bán bản quyền), chuyển sang **ClosedXML** (MIT) trong `ExcelExporter.cs`.
 4. ✅ (2026-11-16) Mật khẩu không còn bị `Trim()`.
 
 ### Bug / hành vi sai
@@ -185,23 +186,24 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 ### Chất lượng code / bảo trì
 - `Form1.cs` vẫn là God class (~2.1k dòng, đã chia `#region`); `SaveOriginalInvoicesAsync`, `btnCnKoPdf_Click` vẫn dài.
 - ✅ Đã gộp (2026-11-16): vòng search → `SearchInvoicesAsync`; tìm `hdhhdvu` → `InvoiceJson.FindProductArray`; cột Excel chi tiết → `InvoiceJson.DetailExportColumns`; header request → `GdtApi.CreateRequest`; HTML→PDF → `PdfConverter`; kiểm tra 4 khóa HĐ → `SearchResult.HasLookupKeys()`.
-- ✅ Đã xóa code chết: `JObject.cs`, `Models/InvoiceDetai.cs`, `Resources/login.html`, `DownloadInvoiceListExcelAsync`, `GetDaysRemaining`, các khối comment cũ, handler rỗng, field Designer không dùng, package ClosedXML/WebView2.
+- ✅ Đã xóa code chết: `JObject.cs`, `Models/InvoiceDetai.cs`, `Resources/login.html`, `DownloadInvoiceListExcelAsync`, `GetDaysRemaining`, các khối comment cũ, handler rỗng, field Designer không dùng, package ClosedXML/WebView2 (ClosedXML sau đó được dùng lại thay EPPlus).
 - 43 warning (chủ yếu nullable; trước khi dọn là 97) — `Nullable` bật nhưng model chưa khai báo nullable.
 - Quy ước lỗi bằng chuỗi `"❌..."` dễ vỡ; nên dùng `Result`/exception.
 - Không có unit test; URL/hằng số hard-code rải rác.
 
 ### Đề xuất refactor theo thứ tự ưu tiên
-1. Sửa license EPPlus (hoặc chuyển ClosedXML), bỏ secret hard-code, cơ chế kích hoạt an toàn hơn.
+1. ✅ Đã chuyển ClosedXML (bỏ EPPlus). Bỏ secret hard-code, cơ chế kích hoạt an toàn hơn.
 2. ✅ (2026-11-16) Ghi log ra file; sửa thông báo in và thông báo hoàn tất tìm kiếm.
-3. Tách lớp: `GdtApiClient` (captcha/login/search/detail/download + header chung), `InvoiceSearchService` (chia lát 30 ngày + phân trang, dùng chung cho Search & Tải gốc), `ExcelExporter`, `PdfService` (dùng chung 1 browser Puppeteer), `NotesStore`.
+3. Tách lớp: `GdtApiClient` (captcha/login/search/detail/download + header chung), `InvoiceSearchService` (chia lát 30 ngày + phân trang, dùng chung cho Search & Tải gốc), ✅ `ExcelExporter`, `PdfService` (dùng chung 1 browser Puppeteer), `NotesStore`.
 4. ✅ (2026-11-16) Cache chi tiết HĐ theo `Id` + gọi song song có giới hạn (`InvoiceDetailService`).
 5. ✅ (2026-11-16) Đã thêm `Loai_hoa_don` thay vì ghi đè `Thong_tin_lien_quan`.
 6. Dọn warning nullable còn lại.
 
 ## 7. Ghi chú khi sửa code
 - Thêm cột cho lưới chi tiết: sửa `InvoiceDetailItem` + `ConfigureFullDetailGrid`/`ConfigureVatNopGrid` + `CreateDetailItem` (DetailGridManager.cs).
-- Thêm cột cho danh sách: `SearchResult` (SearchResult.cs) + cột `dgvMain` trong Designer (tên cột dạng `colDgv*`, `AutoGenerateColumns=false`) + `ExportSearchResultsToExcelAsync`.
-- Cột Excel chi tiết: chỉ sửa `InvoiceJson.DetailExportColumns` (dùng chung cho Excel 1 HĐ và Excel tổng hợp); cột số → `InvoiceJson.IsNumericColumn`.
+- Thêm cột cho danh sách: `SearchResult` (SearchResult.cs) + cột `dgvMain` trong Designer (tên cột dạng `colDgv*`, `AutoGenerateColumns=false`) + `SearchResultHeaders` và khối ghi ô trong `ExcelExporter.ExportSearchResults` (header dòng 4 viết HOA, cột 7–11 `#,##0`; cột 16 = `Loai_hoa_don`).
+- Cột Excel chi tiết: chỉ sửa `InvoiceJson.DetailExportColumns` (dùng chung cho Excel 1 HĐ và Excel tổng hợp); cột số → `InvoiceJson.IsNumericColumn` (parse InvariantCulture, không parse được thì giữ chữ).
+- Excel: `ExcelExporter` chỉ ghi file (không gọi API/UI), Form1 lấy dữ liệu rồi gọi qua `Task.Run`; test ở `E-Tax.Tests/ExcelExporterTests.cs`.
 - Lấy chi tiết HĐ (phân trang, cache, retry, số request đồng thời): chỉ sửa `InvoiceDetailService` (dùng chung cho lưới, Excel chi tiết, Tra cứu; trả `null` khi lỗi, nơi gọi hiện `DetailFetchError`) (hằng `ProductPageSize`, `MaxConcurrency`); test ở `E-Tax.Tests/InvoiceDetailServiceTests.cs`.
 - Logic search: chỉ sửa `SearchInvoicesAsync` / `FetchSearchPageAsync`.
 - Thêm NCC tra cứu: `BuildTraCuuLink` (switch theo `ngcnhat` lowercase).
