@@ -51,6 +51,21 @@ describe('apiFetch', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
+  it('401 muộn sau khi token đã đổi (đăng xuất) KHÔNG gọi onUnauthorized', async () => {
+    server.use(
+      http.get('http://localhost/api/ping', () =>
+        HttpResponse.json({ code: 'UNAUTHORIZED', message: 'Phiên hết hạn' }, { status: 401 }),
+      ),
+    );
+    let token: string | null = 'abc';
+    const onUnauthorized = vi.fn();
+    configureClient({ getToken: () => token, onUnauthorized });
+    const p = apiFetch('/ping');
+    token = null;
+    await expect(p).rejects.toBeInstanceOf(ApiError);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('401 khi chưa có token (đăng nhập sai) KHÔNG gọi onUnauthorized', async () => {
     server.use(
       http.post('http://localhost/api/auth/login', () =>

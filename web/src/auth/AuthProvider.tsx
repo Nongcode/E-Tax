@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { App } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as authApi from '../api/auth';
@@ -10,6 +10,7 @@ import { clearSession, loadSession, saveSession } from './session';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [initial] = useState(loadSession);
   const [user, setUserState] = useState<User | null>(initial?.user ?? null);
+  const [loggingOut, setLoggingOut] = useState(false);
   const tokenRef = useRef<string | null>(initial?.token ?? null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   configureClient({
     getToken: () => tokenRef.current,
     onUnauthorized: () => {
+      if (!tokenRef.current) return;
       clearSession();
       tokenRef.current = null;
       setUserState(null);
@@ -49,9 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     clearSession();
     tokenRef.current = null;
-    setUserState(null);
-    navigateRef.current('/');
+    // Giữ user đến khi router đã sang '/', tránh RequireAuth chen vào chuyển hướng /dang-nhap?next=...
+    setLoggingOut(true);
+    navigateRef.current('/', { replace: true });
   }, []);
+
+  useEffect(() => {
+    if (loggingOut && location.pathname === '/') {
+      setUserState(null);
+      setLoggingOut(false);
+    }
+  }, [loggingOut, location.pathname]);
 
   const setUser = useCallback((u: User) => {
     setUserState(u);

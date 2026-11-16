@@ -66,7 +66,8 @@ export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T
     body = undefined;
   }
   // Chỉ coi là "phiên hết hạn" khi request đã gửi kèm token.
-  if (res.status === 401 && token) options.onUnauthorized();
+  // Bỏ qua nếu token đã đổi (vd. đã đăng xuất trong lúc request bay).
+  if (res.status === 401 && token && options.getToken() === token) options.onUnauthorized();
   if (isErrorBody(body)) throw new ApiError(res.status, body.code, body.message);
   throw new ApiError(res.status, 'UNKNOWN', `Có lỗi xảy ra (HTTP ${res.status})`);
 }
