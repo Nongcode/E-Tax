@@ -262,6 +262,7 @@ namespace E_Tax
                 if (success)
                 {
                     MessageBox.Show("✅ Đăng nhập thành công!");
+                    lblStatusUser.Text = $"👤 {username}";
 
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
@@ -355,7 +356,9 @@ namespace E_Tax
 
         private void CheckForLicense()
         {
-            switch (LicenseManager.CheckLicense())
+            var status = LicenseManager.CheckLicense();
+            ShowLicenseStatus(status);
+            switch (status)
             {
                 case LicenseStatus.Activated:
                     this.Text = "E-Tax (Phiên bản đầy đủ)";
@@ -377,6 +380,31 @@ namespace E_Tax
                     MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm.", "Hết hạn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Ô bản quyền trên thanh trạng thái và dòng chữ phiên bản ở góc trên.
+        /// </summary>
+        private void ShowLicenseStatus(LicenseStatus status)
+        {
+            switch (status)
+            {
+                case LicenseStatus.Activated:
+                    lblStatusLicense.Text = "Bản quyền: Đầy đủ";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0x16, 0xA3, 0x4A);
+                    break;
+                case LicenseStatus.ValidTrial:
+                    var expiry = LicenseManager.GetTrialExpiry();
+                    int daysLeft = expiry.HasValue ? Math.Max(0, (int)Math.Ceiling((expiry.Value - DateTime.UtcNow).TotalDays)) : 0;
+                    lblStatusLicense.Text = expiry.HasValue ? $"Dùng thử: còn {daysLeft} ngày" : "Dùng thử";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0xD9, 0x77, 0x06);
+                    break;
+                default:
+                    lblStatusLicense.Text = "Dùng thử: đã hết hạn";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0xDC, 0x26, 0x26);
+                    break;
+            }
+            lblVersion.Text = status == LicenseStatus.Activated ? "Phiên bản đầy đủ" : "Phiên bản dùng thử trong vòng 1 tháng";
         }
 
         private void btnActivate_Click(object sender, EventArgs e)
@@ -753,6 +781,7 @@ namespace E_Tax
             this.Cursor = Cursors.WaitCursor;
             dgvMain.DataSource = null;
             _latestResults.Clear();
+            UpdateInvoiceSummary();
 
             var modal = new ProcessingForm();
             modal.Show(this);
@@ -831,12 +860,18 @@ namespace E_Tax
             }
         }
 
+        private void UpdateInvoiceSummary()
+        {
+            lblStatusInvoices.Text = InvoiceSummary.Compute(_latestResults).Format();
+        }
+
         /// <summary>
         /// Bind _latestResults vào lưới tổng hợp, điền cột loại HĐ và đổi ngày lập sang dd/MM/yyyy.
         /// </summary>
         private void BindMainGrid()
         {
             dgvMain.DataSource = _latestResults;
+            UpdateInvoiceSummary();
             UpdateGridRowNumbers();
             dgvMain.SuspendLayout();
             try

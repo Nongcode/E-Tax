@@ -65,6 +65,23 @@ namespace E_Tax
         }
 
         /// <summary>Xác thực key; nếu hợp lệ thì lưu vào registry (giá trị <c>LicenseKey</c>).</summary>
+        /// <summary>
+        /// Ngày hết hạn dùng thử (UTC) đã lưu, hoặc null nếu chưa có / không đọc được.
+        /// </summary>
+        public static DateTime? GetTrialExpiry()
+        {
+            try
+            {
+                using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RegistryPath);
+                if (DateTime.TryParseExact(key?.GetValue(ExpiryValueName) as string, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime expiryDate))
+                    return expiryDate;
+            }
+            catch (Exception)
+            {
+            }
+            return null;
+        }
+
         public static LicenseKeyResult Activate(string userProvidedKey)
         {
             // Bỏ khoảng trắng/xuống dòng lẫn vào khi dán key

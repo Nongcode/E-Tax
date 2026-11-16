@@ -74,4 +74,11 @@ Prototype: `index.html`, tab "Giao diện".
 | T-001.3 | `E-Tax/GridColumnHelper.cs:L14` `ApplyDefaultStyle` | Gọi `UiTheme.StyleGrid` thay cho font/màu xen kẽ cũ | `dgvDetails`, `dgvMua`, `dgvBan`, `dgvVatNop`, `dgvGiamThue` nhận theme qua đây |
 | T-001.3 | `E-Tax/Form1.cs:L66`, `:L101-L113` `StyleMainGrid` | `UiTheme.StyleGrid(dgvMain)`; 3 cột tiền `#,##0` căn phải | `dgvMain` cấu hình trong Designer |
 | T-001.3 | `E-Tax.Tests/UiThemeTests.cs` (mới) | `StyleGrid_AppliesTheme`, `ApplyDefaultStyle_UsesTheme` | TDD |
+| T-001.4 | `E-Tax/InvoiceSummary.cs` (mới) | `record InvoiceSummary(SoldCount, SoldTotal, BoughtCount, BoughtTotal)`; `Compute` theo `Loai_hoa_don`; `Format` dùng `vi-VN` `#,##0` | Nội dung ô số HĐ |
+| T-001.4 | `E-Tax.Tests/InvoiceSummaryTests.cs` (mới) | 4 test | TDD |
+| T-001.4 | `E-Tax/Form1.Designer.cs:L125-L130`, `:L999-L1028` | `statusBar` (nền `#F3F4F6`) + `lblStatusInvoices` (Spring) / `lblStatusUser` / `lblStatusLicense` (đậm); `ClientSize` 984×686 → 984×708 | Thanh trạng thái không che `panelSearch` |
+| T-001.4 | `E-Tax/Form1.cs:L265` | Đăng nhập thành công → `lblStatusUser = "👤 <tài khoản>"` | |
+| T-001.4 | `E-Tax/Form1.cs:L360`, `:L388` `ShowLicenseStatus` | Ô bản quyền: xanh "Đầy đủ" / cam "Dùng thử: còn N ngày" / đỏ "đã hết hạn"; `lblVersion` theo bản quyền | Sửa lỗi `lblVersion` luôn ghi "dùng thử" |
+| T-001.4 | `E-Tax/Form1.cs:L784`, `:L863`, `:L874` | `UpdateInvoiceSummary()` khi xóa kết quả lúc bắt đầu tìm và trong `BindMainGrid` | |
+| T-001.4 | `E-Tax/LicenseManager.cs` `GetTrialExpiry()` | Đọc `TrialExpiryDate` (UTC), null nếu thiếu/lỗi | Số ngày dùng thử còn lại |
 | T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |

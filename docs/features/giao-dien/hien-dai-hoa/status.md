@@ -10,11 +10,11 @@
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Nhóm 1: cửa sổ co giãn, bảng hiện đại, thanh trạng thái |
 | Bước Superpowers | Không áp dụng đủ chuỗi: đây là `change` trên màn hình có sẵn, không thêm màn hình/API/model. Vẫn TDD cho logic. |
-| Task đang làm | T-001.4 |
-| **Bước tiếp theo** | T-001.4: viết `E-Tax.Tests/InvoiceSummaryTests.cs` (4 test) chạy thấy fail, rồi tạo `E-Tax/InvoiceSummary.cs` và `StatusStrip` |
+| Task đang làm | T-001.5 |
+| **Bước tiếp theo** | T-001.5: khối `#if DEBUG` trong `Form1_Load` — `ETAX_UI_DEMO=1` bỏ đăng nhập, nạp 60 HĐ mẫu, `BindMainGrid`; kiểm tra Release dll không chứa chuỗi `ETAX_UI_DEMO` |
 | Branch | `feature/giao-dien-hien-dai` (tách từ `master` @ 29d5a4c) |
-| Cập nhật lần cuối | 2026-11-16 14:40 |
-| Ghi chú dở dang | (1) `downloadProgressBar`/`lblDownloadStatus` nằm dưới `mainSplitContainer` (Dock Fill, z-order trên) nên có thể bị che từ trước — kiểm tra bằng demo, xử lý ở T-001.4. (2) `lblVersion` luôn ghi "Phiên bản dùng thử trong vòng 1 tháng" kể cả bản đầy đủ — xử lý cùng thanh trạng thái. (3) Nhánh `chore/release-public-key` (public key thật) chưa merge, độc lập với nhánh này. |
+| Cập nhật lần cuối | 2026-11-16 15:00 |
+| Ghi chú dở dang | (1) `downloadProgressBar`/`lblDownloadStatus` nằm dưới `mainSplitContainer` (Dock Fill, z-order trên) nên có thể bị che từ trước — kiểm tra bằng demo, xử lý ở T-001.4. (2) ~~`lblVersion` ghi sai bản quyền~~ — đã sửa ở T-001.4. (3) Nhánh `chore/release-public-key` (public key thật) chưa merge, độc lập với nhánh này. |
 
 ## File chính
 
@@ -36,7 +36,7 @@
 | T-001.1 | Lưu/khôi phục vị trí cửa sổ (TDD) | ✅ DONE | xUnit 6 test RED→GREEN, suite 37/37; bỏ qua Playwright: logic thuần, chưa nối UI | Thêm test màn hình phụ |
 | T-001.2 | Cửa sổ co giãn, căn giữa đăng nhập | ✅ DONE | TC-01 ✅ TC-03 ✅ TC-04 ✅ (ảnh `T-001.2-*`); TC-02 chờ demo T-001.5 | `MinimumSize = Size` đặt bằng code (không phụ thuộc DPI) |
 | T-001.3 | Style bảng hiện đại (UiTheme) | ✅ DONE | xUnit 2 test RED→GREEN, suite 39/39; build 0 lỗi. Ảnh TC-05 dời sang T-001.6 (cần dữ liệu demo của T-001.5) | Ruling: không cố định cột Ký hiệu HĐ/Số HĐ — là cột 5–6, cố định thì kéo theo 4 cột trước (~470px, nửa bề ngang tối thiểu); giữ STT. Ruling: định dạng tiền `#,##0` (thống nhất các bảng khác) thay vì `N0`. Padding ô chỉ ngang 6px (dọc sẽ cắt chữ ở dòng 28px) |
-| T-001.4 | Thanh trạng thái (TDD phần tính) | ⬜ TODO | xUnit + ảnh chụp TC-06 | |
+| T-001.4 | Thanh trạng thái (TDD phần tính) | ✅ DONE | xUnit 4 test RED→GREEN, suite 43/43; build 0 lỗi; TC-06 phần đăng nhập ✅ (ảnh `T-001.4-TC06-dang-nhap.png`); phần có dữ liệu chạy ở T-001.6 bằng demo | Thêm `LicenseManager.GetTrialExpiry()` để hiện "còn N ngày". `lblVersion` sửa theo bản quyền (ghi chú dở dang (2) đã xử lý) |
 | T-001.5 | Chế độ demo chỉ Debug | ⬜ TODO | Chạy demo; kiểm tra Release không chứa | |
 | T-001.6 | Kiểm thử tổng thể + tài liệu | ⬜ TODO | TC-01..07 | |
 
@@ -44,6 +44,7 @@
 
 | Thời gian | Lệnh / kịch bản | Kết quả | Ghi chú |
 |---|---|---|---|
+| 2026-11-16 15:00 | `dotnet test E-Tax.Tests` + ảnh màn hình đăng nhập | ✅ 43/43; TC-06 (đăng nhập) pass | "Chưa có dữ liệu", "Bản quyền: Đầy đủ" màu xanh; `lblVersion` = "Phiên bản đầy đủ" |
 | 2026-11-16 14:40 | `dotnet test E-Tax.Tests` | ✅ 39/39 | T-001.3 (`UiThemeTests` 2 test) |
 | 2026-11-16 14:20 | Ảnh chụp app Debug: TC-01, TC-03, TC-04 | ✅ pass | min 1000×725 giữ khi kéo 600×400; phóng to 1936×1048; mở lại 150,70 1300×820; mở lại phóng to; 5000,5000 → giữa 460,153 |
 | 2026-11-16 14:00 | `dotnet test E-Tax.Tests` | ✅ 37/37 | T-001.1 |
@@ -58,4 +59,5 @@
 - 2026-11-16 14:00 — Người dùng duyệt kế hoạch ("oke"). Xong T-001.1.
 - 2026-11-16 14:20 — Xong T-001.2 (build 0 lỗi, TC-01/03/04 đạt bằng script PowerShell ngoài repo).
 - 2026-11-16 14:40 — Xong T-001.3 (UiTheme, áp cho 6 bảng).
+- 2026-11-16 15:00 — Xong T-001.4 (InvoiceSummary + StatusStrip).
   - Ruling: coi là `change` (không đủ chuỗi Superpowers) vì không thêm màn hình/API/model.

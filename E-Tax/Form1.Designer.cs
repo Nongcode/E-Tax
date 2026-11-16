@@ -122,7 +122,12 @@ namespace E_Tax
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
+            statusBar = new StatusStrip();
+            lblStatusInvoices = new ToolStripStatusLabel();
+            lblStatusUser = new ToolStripStatusLabel();
+            lblStatusLicense = new ToolStripStatusLabel();
             panelLogin.SuspendLayout();
+            statusBar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             panelActivation.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).BeginInit();
@@ -991,10 +996,40 @@ namespace E_Tax
             statusTimer.Interval = 2000;
             statusTimer.Tick += statusTimer_Tick;
             // 
+            // statusBar
+            // 
+            statusBar.BackColor = Color.FromArgb(243, 244, 246);
+            statusBar.Font = new Font("Segoe UI", 9F);
+            statusBar.Items.AddRange(new ToolStripItem[] { lblStatusInvoices, lblStatusUser, lblStatusLicense });
+            statusBar.Location = new Point(0, 686);
+            statusBar.Name = "statusBar";
+            statusBar.Size = new Size(984, 22);
+            statusBar.SizingGrip = true;
+            statusBar.TabIndex = 18;
+            // 
+            // lblStatusInvoices
+            // 
+            lblStatusInvoices.ForeColor = Color.FromArgb(55, 65, 81);
+            lblStatusInvoices.Name = "lblStatusInvoices";
+            lblStatusInvoices.Spring = true;
+            lblStatusInvoices.Text = "Chưa có dữ liệu";
+            lblStatusInvoices.TextAlign = ContentAlignment.MiddleLeft;
+            // 
+            // lblStatusUser
+            // 
+            lblStatusUser.ForeColor = Color.FromArgb(55, 65, 81);
+            lblStatusUser.Name = "lblStatusUser";
+            // 
+            // lblStatusLicense
+            // 
+            lblStatusLicense.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            lblStatusLicense.Name = "lblStatusLicense";
+            // 
             // Form1
             // 
             BackColor = Color.White;
-            ClientSize = new Size(984, 686);
+            ClientSize = new Size(984, 708);
+            Controls.Add(statusBar);
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);
@@ -1003,6 +1038,8 @@ namespace E_Tax
             StartPosition = FormStartPosition.CenterScreen;
             Text = "E-Tax Invoice Downloader";
             Load += Form1_Load;
+            statusBar.ResumeLayout(false);
+            statusBar.PerformLayout();
             panelLogin.ResumeLayout(false);
             panelLogin.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
@@ -1090,5 +1127,9 @@ namespace E_Tax
         private TabPage tabGiamThue;
 
         private TextBox txtKtraMaDoanhNghiep;
+        private StatusStrip statusBar;
+        private ToolStripStatusLabel lblStatusInvoices;
+        private ToolStripStatusLabel lblStatusUser;
+        private ToolStripStatusLabel lblStatusLicense;
     }
 }
