@@ -125,6 +125,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 3. `dotnet run --project tools/E-Tax.KeyGen -- issue <private.pem> <mã máy> "<tên khách>" [yyyy-MM-dd]` (bỏ ngày = vĩnh viễn) → gửi chuỗi key in ra cho khách dán vào ô **Mã** → "Kích hoạt".
 
 ### 5.2 Đăng nhập
+Khối đăng nhập không có logo: tiêu đề `lblLoginTitle` + `lblLoginSubtitle`; `CenterLoginPanel` đặt chiều cao theo nội dung và căn giữa vùng trên thanh trạng thái (gọi lại khi `Resize`/`Shown`/`panelActivation.VisibleChanged`).
 `btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
 
 ### 5.3 Tìm kiếm (`btnLeftSearch_Click`) — chức năng trung tâm
@@ -167,7 +168,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 - Cửa sổ co giãn (`Sizable`, tối thiểu = kích thước thiết kế): `RestoreWindowBounds`/`SaveWindowBounds` (`#region Cửa sổ`), `CenterLoginPanel` khi Resize.
 - Thanh trạng thái `statusBar`: `lblStatusInvoices` (`UpdateInvoiceSummary`, gọi trong `BindMainGrid` và khi bắt đầu tìm), `lblStatusUser` (đăng nhập), `lblStatusLicense` + `lblVersion` (`ShowLicenseStatus` trong `CheckForLicense`).
 - `dgvMain` chọn cả dòng (`FullRowSelect`) → In pdf in tất cả dòng đang chọn. Style/định dạng tiền ở `StyleMainGrid`.
-- **Chế độ demo (chỉ Debug):** đặt biến môi trường `ETAX_UI_DEMO=1` (hoặc `progress` để hiện thanh tiến độ) → bỏ đăng nhập, nạp 60 HĐ mẫu (`ShowDemoData`), không gọi API. Dùng để chụp màn hình; không có trong Release.
+- **Chế độ demo (chỉ Debug):** đặt biến môi trường `ETAX_UI_DEMO=1` (hoặc `progress` để hiện thanh tiến độ; `activation` để hiện khối kích hoạt trên màn hình đăng nhập) → bỏ đăng nhập, nạp 60 HĐ mẫu (`ShowDemoData`), không gọi API. Dùng để chụp màn hình; không có trong Release.
 - Quy ước lỗi: các hàm gọi API trả về **chuỗi bắt đầu bằng `"❌"`** khi lỗi thay vì throw → nơi gọi kiểm `StartsWith("❌")`.
 
 ## 6. Đánh giá

@@ -89,3 +89,14 @@ Prototype: `index.html`, tab "Giao diện".
 | T-001.6 | `E-Tax/Form1.cs:L75` | `MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea)` | |
 | T-001.6 | `E-Tax/Form1.cs:L928`, `:L989` | `UpdateInvoiceSummary(shown)` — khi lọc MST hiện "Lọc x/y HĐ — …" | Thanh trạng thái khớp bảng |
 | T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |
+
+### CR-002 — Bỏ logo màn hình đăng nhập, cân đối khối đăng nhập
+
+| Task | File:dòng | Thay đổi | Lý do |
+|---|---|---|---|
+| T-002.1 | `E-Tax/Form1.Designer.cs` | Xoá `pictureBox1` (logo "E") và `pictureBox2` (ẩn, không dùng); thêm `lblLoginTitle` (L238, "Đăng nhập", Segoe UI 20 đậm, Accent) và `lblLoginSubtitle` ("Tài khoản hoadondientu.gdt.gov.vn", `#6B7280`) | Người dùng chọn tiêu đề chữ thay logo |
+| T-002.1 | `E-Tax/Form1.Designer.cs` `panelLogin` | Mọi ô/đường kẻ/captcha/nút cùng cột x=60 rộng 350; dời lên vào chỗ logo cũ (txtUser y=88 … btnLogin y=340); `panelActivation` y=410 | Trước lệch 60/61/67 |
+| T-002.1 | `E-Tax/Form1.resx` | Xoá `pictureBox1.Image`, `pictureBox2.Image` (~53 KB) | |
+| T-002.1 | `E-Tax/Form1.cs:L221` `CenterLoginPanel` | Cao theo nội dung (`btnLogin` hoặc `panelActivation` nếu hiện); căn giữa vùng trên thanh trạng thái | Cân đối; sửa minor CR-001 lệch ~11px |
+| T-002.1 | `E-Tax/Form1.cs:L79` | Gọi lại khi `panelActivation.VisibleChanged` và `Shown` | Khối kích hoạt hiện/ẩn → căn lại |
+| T-002.1 | `E-Tax/Form1.cs:L111` (`#if DEBUG`) | `ETAX_UI_DEMO=activation` hiện khối kích hoạt | Chụp TC-09 không sửa registry |

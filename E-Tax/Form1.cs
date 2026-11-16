@@ -75,6 +75,9 @@ namespace E_Tax
             MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea);
             RestoreWindowBounds();
             Resize += (_, _) => CenterLoginPanel();
+            // Khối kích hoạt hiện/ẩn làm đổi chiều cao khối đăng nhập; Shown: lúc này Visible mới phản ánh đúng
+            panelActivation.VisibleChanged += (_, _) => CenterLoginPanel();
+            Shown += (_, _) => CenterLoginPanel();
             FormClosing += (_, _) => SaveWindowBounds();
         }
 
@@ -103,6 +106,14 @@ namespace E_Tax
             if (demo is "1" or "progress")
             {
                 ShowDemoData(showProgress: demo == "progress");
+                return;
+            }
+            if (demo == "activation")
+            {
+                // Chụp màn hình trạng thái hết hạn mà không sửa registry bản quyền
+                txtMachineId.Text = MachineId.Get();
+                panelActivation.Visible = true;
+                SetLoginInputsEnabled(false);
                 return;
             }
 #endif
@@ -204,11 +215,16 @@ namespace E_Tax
             }
         }
 
+        /// <summary>
+        /// Khối đăng nhập cao vừa nội dung (tới nút Đăng nhập, hoặc khối kích hoạt khi hiện) và nằm giữa vùng phía trên thanh trạng thái.
+        /// </summary>
         private void CenterLoginPanel()
         {
             if (WindowState == FormWindowState.Minimized) return;
+            panelLogin.Height = (panelActivation.Visible ? panelActivation.Bottom : btnLogin.Bottom) + 6;
+            int availableHeight = ClientSize.Height - statusBar.Height;
             panelLogin.Left = Math.Max(0, (ClientSize.Width - panelLogin.Width) / 2);
-            panelLogin.Top = Math.Max(lblVersion.Bottom, (ClientSize.Height - panelLogin.Height) / 2);
+            panelLogin.Top = Math.Max(lblVersion.Bottom, (availableHeight - panelLogin.Height) / 2);
         }
 
         #endregion

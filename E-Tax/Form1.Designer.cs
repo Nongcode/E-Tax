@@ -52,7 +52,6 @@ namespace E_Tax
             btnRefreshCaptcha = new Button();
             btnLogin = new Button();
             panelLogin = new Panel();
-            pictureBox1 = new PictureBox();
             panel3 = new Panel();
             panelActivation = new Panel();
             panel4 = new Panel();
@@ -117,7 +116,8 @@ namespace E_Tax
             btnRightSearch = new Button();
             downloadProgressBar = new ProgressBar();
             lblDownloadStatus = new Label();
-            pictureBox2 = new PictureBox();
+            lblLoginTitle = new Label();
+            lblLoginSubtitle = new Label();
             colDgvLoaiHD = new DataGridViewTextBoxColumn();
             lblVersion = new Label();
             lblStatusMessage = new Label();
@@ -128,7 +128,6 @@ namespace E_Tax
             lblStatusLicense = new ToolStripStatusLabel();
             panelLogin.SuspendLayout();
             statusBar.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             panelActivation.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).BeginInit();
             panelSearch.SuspendLayout();
@@ -150,7 +149,6 @@ namespace E_Tax
             tabGiamThue.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvGiamThue).BeginInit();
             gbNguoiBan.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
             SuspendLayout();
             // 
             // txtUser
@@ -158,11 +156,11 @@ namespace E_Tax
             txtUser.BorderStyle = BorderStyle.None;
             txtUser.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point, 0);
             txtUser.ForeColor = Color.FromArgb(0, 117, 214);
-            txtUser.Location = new Point(60, 151);
+            txtUser.Location = new Point(60, 88);
             txtUser.Multiline = true;
             txtUser.Name = "txtUser";
             txtUser.PlaceholderText = "Nhập tài khoản...";
-            txtUser.Size = new Size(344, 34);
+            txtUser.Size = new Size(350, 30);
             txtUser.TabIndex = 3;
             // 
             // txtPass
@@ -170,12 +168,12 @@ namespace E_Tax
             txtPass.BorderStyle = BorderStyle.None;
             txtPass.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point, 0);
             txtPass.ForeColor = Color.FromArgb(0, 117, 214);
-            txtPass.Location = new Point(61, 205);
+            txtPass.Location = new Point(60, 144);
             txtPass.Multiline = true;
             txtPass.Name = "txtPass";
             txtPass.PasswordChar = '*';
             txtPass.PlaceholderText = "Nhập mật khẩu...";
-            txtPass.Size = new Size(350, 36);
+            txtPass.Size = new Size(350, 30);
             txtPass.TabIndex = 4;
             // 
             // txtCaptcha
@@ -183,11 +181,11 @@ namespace E_Tax
             txtCaptcha.BorderStyle = BorderStyle.None;
             txtCaptcha.Font = new Font("Segoe UI", 12F, FontStyle.Italic, GraphicsUnit.Point, 0);
             txtCaptcha.ForeColor = Color.FromArgb(0, 117, 214);
-            txtCaptcha.Location = new Point(61, 261);
+            txtCaptcha.Location = new Point(60, 200);
             txtCaptcha.Multiline = true;
             txtCaptcha.Name = "txtCaptcha";
             txtCaptcha.PlaceholderText = "Nhập mã bên dưới...";
-            txtCaptcha.Size = new Size(356, 30);
+            txtCaptcha.Size = new Size(350, 30);
             txtCaptcha.TabIndex = 5;
             // 
             // btnRefreshCaptcha
@@ -195,7 +193,7 @@ namespace E_Tax
             btnRefreshCaptcha.BackColor = Color.Transparent;
             btnRefreshCaptcha.Font = new Font("Segoe UI", 27.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
             btnRefreshCaptcha.ForeColor = Color.FromArgb(0, 117, 214);
-            btnRefreshCaptcha.Location = new Point(350, 311);
+            btnRefreshCaptcha.Location = new Point(343, 254);
             btnRefreshCaptcha.Name = "btnRefreshCaptcha";
             btnRefreshCaptcha.Size = new Size(67, 66);
             btnRefreshCaptcha.TabIndex = 7;
@@ -210,7 +208,7 @@ namespace E_Tax
             btnLogin.FlatStyle = FlatStyle.Flat;
             btnLogin.Font = new Font("Segoe UI Emoji", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             btnLogin.ForeColor = Color.White;
-            btnLogin.Location = new Point(67, 397);
+            btnLogin.Location = new Point(60, 340);
             btnLogin.Name = "btnLogin";
             btnLogin.Size = new Size(350, 54);
             btnLogin.TabIndex = 8;
@@ -220,7 +218,8 @@ namespace E_Tax
             // 
             // panelLogin
             // 
-            panelLogin.Controls.Add(pictureBox1);
+            panelLogin.Controls.Add(lblLoginTitle);
+            panelLogin.Controls.Add(lblLoginSubtitle);
             panelLogin.Controls.Add(panel3);
             panelLogin.Controls.Add(panelActivation);
             panelLogin.Controls.Add(panel2);
@@ -233,23 +232,35 @@ namespace E_Tax
             panelLogin.Controls.Add(btnLogin);
             panelLogin.Location = new Point(289, 26);
             panelLogin.Name = "panelLogin";
-            panelLogin.Size = new Size(471, 627);
+            panelLogin.Size = new Size(471, 394);
             panelLogin.TabIndex = 0;
             // 
-            // pictureBox1
+            // lblLoginTitle
             // 
-            pictureBox1.Image = (Image)resources.GetObject("pictureBox1.Image");
-            pictureBox1.Location = new Point(162, 18);
-            pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(134, 107);
-            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox1.TabIndex = 20;
-            pictureBox1.TabStop = false;
+            lblLoginTitle.Font = new Font("Segoe UI", 20F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            lblLoginTitle.ForeColor = Color.FromArgb(0, 117, 214);
+            lblLoginTitle.Location = new Point(60, 0);
+            lblLoginTitle.Name = "lblLoginTitle";
+            lblLoginTitle.Size = new Size(350, 42);
+            lblLoginTitle.TabIndex = 20;
+            lblLoginTitle.Text = "Đăng nhập";
+            lblLoginTitle.TextAlign = ContentAlignment.MiddleCenter;
+            // 
+            // lblLoginSubtitle
+            // 
+            lblLoginSubtitle.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            lblLoginSubtitle.ForeColor = Color.FromArgb(107, 114, 128);
+            lblLoginSubtitle.Location = new Point(60, 42);
+            lblLoginSubtitle.Name = "lblLoginSubtitle";
+            lblLoginSubtitle.Size = new Size(350, 22);
+            lblLoginSubtitle.TabIndex = 21;
+            lblLoginSubtitle.Text = "Tài khoản hoadondientu.gdt.gov.vn";
+            lblLoginSubtitle.TextAlign = ContentAlignment.MiddleCenter;
             // 
             // panel3
             // 
             panel3.BackColor = Color.FromArgb(0, 117, 214);
-            panel3.Location = new Point(67, 290);
+            panel3.Location = new Point(60, 233);
             panel3.Name = "panel3";
             panel3.Size = new Size(350, 1);
             panel3.TabIndex = 19;
@@ -265,7 +276,7 @@ namespace E_Tax
             panelActivation.Controls.Add(txtMachineId);
             panelActivation.Controls.Add(btnCopyMachineId);
             panelActivation.Font = new Font("Segoe UI", 9.75F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            panelActivation.Location = new Point(17, 467);
+            panelActivation.Location = new Point(16, 410);
             panelActivation.Name = "panelActivation";
             panelActivation.Size = new Size(439, 142);
             panelActivation.TabIndex = 17;
@@ -355,7 +366,7 @@ namespace E_Tax
             // panel2
             // 
             panel2.BackColor = Color.FromArgb(0, 117, 214);
-            panel2.Location = new Point(61, 240);
+            panel2.Location = new Point(60, 177);
             panel2.Name = "panel2";
             panel2.Size = new Size(350, 1);
             panel2.TabIndex = 18;
@@ -363,7 +374,7 @@ namespace E_Tax
             // panel1
             // 
             panel1.BackColor = Color.FromArgb(0, 117, 214);
-            panel1.Location = new Point(60, 184);
+            panel1.Location = new Point(60, 121);
             panel1.Name = "panel1";
             panel1.Size = new Size(350, 1);
             panel1.TabIndex = 17;
@@ -371,9 +382,9 @@ namespace E_Tax
             // picCaptcha
             // 
             picCaptcha.BorderStyle = BorderStyle.FixedSingle;
-            picCaptcha.Location = new Point(67, 311);
+            picCaptcha.Location = new Point(60, 254);
             picCaptcha.Name = "picCaptcha";
-            picCaptcha.Size = new Size(280, 66);
+            picCaptcha.Size = new Size(276, 66);
             picCaptcha.SizeMode = PictureBoxSizeMode.StretchImage;
             picCaptcha.TabIndex = 6;
             picCaptcha.TabStop = false;
@@ -383,7 +394,6 @@ namespace E_Tax
             panelSearch.Controls.Add(mainSplitContainer);
             panelSearch.Controls.Add(downloadProgressBar);
             panelSearch.Controls.Add(lblDownloadStatus);
-            panelSearch.Controls.Add(pictureBox2);
             panelSearch.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             panelSearch.ForeColor = Color.FromArgb(0, 117, 214);
             panelSearch.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -954,17 +964,6 @@ namespace E_Tax
             lblDownloadStatus.Text = "Đang tải 0/0...";
             lblDownloadStatus.Visible = false;
             // 
-            // pictureBox2
-            // 
-            pictureBox2.Image = (Image)resources.GetObject("pictureBox2.Image");
-            pictureBox2.Location = new Point(161, 16);
-            pictureBox2.Name = "pictureBox2";
-            pictureBox2.Size = new Size(134, 107);
-            pictureBox2.SizeMode = PictureBoxSizeMode.Zoom;
-            pictureBox2.TabIndex = 21;
-            pictureBox2.TabStop = false;
-            pictureBox2.Visible = false;
-            // 
             // colDgvLoaiHD
             // 
             colDgvLoaiHD.Name = "colDgvLoaiHD";
@@ -1042,7 +1041,6 @@ namespace E_Tax
             statusBar.PerformLayout();
             panelLogin.ResumeLayout(false);
             panelLogin.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             panelActivation.ResumeLayout(false);
             panelActivation.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)picCaptcha).EndInit();
@@ -1069,7 +1067,6 @@ namespace E_Tax
             ((System.ComponentModel.ISupportInitialize)dgvGiamThue).EndInit();
             gbNguoiBan.ResumeLayout(false);
             gbNguoiBan.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -1086,8 +1083,8 @@ namespace E_Tax
         private Panel panel2;
         private Panel panel3;
         private Panel panel4;
-        private PictureBox pictureBox1;
-        private PictureBox pictureBox2;
+        private Label lblLoginTitle;
+        private Label lblLoginSubtitle;
         private Label label1;
         private Label label2;
         private DateTimePicker dtpToDate;

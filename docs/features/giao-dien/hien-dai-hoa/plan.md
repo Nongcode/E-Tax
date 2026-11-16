@@ -124,3 +124,26 @@ App là WinForms nên không chạy được bằng Playwright. Giao diện th�
 - Chưa có ảnh màn hình chính thật (cần đăng nhập cổng thuế). Chế độ demo T-001.5 giải quyết việc này mà không đưa vào bản phát hành.
 - Thanh tiến độ `downloadProgressBar` / `lblDownloadStatus` / `pictureBox2` nằm trong `panelSearch` ở toạ độ cố định. Khi co giãn cần kiểm tra chúng không bị bảng che. Nếu bị che, chuyển tiến độ xuống thanh trạng thái (ghi Ruling trong `status.md`).
 - Tổng tiền gộp Bán ra + Mua vào không có nghĩa kế toán, nên tách theo loại. Chưa trừ HĐ bị hủy/điều chỉnh: thanh trạng thái chỉ để tham khảo, ghi rõ trong tooltip.
+
+### CR-002 — Bỏ logo màn hình đăng nhập, cân đối khối đăng nhập · 2026-11-16
+
+**Mục tiêu:** bỏ logo chữ "E" (`pictureBox1`) và logo ẩn không dùng (`pictureBox2`). Đầu khối đăng nhập thay bằng tiêu đề chữ: "Đăng nhập" (Segoe UI 20 đậm, màu Accent) và dòng phụ "Tài khoản hoadondientu.gdt.gov.vn" (màu xám `#6B7280`). Người dùng đã chọn phương án này (2026-11-16).
+
+**Phạm vi:** chỉ bố cục `panelLogin`. Không đổi luồng đăng nhập hay kích hoạt.
+
+#### T-002.1 — Bỏ logo, tiêu đề chữ, căn thẳng, căn giữa theo nội dung
+- File: `E-Tax/Form1.Designer.cs`, `E-Tax/Form1.resx` (xoá ảnh `pictureBox1.Image`, `pictureBox2.Image`), `E-Tax/Form1.cs` (`CenterLoginPanel`, demo)
+- Các bước:
+  1. Xoá `pictureBox1` và `pictureBox2`; thêm `lblLoginTitle` và `lblLoginSubtitle` (rộng 350, căn giữa).
+  2. Mọi ô nhập, đường kẻ, captcha và nút căn cùng cột x=60, rộng 350 (trước lệch 60/61/67). Dời toàn bộ lên 63px vào chỗ logo cũ.
+  3. `CenterLoginPanel`:
+     - Chiều cao `panelLogin` theo nội dung: tới `btnLogin` hoặc `panelActivation` nếu đang hiện.
+     - Căn giữa trong vùng phía trên thanh trạng thái (sửa luôn minor đã hoãn ở CR-001: lệch ~11px).
+     - Gọi lại khi form `Shown` và khi `panelActivation.VisibleChanged`.
+  4. Demo (chỉ Debug): `ETAX_UI_DEMO=activation` hiện `panelActivation` để chụp trạng thái hết hạn mà không sửa registry bản quyền.
+- Xong khi: build 0 lỗi, test xanh, TC-08 và TC-09 đạt.
+
+| ID | Kịch bản | Kết quả mong đợi |
+|---|---|---|
+| TC-08 | Mở app (đăng nhập), cỡ mặc định và phóng to | Không còn logo; tiêu đề + dòng phụ; các ô thẳng cột; khối ở giữa vùng trên thanh trạng thái |
+| TC-09 | Debug + `ETAX_UI_DEMO=activation` | Khối kích hoạt hiện dưới nút Đăng nhập, cả khối vẫn ở giữa, không bị cắt |

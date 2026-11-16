@@ -7,4 +7,4 @@ Trạng thái: 🟡 IN_PROGRESS · ✅ DONE · ⏸ PAUSED · 🔴 BLOCKED
 
 | Chức năng | Folder | Trạng thái | Yêu cầu đang làm | Cập nhật |
 |---|---|---|---|---|
-| Hiện đại hóa giao diện | [giao-dien/hien-dai-hoa](giao-dien/hien-dai-hoa/status.md) | ✅ DONE | CR-001 — Nhóm 1: cửa sổ co giãn, bảng hiện đại, thanh trạng thái | 2026-11-16 16:10 |
+| Hiện đại hóa giao diện | [giao-dien/hien-dai-hoa](giao-dien/hien-dai-hoa/status.md) | ✅ DONE | CR-001, CR-002 — chờ tích hợp nhánh | 2026-11-16 16:50 |
