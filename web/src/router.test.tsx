@@ -78,4 +78,10 @@ describe('router', () => {
     renderAt('/quan-tri/goi');
     expect(await screen.findByText('Không có quyền truy cập')).toBeInTheDocument();
   });
+
+  it('admin vào /tai-khoan bị chặn', async () => {
+    loginAs('admin@etax.vn', 'Admin@123');
+    renderAt('/tai-khoan');
+    expect(await screen.findByText('Không có quyền truy cập')).toBeInTheDocument();
+  });
 });

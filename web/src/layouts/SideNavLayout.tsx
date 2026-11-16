@@ -81,7 +81,7 @@ export default function SideNavLayout({ items, theme, title }: Props) {
       )}
       {!wide && (
         <Drawer
-          open={open}
+          open={open && !wide}
           onClose={() => setOpen(false)}
           placement="left"
           width={240}

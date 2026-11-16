@@ -31,15 +31,20 @@ export const routes: RouteObject[] = [
         element: <RequireAuth />,
         children: [
           {
-            element: <AccountLayout />,
+            element: <RequireRole role="customer" />,
             children: [
-              { path: '/tai-khoan', element: soon('Tổng quan') },
-              { path: '/tai-khoan/mua-goi', element: soon('Mua gói') },
-              { path: '/tai-khoan/don-hang', element: soon('Đơn hàng') },
-              { path: '/tai-khoan/don-hang/:id', element: soon('Thanh toán') },
-              { path: '/tai-khoan/ban-quyen', element: soon('Bản quyền') },
-              { path: '/tai-khoan/ban-quyen/:id', element: soon('Chi tiết bản quyền') },
-              { path: '/tai-khoan/ho-so', element: soon('Hồ sơ') },
+              {
+                element: <AccountLayout />,
+                children: [
+                  { path: '/tai-khoan', element: soon('Tổng quan') },
+                  { path: '/tai-khoan/mua-goi', element: soon('Mua gói') },
+                  { path: '/tai-khoan/don-hang', element: soon('Đơn hàng') },
+                  { path: '/tai-khoan/don-hang/:id', element: soon('Thanh toán') },
+                  { path: '/tai-khoan/ban-quyen', element: soon('Bản quyền') },
+                  { path: '/tai-khoan/ban-quyen/:id', element: soon('Chi tiết bản quyền') },
+                  { path: '/tai-khoan/ho-so', element: soon('Hồ sơ') },
+                ],
+              },
             ],
           },
           {
