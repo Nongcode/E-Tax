@@ -1,15 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configureClient } from './client';
-import { useMockServer } from '../test/server';
+import { setupMockServer } from '../test/server';
 import { addActivation, removeActivation, getLicenses } from './licenses';
 import { forgotPassword, login } from './auth';
 import { createOrder, getOrders } from './orders';
 import { getPlans } from './plans';
 import { confirmOrder, getAdminOrders, getStats } from './admin';
 
-// Không phải React hook, chỉ đăng ký beforeAll/afterAll của vitest.
-// eslint-disable-next-line react-hooks/rules-of-hooks
-useMockServer();
+setupMockServer();
 
 let token: string | null = null;
 

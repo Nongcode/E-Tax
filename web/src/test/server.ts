@@ -5,7 +5,7 @@ import { createMemoryStorage } from '../mocks/memoryStorage';
 import { createHandlers } from '../mocks/handlers';
 
 /** Gọi ở cấp cao nhất của file test. */
-export function useMockServer(): { db: () => MockDb } {
+export function setupMockServer(): { db: () => MockDb } {
   const server = setupServer();
   let current: MockDb;
 
