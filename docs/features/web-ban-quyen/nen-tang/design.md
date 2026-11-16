@@ -79,6 +79,10 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | web/src/mocks/licenses.ts | `listLicenses`, `addActivation`, `removeActivation`, `extendLicense`, `revokeLicense`, `toPublicLicense`, `effectiveLicenseStatus` | Bản quyền và máy (R7–R15) |
 | web/src/mocks/admin.ts | `adminListUsers`, `adminGetUser`, `adminSetUserStatus`, `stats` | Khách hàng và số liệu quản trị (R19) |
 | web/src/mocks/views.ts | `toPublicUser`, `effectiveOrderStatus` | Hàm chuyển dữ liệu lưu → dữ liệu trả ra |
+| web/src/mocks/handlers.ts | `createHandlers(db, {delayMs})` | 34 route MSW theo hợp đồng API, kiểm tra token/vai trò (R16), MockError → JSON |
+| web/src/mocks/browser.ts | `mockDb`, `worker` | Giả lập trong trình duyệt (localStorage, trễ 300ms) |
+| web/src/api/{auth,plans,orders,licenses,admin}.ts | mỗi endpoint một hàm | Lớp gọi API cho màn hình |
+| web/src/test/server.ts | `setupMockServer()` | MSW setupServer + mockDb mới cho mỗi test |
 
 ## Nhật ký sửa đổi
 
@@ -93,3 +97,4 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.5 | web/src/mocks/mockDb.ts | Đơn hàng và xác nhận thanh toán; load() kiểm tra đủ cấu trúc | Luồng mua gói |
 | T-001.6 | web/src/mocks/licenses.ts, errors.ts (mới), mockDb.ts | Bản quyền, thêm/gỡ máy, gia hạn, thu hồi | Tách file cho gọn mockDb.ts |
 | T-001.7 | web/src/mocks/admin.ts, views.ts (mới), mockDb.ts | Khách hàng, khoá/mở, số liệu tháng | Trang quản trị |
+| T-001.8 | web/src/mocks/handlers.ts, browser.ts, web/src/api/*.ts, web/src/test/server.ts, web/public/mockServiceWorker.js (mới) | Nối mockDb với hợp đồng API | Màn hình gọi API thật sự qua MSW |
