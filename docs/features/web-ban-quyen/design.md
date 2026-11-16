@@ -182,6 +182,11 @@ Mọi đường dẫn có tiền tố `/api`. Xác thực bằng `Authorization:
 | R15 | Khách truy cập đơn/bản quyền của người khác | 404 `NOT_FOUND` (không lộ là tồn tại) |
 | R16 | Thiếu/sai token → 401 `UNAUTHORIZED`; sai vai trò → 403 `FORBIDDEN` | |
 | R17 | Mã đơn `ET` + 6 số ngẫu nhiên, lặp lại đến khi không trùng | — |
+| R18 | Đổi mật khẩu: mật khẩu hiện tại sai | 400 `WRONG_PASSWORD` "Mật khẩu hiện tại không đúng" |
+| R19 | Admin tự khoá chính mình | 409 `CANNOT_LOCK_SELF` "Không thể khoá tài khoản đang đăng nhập" |
+| R20 | Token của tài khoản đã bị khoá được coi như token không hợp lệ, trả 401 `UNAUTHORIZED` để phiên bị đăng xuất | — |
+
+`OrderDetail` có thêm `licenseId` (`null` khi đơn chưa `paid`) để nút "Đến bản quyền" biết đi đâu. `License` có thêm `activeMachines` (số activation chưa gỡ).
 
 **Số liệu `/admin/stats`** (theo giờ máy chủ, tháng dương lịch hiện tại):
 - `revenueThisMonth`: tổng `amount` của đơn `paid` có `paidAt` trong tháng;
@@ -255,7 +260,7 @@ Chi tiết màn hình của từng phần nằm trong `design.md` của chức n
 
 - **Vitest (`npm run test`):**
   - `shared/format`, `shared/validators`;
-  - `mocks/mockDb`: mỗi quy tắc R1–R17 có ít nhất một test;
+  - `mocks/mockDb`: mỗi quy tắc R1–R20 có ít nhất một test;
   - `api/client` (401, lỗi mạng);
   - các màn hình chính chạy cùng MSW `setupServer`.
 - **Playwright (`npm run e2e`):** khởi chạy `vite` với `VITE_USE_MOCK=true`, xoá localStorage trước mỗi test.

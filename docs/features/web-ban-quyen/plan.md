@@ -32,7 +32,7 @@ Các lựa chọn trong brainstorming: giao diện thật của sản phẩm; Re
 **Tiêu chí nghiệm thu**
 - [ ] `npm run dev` đi trọn luồng khách đăng ký → mua gói → QR → admin xác nhận → khách thêm máy, lấy key
 - [ ] Đủ màn hình theo design.md của 4 chức năng con, tiếng Việt, màu #0075D6
-- [ ] Mỗi quy tắc R1–R17 có test Vitest
+- [ ] Mỗi quy tắc R1–R20 có test Vitest
 - [ ] `npm run build`, `npm run lint`, `npm run test`, `npm run e2e` pass
 - [ ] Không tràn ngang ở 390px
 - [ ] Đổi `VITE_USE_MOCK=false` thì không còn import MSW vào bundle; màn hình gọi `VITE_API_URL`

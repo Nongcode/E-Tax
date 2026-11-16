@@ -1,6 +1,6 @@
 # Design — Nền tảng web (khung dự án, API, giả lập, đăng nhập, layout)
 
-> Thuộc [Web bán bản quyền E-Tax](../design.md). Hợp đồng API, mô hình dữ liệu, quy tắc R1–R17 nằm ở design.md cha.
+> Thuộc [Web bán bản quyền E-Tax](../design.md). Hợp đồng API, mô hình dữ liệu, quy tắc R1–R20 nằm ở design.md cha.
 
 ## Kiến trúc
 

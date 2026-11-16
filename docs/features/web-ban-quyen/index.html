@@ -207,7 +207,7 @@
       <table>
         <thead><tr><th>Phần</th><th>Màn hình</th><th>Trạng thái</th></tr></thead>
         <tbody>
-          <tr><td>nen-tang</td><td>Khung dự án, lớp API, MSW + mockDb (R1–R17), đăng nhập / đăng ký / quên mật khẩu, 3 layout, 404/403, công cụ dev</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>nen-tang</td><td>Khung dự án, lớp API, MSW + mockDb (R1–R20), đăng nhập / đăng ký / quên mật khẩu, 3 layout, 404/403, công cụ dev</td><td><span class="badge s-doing">🟡 Plan chờ duyệt</span></td></tr>
           <tr><td>trang-cong-khai</td><td>Trang chủ, Bảng giá, Tải ứng dụng</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
           <tr><td>tai-khoan-khach</td><td>Tổng quan, Mua gói, Thanh toán VietQR, Đơn hàng, Bản quyền + thêm/gỡ máy lấy key, Hồ sơ</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
           <tr><td>quan-tri</td><td>Bảng điều khiển, Đơn hàng + xác nhận, Khách hàng, Bản quyền (gia hạn/thu hồi), Gói &amp; giá, Cài đặt</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
@@ -235,7 +235,7 @@
           <tr><td><code>GET/PUT</code></td><td><code>/admin/settings/bank</code>, <code>/admin/settings/app</code></td><td>admin</td><td>Tài khoản nhận tiền, phiên bản app</td></tr>
         </tbody>
       </table>
-      <p class="legend">Chi tiết request/response và quy tắc R1–R17: <a href="design.md">design.md</a>.</p>
+      <p class="legend">Chi tiết request/response và quy tắc R1–R20: <a href="design.md">design.md</a>.</p>
     </div>
   </section>
 
@@ -243,14 +243,14 @@
   <section id="progress" hidden>
     <div class="card next">
       <h2>Bước tiếp theo</h2>
-      <p>Người dùng duyệt spec (design.md cha + 4 con, index.html), rồi chạy writing-plans cho <code>nen-tang</code>.</p>
+      <p>Người dùng duyệt <a href="nen-tang/plan.md">nen-tang/plan.md</a> (11 task) và chọn cách thực hiện, rồi làm T-001.1.</p>
     </div>
     <div class="card">
       <h2>CR-001 — Dựng web bán bản quyền (giao diện + API giả lập)</h2>
       <table>
         <thead><tr><th>ID</th><th>Task</th><th>Trạng thái</th><th>Test</th></tr></thead>
         <tbody>
-          <tr><td>T-001.0</td><td>Brainstorming: chốt thiết kế, viết spec + prototype</td><td><span class="badge s-doing">🔄 DOING</span></td><td>Playwright mở index.html</td></tr>
+          <tr><td>T-001.0</td><td>Brainstorming: chốt thiết kế, viết spec + prototype</td><td><span class="badge s-done">✅ DONE</span></td><td>Playwright mở index.html</td></tr>
         </tbody>
       </table>
     </div>
@@ -259,7 +259,7 @@
   <!-- ===== Chức năng con ===== -->
   <section id="children" hidden>
     <div class="grid-2">
-      <a class="card" href="nen-tang/index.html" style="text-decoration:none;color:inherit"><h2>1. Nền tảng web</h2><p class="legend">Khung, API, giả lập, đăng nhập, layout</p><span class="badge s-todo">⬜ TODO</span></a>
+      <a class="card" href="nen-tang/index.html" style="text-decoration:none;color:inherit"><h2>1. Nền tảng web</h2><p class="legend">Khung, API, giả lập, đăng nhập, layout</p><span class="badge s-doing">🟡 Plan chờ duyệt</span></a>
       <a class="card" href="trang-cong-khai/index.html" style="text-decoration:none;color:inherit"><h2>2. Trang công khai</h2><p class="legend">Trang chủ, bảng giá, tải ứng dụng</p><span class="badge s-todo">⬜ TODO</span></a>
       <a class="card" href="tai-khoan-khach/index.html" style="text-decoration:none;color:inherit"><h2>3. Tài khoản khách hàng</h2><p class="legend">Mua gói, VietQR, đơn hàng, bản quyền, key</p><span class="badge s-todo">⬜ TODO</span></a>
       <a class="card" href="quan-tri/index.html" style="text-decoration:none;color:inherit"><h2>4. Trang quản trị</h2><p class="legend">Đơn hàng, khách, gói, bản quyền, cài đặt</p><span class="badge s-todo">⬜ TODO</span></a>
