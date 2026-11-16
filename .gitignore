@@ -363,3 +363,7 @@ MigrationBackup/
 FodyWeavers.xsd
 # Superpowers workspace
 .superpowers/
+
+# Cấu hình bí mật (xem E-Tax/appsettings.example.json)
+E-Tax/appsettings.json
+.claude/worktrees/

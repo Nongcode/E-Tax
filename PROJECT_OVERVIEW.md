@@ -42,6 +42,7 @@ E-Tax/
 ├── Logger.cs                  # Ghi log ra file theo ngày (%LocalAppData%/E-Tax/logs)
 ├── NotesStore.cs              # Ghi chú theo Id HĐ (%AppData%/E-Tax/notes.json)
 ├── PdfConverter.cs            # HTML → PDF (PuppeteerSharp), 1 trình duyệt cho cả lô
+├── AppSettings.cs             # Đọc appsettings.json (token blacklist); appsettings.example.json là mẫu
 ├── LicenseManager.cs          # static LicenseManager + enum LicenseStatus
 ├── ProcessingForm.cs          # Form "đang xử lý" (ControlBox=false), có UpdateStatus(string)
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
@@ -70,7 +71,7 @@ Query string tạo bởi `BuildSearchQuery(from, to, type, page, size)`:
 
 Giới hạn API (được code xử lý): **tối đa 30 ngày/lần** (hằng `SearchChunkDays = 30`) và **50 bản ghi/trang** (`SearchPageSize = 50`, lặp trang đến khi < 50).
 
-API ngoài: `BlacklistApiUrl?tax_code=...&token=BlacklistApiToken` (hằng trong Form1; kiểm tra DN rủi ro, `btnKtraDNMuaLe_Click`).
+API ngoài: `BlacklistApiUrl?tax_code=...&token=...` (kiểm tra DN rủi ro, `btnKtraDNMuaLe_Click`). Token đọc từ `appsettings.json` cạnh exe qua `AppSettings` — file **không commit**, mẫu ở `E-Tax/appsettings.example.json`; thiếu token thì nút báo "chưa được cấu hình".
 
 ### Mapping trường JSON → `SearchResult`
 
@@ -157,7 +158,7 @@ Input: `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`
 
 ### Vấn đề nghiêm trọng (bảo mật / pháp lý)
 1. **Mã kích hoạt master hard-code** trong `LicenseManager.cs` — decompile .NET là lấy được ngay. Trial lưu ở HKCU nên xóa key Registry là có thêm 30 ngày. Nên chuyển sang kích hoạt online/ký số (license server metaecom đã có sẵn).
-2. **API token blacklist hard-code** trong `btnKtraDNMuaLe_Click` và gửi qua query string. Nên đưa qua server trung gian hoặc ít nhất ra file cấu hình.
+2. ✅ Token blacklist đã chuyển ra `appsettings.json` (2026-11-16). **Còn phải làm:** đổi token phía server metaecom vì token cũ nằm trong lịch sử git; về lâu dài nên gọi qua server trung gian (app desktop luôn có thể bị đọc token).
 3. **EPPlus 8 dùng license NonCommercialPersonal** (`"Your Name"`) trong khi app có bán bản quyền → vi phạm điều khoản EPPlus (Polyform Noncommercial). Cần mua license thương mại hoặc chuyển sang **ClosedXML** (MIT).
 4. Mật khẩu người dùng bị `Trim()` trước khi gửi (mật khẩu có khoảng trắng đầu/cuối sẽ sai).
 

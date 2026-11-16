@@ -19,8 +19,8 @@ namespace E_Tax
         private const int SearchPageSize = 50;
 
         private const string BlacklistApiUrl = "https://license.metaecom.net/api/blacklist/check";
-        private const string BlacklistApiToken = "VpVC1xtjIBha1VZVdBQE3z5uvw6jXmGVoAHbotLA1MDruVg4fKRY4JH1OlilistK";
 
+        private readonly AppSettings _settings = AppSettings.Load(AppSettings.DefaultPath);
         private readonly CookieContainer cookieContainer = new CookieContainer();
         private readonly HttpClient client;
         private readonly DetailGridManager _detailGridManager;
@@ -2003,7 +2003,13 @@ namespace E_Tax
                 return;
             }
 
-            string apiUrl = $"{BlacklistApiUrl}?tax_code={Uri.EscapeDataString(taxCode)}&token={Uri.EscapeDataString(BlacklistApiToken)}";
+            if (string.IsNullOrEmpty(_settings.BlacklistApiToken))
+            {
+                MessageBox.Show("Chức năng kiểm tra doanh nghiệp chưa được cấu hình.", "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string apiUrl = $"{BlacklistApiUrl}?tax_code={Uri.EscapeDataString(taxCode)}&token={Uri.EscapeDataString(_settings.BlacklistApiToken)}";
 
             btnKtraDNMuaLe.Enabled = false;
             btnKtraDNMuaLe.Text = "Đang KT...";
