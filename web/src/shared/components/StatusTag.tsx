@@ -20,5 +20,7 @@ type StatusTagProps =
 
 export function StatusTag(props: StatusTagProps) {
   const info = props.kind === 'order' ? ORDER[props.status] : LICENSE[props.status];
+  // Máy chủ có thể thêm trạng thái mới trước khi giao diện kịp cập nhật.
+  if (!info) return <Tag>{props.status}</Tag>;
   return <Tag color={info.color}>{info.label}</Tag>;
 }

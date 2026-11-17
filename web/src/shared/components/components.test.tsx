@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppProviders } from '../../App';
@@ -9,6 +9,7 @@ import ForbiddenPage from '../../pages/ForbiddenPage';
 import NotFoundPage from '../../pages/NotFoundPage';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { CopyField } from './CopyField';
+import { PageHeader } from './PageHeader';
 import { QueryState } from './QueryState';
 import { StatusTag } from './StatusTag';
 
@@ -142,5 +143,63 @@ describe('trang lỗi', () => {
     wrap(<ForbiddenPage />);
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument();
     expect(screen.getByText('Trang này chỉ dành cho quản trị viên.')).toBeInTheDocument();
+  });
+});
+
+describe('bổ sung CR-002', () => {
+  it('StatusTag gặp trạng thái lạ thì hiện chính giá trị', () => {
+    wrap(<StatusTag kind="order" status={'refunded' as never} />);
+    expect(screen.getByText('refunded')).toBeInTheDocument();
+  });
+
+  it('QueryState đang tải thì hiện Skeleton', () => {
+    const { container } = wrap(
+      <QueryState query={fakeQuery<string[]>({ isPending: true })}>{() => <div>nội dung</div>}</QueryState>,
+    );
+    expect(container.querySelector('.ant-skeleton')).not.toBeNull();
+    expect(screen.queryByText('nội dung')).not.toBeInTheDocument();
+  });
+
+  it('QueryState rỗng thì hiện emptyAction', () => {
+    wrap(
+      <QueryState
+        query={fakeQuery<string[]>({ isPending: false, isError: false, data: [] })}
+        isEmpty={(d) => d.length === 0}
+        emptyText="Chưa có đơn"
+        emptyAction={<button>Mua ngay</button>}
+      >
+        {() => null}
+      </QueryState>,
+    );
+    expect(screen.getByRole('button', { name: 'Mua ngay' })).toBeInTheDocument();
+  });
+
+  function at(path: string, ui: React.ReactNode, other: string) {
+    return render(
+      <AppProviders>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path={other} element={<div>đích đến</div>} />
+            <Route path="*" element={ui} />
+          </Routes>
+        </MemoryRouter>
+      </AppProviders>,
+    );
+  }
+
+  it('PageHeader bấm Quay lại thì đi tới backTo', async () => {
+    at('/x', <PageHeader title="Chi tiết" backTo="/danh-sach" />, '/danh-sach');
+    await userEvent.click(screen.getByRole('button', { name: /Quay lại/ }));
+    expect(await screen.findByText('đích đến')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['404', <NotFoundPage key="404" />],
+    ['403', <ForbiddenPage key="403" />],
+  ])('%s: nút Về trang chủ không lồng trong link và về /', async (_, page) => {
+    const { container } = at('/x', page, '/');
+    expect(container.querySelector('a button')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /Về trang chủ/ }));
+    expect(await screen.findByText('đích đến')).toBeInTheDocument();
   });
 });

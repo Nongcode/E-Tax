@@ -7,20 +7,24 @@ export interface Session {
   user: User;
 }
 
+function isSession(v: unknown): v is Session {
+  if (typeof v !== 'object' || v === null) return false;
+  const { token, user } = v as Partial<Session>;
+  if (typeof token !== 'string' || typeof user !== 'object' || user === null) return false;
+  return (
+    typeof user.id === 'string' &&
+    typeof user.email === 'string' &&
+    typeof user.fullName === 'string' &&
+    (user.role === 'customer' || user.role === 'admin')
+  );
+}
+
 export function loadSession(): Session | null {
   const raw = localStorage.getItem(KEY);
   if (raw === null) return null;
   try {
     const v: unknown = JSON.parse(raw);
-    if (
-      typeof v === 'object' &&
-      v !== null &&
-      typeof (v as Session).token === 'string' &&
-      typeof (v as Session).user === 'object' &&
-      (v as Session).user !== null
-    ) {
-      return v as Session;
-    }
+    if (isSession(v)) return v;
   } catch {
     // rơi xuống xoá key
   }

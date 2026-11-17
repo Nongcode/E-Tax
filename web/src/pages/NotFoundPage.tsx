@@ -1,15 +1,16 @@
 import { Button, Result } from 'antd';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export default function NotFoundPage() {
+  const navigate = useNavigate();
   return (
     <Result
       status="404"
       title="Không tìm thấy trang"
       extra={
-        <Link to="/">
-          <Button type="primary">Về trang chủ</Button>
-        </Link>
+        <Button type="primary" onClick={() => navigate('/')}>
+          Về trang chủ
+        </Button>
       }
     />
   );

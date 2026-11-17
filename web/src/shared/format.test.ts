@@ -32,3 +32,12 @@ describe('formatDateTime', () => {
     );
   });
 });
+
+describe('ngày không hợp lệ', () => {
+  it('chuỗi rỗng hoặc sai định dạng hiện "—"', () => {
+    expect(formatDate('')).toBe('—');
+    expect(formatDate('khong-phai-ngay')).toBe('—');
+    expect(formatDateTime('')).toBe('—');
+    expect(formatDateTime('khong-phai-ngay')).toBe('—');
+  });
+});

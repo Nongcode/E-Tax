@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider, type RouteObject } from 'react-router-dom';
 import { act } from 'react';
@@ -153,5 +154,16 @@ describe('router', () => {
     });
     await vi.waitFor(() => expect(router.state.location.pathname).toBe('/'));
     expect(qc.getQueryData(['x'])).toBeUndefined();
+  });
+
+  it.each([
+    { email: 'admin@etax.vn', password: 'Admin@123', initial: 'Q', item: 'Quản trị' },
+    { email: 'khach@etax.vn', password: 'Khach@123', initial: 'N', item: 'Tài khoản' },
+  ])('trang công khai khi $email đăng nhập: menu avatar có $item và Đăng xuất', async ({ email, password, initial, item }) => {
+    loginAs(email, password);
+    renderAt('/bang-gia');
+    await userEvent.hover(await screen.findByText(initial, { selector: '.ant-avatar-string' }));
+    expect(await screen.findByRole('menuitem', { name: item })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Đăng xuất' })).toBeInTheDocument();
   });
 });

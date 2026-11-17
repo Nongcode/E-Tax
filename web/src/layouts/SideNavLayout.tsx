@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Avatar, Badge, Button, Drawer, Grid, Layout, Menu, Space, Typography } from 'antd';
+import { Avatar, Badge, Button, Drawer, Grid, Layout, Menu, Space, theme as antdTheme, Typography } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/context';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
@@ -30,9 +30,14 @@ export default function SideNavLayout({ items, theme, title }: Props) {
   const screens = Grid.useBreakpoint();
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const { token } = antdTheme.useToken();
   const wide = !!screens.lg;
   const dark = theme === 'dark';
+  // Ghi route lúc mở: đổi route thì tự đóng; lên màn rộng thì đóng hẳn để khi thu nhỏ lại không tự mở.
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  if (wide && openAt !== null) setOpenAt(null);
+  const open = openAt === pathname;
+  const setOpen = (v: boolean) => setOpenAt(v ? pathname : null);
 
   const menu = (
     <Menu
@@ -72,7 +77,7 @@ export default function SideNavLayout({ items, theme, title }: Props) {
               padding: '0 24px',
               fontWeight: 700,
               fontSize: 18,
-              color: dark ? '#fff' : '#0075D6',
+              color: dark ? '#fff' : token.colorPrimary,
             }}
           >
             {title}
@@ -111,7 +116,7 @@ export default function SideNavLayout({ items, theme, title }: Props) {
           </div>
           <Space size="middle">
             <Link to="/">← Trang chủ</Link>
-            <Avatar style={{ background: '#0075D6' }}>{user?.fullName.charAt(0).toUpperCase()}</Avatar>
+            <Avatar style={{ background: token.colorPrimary }}>{user?.fullName.charAt(0).toUpperCase()}</Avatar>
             {screens.sm && <Typography.Text>{user?.fullName}</Typography.Text>}
             <Button onClick={logout}>Đăng xuất</Button>
           </Space>

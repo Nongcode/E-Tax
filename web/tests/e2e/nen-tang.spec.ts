@@ -39,3 +39,27 @@ test('mobile-drawer: 390x844 mở menu thấy Hồ sơ, không tràn ngang', asy
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);
 });
+
+test('drawer-resize: mở menu ở 390, sang 1280 rồi về 390 thì menu không tự mở', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, 'khach@etax.vn', 'Khach@123');
+  await page.getByLabel('Mở menu').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByLabel('Mở menu')).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeHidden();
+});
+
+test('drawer-resize công khai: mở menu ở 390, sang 1280 rồi về 390 thì menu không tự mở', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/bang-gia');
+  await page.getByLabel('Mở menu').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByLabel('Mở menu')).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeHidden();
+});

@@ -43,4 +43,19 @@ describe('loadSession', () => {
     expect(loadSession()).toBeNull();
     expect(localStorage.getItem('etax-session')).toBeNull();
   });
+
+  it('phiên thiếu thông tin người dùng thì xoá key và trả null', () => {
+    for (const bad of [
+      { token: 'x', user: {} },
+      { token: 1, user: customer },
+      { token: 'x', user: { ...customer, role: 'root' } },
+      { token: 'x', user: { ...customer, fullName: null } },
+    ]) {
+      localStorage.setItem('etax-session', JSON.stringify(bad));
+      expect(loadSession()).toBeNull();
+      expect(localStorage.getItem('etax-session')).toBeNull();
+    }
+    localStorage.setItem('etax-session', JSON.stringify({ token: 'x', user: admin }));
+    expect(loadSession()?.user.role).toBe('admin');
+  });
 });

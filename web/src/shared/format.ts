@@ -7,13 +7,15 @@ export function formatVnd(n: number): string {
   return `${vndFormatter.format(n)} ₫`;
 }
 
-/** Ngày DD/MM/YYYY theo giờ địa phương; null/undefined -> "Trọn đời" */
+/** Ngày DD/MM/YYYY theo giờ địa phương; null/undefined -> "Trọn đời"; rỗng/sai định dạng -> "—" */
 export function formatDate(iso: string | null | undefined): string {
   if (iso == null) return 'Trọn đời';
-  return dayjs(iso).format('DD/MM/YYYY');
+  const d = dayjs(iso);
+  return iso && d.isValid() ? d.format('DD/MM/YYYY') : '—';
 }
 
-/** Ngày giờ DD/MM/YYYY HH:mm theo giờ địa phương */
+/** Ngày giờ DD/MM/YYYY HH:mm theo giờ địa phương; rỗng/sai định dạng -> "—" */
 export function formatDateTime(iso: string): string {
-  return dayjs(iso).format('DD/MM/YYYY HH:mm');
+  const d = dayjs(iso);
+  return iso && d.isValid() ? d.format('DD/MM/YYYY HH:mm') : '—';
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space } from 'antd';
+import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space, theme } from 'antd';
 import { MenuOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/context';
 import { ErrorBoundary } from '../shared/ErrorBoundary';
@@ -16,8 +16,13 @@ export default function PublicLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
+  const { token } = theme.useToken();
   const mobile = !screens.md;
+  // Ghi route lúc mở: đổi route thì tự đóng; lên màn rộng thì đóng hẳn để khi thu nhỏ lại không tự mở.
+  const [openAt, setOpenAt] = useState<string | null>(null);
+  if (!mobile && openAt !== null) setOpenAt(null);
+  const open = openAt === pathname;
+  const setOpen = (v: boolean) => setOpenAt(v ? pathname : null);
 
   const right = user ? (
     <Dropdown
@@ -30,7 +35,7 @@ export default function PublicLayout() {
         ],
       }}
     >
-      <Avatar style={{ background: '#0075D6', cursor: 'pointer' }}>{user.fullName.charAt(0).toUpperCase()}</Avatar>
+      <Avatar style={{ background: token.colorPrimary, cursor: 'pointer' }}>{user.fullName.charAt(0).toUpperCase()}</Avatar>
     </Dropdown>
   ) : (
     <Space>
@@ -59,7 +64,7 @@ export default function PublicLayout() {
           {mobile && (
             <Button type="text" aria-label="Mở menu" icon={<MenuOutlined />} onClick={() => setOpen(true)} />
           )}
-          <Link to="/" style={{ fontWeight: 700, fontSize: 20, color: '#0075D6' }}>
+          <Link to="/" style={{ fontWeight: 700, fontSize: 20, color: token.colorPrimary }}>
             E-Tax
           </Link>
           {!mobile && (
