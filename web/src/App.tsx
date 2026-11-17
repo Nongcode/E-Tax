@@ -3,11 +3,12 @@ import { App as AntApp, ConfigProvider } from 'antd';
 import viVN from 'antd/locale/vi_VN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
+import { shouldRetry } from './api/client';
 import { theme } from './theme';
 import { router } from './router';
 
 const defaultQueryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { retry: shouldRetry, refetchOnWindowFocus: false } },
 });
 
 export function AppProviders({

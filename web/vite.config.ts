@@ -1,8 +1,28 @@
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { loadEnv, type Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
-  plugins: [react()],
+// public/mockServiceWorker.js luôn bị copy vào dist; bản build không giả lập thì xoá đi.
+function dropMockWorker(mode: string): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'drop-mock-worker',
+    apply: 'build',
+    configResolved(c) {
+      outDir = resolve(c.root, c.build.outDir);
+    },
+    closeBundle() {
+      if (loadEnv(mode, process.cwd(), '').VITE_USE_MOCK !== 'true') {
+        rmSync(resolve(outDir, 'mockServiceWorker.js'), { force: true });
+      }
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), dropMockWorker(mode)],
   build: {
     rollupOptions: {
       output: {
@@ -26,4 +46,4 @@ export default defineConfig({
     env: { VITE_API_URL: 'http://localhost', VITE_USE_MOCK: 'false' },
     include: ['src/**/*.test.{ts,tsx}'],
   },
-});
+}));

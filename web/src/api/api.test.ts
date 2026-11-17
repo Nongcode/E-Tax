@@ -3,7 +3,7 @@ import { configureClient } from './client';
 import { setupMockServer } from '../test/server';
 import { addActivation, removeActivation, getLicenses } from './licenses';
 import { forgotPassword, login } from './auth';
-import { createOrder, getOrders } from './orders';
+import { createOrder, getOrder, getOrders } from './orders';
 import { getPlans } from './plans';
 import { confirmOrder, getAdminOrders, getStats } from './admin';
 
@@ -87,5 +87,18 @@ describe('api qua MSW', () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ code: 'VALIDATION_ERROR', message: 'Dữ liệu gửi lên không hợp lệ' });
+  });
+
+  it('mã hoá tham số đường dẫn', async () => {
+    await loginAs('khach@etax.vn', 'Khach@123');
+    const seen: string[] = [];
+    const orig = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      seen.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+      return orig(input, init);
+    });
+    await getOrder('a/../b').catch(() => undefined);
+    spy.mockRestore();
+    expect(seen[0]).toContain('/api/orders/a%2F..%2Fb');
   });
 });

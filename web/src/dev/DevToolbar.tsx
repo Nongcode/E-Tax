@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { FloatButton } from 'antd';
+import { App, FloatButton } from 'antd';
 import { CrownOutlined, DatabaseOutlined, ReloadOutlined, UserOutlined } from '@ant-design/icons';
 import { useAuth } from '../auth/context';
 import { resolveAfterLogin } from '../auth/redirect';
@@ -8,11 +8,16 @@ import { clearSession } from '../auth/session';
 export default function DevToolbar() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { message } = App.useApp();
   if (import.meta.env.VITE_USE_MOCK !== 'true') return null;
 
   const loginAs = async (email: string, password: string) => {
-    const user = await login({ email, password });
-    navigate(resolveAfterLogin(user, null));
+    try {
+      const user = await login({ email, password });
+      navigate(resolveAfterLogin(user, null));
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : 'Đăng nhập thất bại');
+    }
   };
 
   return (

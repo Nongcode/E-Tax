@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { ApiError, apiFetch, configureClient } from './client';
+import { ApiError, apiFetch, configureClient, shouldRetry } from './client';
 
 const server = setupServer();
 
@@ -101,5 +101,26 @@ describe('apiFetch', () => {
   it('204 trả undefined', async () => {
     server.use(http.delete('http://localhost/api/x', () => new HttpResponse(null, { status: 204 })));
     await expect(apiFetch('/x', { method: 'DELETE' })).resolves.toBeUndefined();
+  });
+
+  it('2xx không phải JSON thành ApiError UNKNOWN', async () => {
+    server.use(http.get('http://localhost/api/ping', () => HttpResponse.text('<html>proxy</html>')));
+    await expect(apiFetch('/ping')).rejects.toMatchObject({
+      status: 200,
+      code: 'UNKNOWN',
+      message: 'Phản hồi không hợp lệ từ máy chủ',
+    });
+  });
+});
+
+describe('shouldRetry', () => {
+  it('không thử lại lỗi 4xx, lỗi khác thử lại 1 lần', () => {
+    expect(shouldRetry(0, new ApiError(400, 'X', 'x'))).toBe(false);
+    expect(shouldRetry(0, new ApiError(404, 'X', 'x'))).toBe(false);
+    expect(shouldRetry(0, new ApiError(499, 'X', 'x'))).toBe(false);
+    expect(shouldRetry(0, new ApiError(500, 'X', 'x'))).toBe(true);
+    expect(shouldRetry(0, new ApiError(0, 'NETWORK', 'x'))).toBe(true);
+    expect(shouldRetry(0, new Error('x'))).toBe(true);
+    expect(shouldRetry(1, new ApiError(500, 'X', 'x'))).toBe(false);
   });
 });

@@ -56,7 +56,11 @@ export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T
 
   if (res.ok) {
     if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new ApiError(res.status, 'UNKNOWN', 'Phản hồi không hợp lệ từ máy chủ');
+    }
   }
 
   let body: unknown;
@@ -70,4 +74,10 @@ export async function apiFetch<T>(path: string, init: FetchInit = {}): Promise<T
   if (res.status === 401 && token && options.getToken() === token) options.onUnauthorized();
   if (isErrorBody(body)) throw new ApiError(res.status, body.code, body.message);
   throw new ApiError(res.status, 'UNKNOWN', `Có lỗi xảy ra (HTTP ${res.status})`);
+}
+
+// Lỗi 4xx là lỗi nghiệp vụ / quyền: thử lại không đổi kết quả.
+export function shouldRetry(failureCount: number, error: unknown): boolean {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+  return failureCount < 1;
 }

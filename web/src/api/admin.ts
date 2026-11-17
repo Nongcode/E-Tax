@@ -29,28 +29,28 @@ function qs(params: Record<string, string | undefined>): string {
 export const getStats = () => apiFetch<AdminStats>('/admin/stats');
 
 export const getUsers = (q?: string) => apiFetch<UserSummary[]>(`/admin/users${qs({ q })}`);
-export const getUser = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${id}`);
+export const getUser = (id: string) => apiFetch<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}`);
 export const setUserStatus = (id: string, status: UserStatus) =>
-  apiFetch<User>(`/admin/users/${id}`, { method: 'PATCH', body: { status } });
+  apiFetch<User>(`/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: { status } });
 
 export const getAdminPlans = () => apiFetch<Plan[]>('/admin/plans');
 export const createPlan = (i: PlanInput) => apiFetch<Plan>('/admin/plans', { method: 'POST', body: i });
 export const updatePlan = (id: string, i: PlanInput) =>
-  apiFetch<Plan>(`/admin/plans/${id}`, { method: 'PUT', body: i });
+  apiFetch<Plan>(`/admin/plans/${encodeURIComponent(id)}`, { method: 'PUT', body: i });
 
 export const getAdminOrders = (f: { status?: OrderStatus; q?: string } = {}) =>
   apiFetch<AdminOrder[]>(`/admin/orders${qs(f)}`);
 export const confirmOrder = (id: string, note?: string) =>
-  apiFetch<{ order: Order; license: License }>(`/admin/orders/${id}/confirm`, { method: 'POST', body: { note } });
+  apiFetch<{ order: Order; license: License }>(`/admin/orders/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: { note } });
 export const cancelAdminOrder = (id: string, note?: string) =>
-  apiFetch<Order>(`/admin/orders/${id}/cancel`, { method: 'POST', body: { note } });
+  apiFetch<Order>(`/admin/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { note } });
 
 export const getAdminLicenses = (f: { status?: LicenseStatus; q?: string } = {}) =>
   apiFetch<AdminLicense[]>(`/admin/licenses${qs(f)}`);
-export const getAdminLicense = (id: string) => apiFetch<AdminLicenseDetail>(`/admin/licenses/${id}`);
-export const revokeLicense = (id: string) => apiFetch<License>(`/admin/licenses/${id}/revoke`, { method: 'POST' });
+export const getAdminLicense = (id: string) => apiFetch<AdminLicenseDetail>(`/admin/licenses/${encodeURIComponent(id)}`);
+export const revokeLicense = (id: string) => apiFetch<License>(`/admin/licenses/${encodeURIComponent(id)}/revoke`, { method: 'POST' });
 export const extendLicense = (id: string, months: number) =>
-  apiFetch<License>(`/admin/licenses/${id}/extend`, { method: 'POST', body: { months } });
+  apiFetch<License>(`/admin/licenses/${encodeURIComponent(id)}/extend`, { method: 'POST', body: { months } });
 
 export const getBankSettings = () => apiFetch<BankSettings>('/admin/settings/bank');
 export const saveBankSettings = (b: BankSettings) =>
