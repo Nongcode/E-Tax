@@ -1,6 +1,7 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw';
 import type { MockDb } from './mockDb';
 import { MockError } from './mockDb';
+import { validationError } from './errors';
 import type {
   AppRelease,
   BankSettings,
@@ -52,7 +53,13 @@ export function createHandlers(db: MockDb, opts: { delayMs?: number } = {}): Htt
           user,
           params: params as Record<string, string>,
           url: new URL(request.url),
-          body: <T>() => request.json() as Promise<T>,
+          body: async <T>() => {
+            try {
+              return (await request.json()) as T;
+            } catch {
+              throw validationError('Dữ liệu gửi lên không hợp lệ');
+            }
+          },
         });
         return result === undefined ? new HttpResponse(null, { status: 204 }) : HttpResponse.json(result as object);
       } catch (e) {

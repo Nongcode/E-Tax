@@ -25,7 +25,7 @@ import type {
   UserStatus,
   UserSummary,
 } from '../api/types';
-import { MockError } from './errors';
+import { MockError, validationError } from './errors';
 import * as admin from './admin';
 import * as lic from './licenses';
 import { createSeed } from './seed';
@@ -91,6 +91,18 @@ export function buildQrUrl(bank: BankSettings, amount: number, content: string):
 }
 
 const normEmail = (e: string) => e.trim().toLowerCase();
+/** R23: ràng buộc dữ liệu gói. */
+function validatePlan(i: PlanInput): void {
+  const isInt = (n: unknown, min: number) => typeof n === 'number' && Number.isInteger(n) && n >= min;
+  if (typeof i.name !== 'string' || !i.name.trim()) throw validationError('Tên gói không được để trống');
+  if (!isInt(i.price, 0)) throw validationError('Giá gói phải là số nguyên không âm');
+  if (!isInt(i.maxMachines, 1)) throw validationError('Số máy tối đa phải từ 1 trở lên');
+  if (!isInt(i.maxMachineChanges, 0)) throw validationError('Số lần đổi máy phải là số nguyên không âm');
+  if (i.durationMonths !== null && !isInt(i.durationMonths, 1)) {
+    throw validationError('Thời hạn gói phải là số tháng nguyên từ 1 trở lên hoặc trọn đời');
+  }
+}
+
 const unauthorized = () => new MockError(401, 'UNAUTHORIZED', 'Vui lòng đăng nhập để tiếp tục');
 const notFound = () => new MockError(404, 'NOT_FOUND', 'Không tìm thấy dữ liệu');
 const notPending = () => new MockError(409, 'ORDER_NOT_PENDING', 'Đơn không còn ở trạng thái chờ thanh toán');
@@ -267,6 +279,7 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
     },
 
     createPlan(i) {
+      validatePlan(i);
       const s = load();
       const plan: Plan = { ...i, id: crypto.randomUUID() };
       s.plans.push(plan);
@@ -275,6 +288,7 @@ export function createMockDb(storage: Storage, now: () => Date = () => new Date(
     },
 
     updatePlan(id, i) {
+      validatePlan(i);
       const s = load();
       const idx = s.plans.findIndex((p) => p.id === id);
       if (idx < 0) throw new MockError(404, 'PLAN_NOT_FOUND', 'Không tìm thấy gói');

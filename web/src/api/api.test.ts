@@ -78,4 +78,14 @@ describe('api qua MSW', () => {
     expect(seen[0]).not.toContain('q=');
     expect(list.map((o) => o.code)).toContain('ET482915');
   });
+
+  it('R23: body JSON hỏng thì 400 VALIDATION_ERROR, không phải lỗi máy chủ', async () => {
+    const res = await fetch('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{bad',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ code: 'VALIDATION_ERROR', message: 'Dữ liệu gửi lên không hợp lệ' });
+  });
 });

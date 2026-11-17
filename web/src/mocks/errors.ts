@@ -8,3 +8,6 @@ export class MockError extends Error {
     this.code = code;
   }
 }
+
+/** R23: dữ liệu gửi lên sai, message nói rõ trường sai. */
+export const validationError = (message: string) => new MockError(400, 'VALIDATION_ERROR', message);

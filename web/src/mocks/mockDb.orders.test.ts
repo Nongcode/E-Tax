@@ -107,7 +107,8 @@ describe('mockDb orders', () => {
 
   it('R6: cộng tháng cuối tháng', () => {
     const { db } = setup();
-    t = new Date('2027-01-31T03:00:00.000Z');
+    // Dựng mốc và so sánh theo giờ máy để không lệch ngày ở múi giờ khác UTC.
+    t = dayjs('2027-01-31T10:00:00').toDate();
     const plan = db.createPlan({
       name: '1 tháng',
       description: '',
@@ -121,7 +122,7 @@ describe('mockDb orders', () => {
     });
     const o = db.createOrder('u-khach', plan.id);
     const { license } = db.adminConfirmOrder('u-admin', o.id);
-    expect(license.expiresAt!.slice(0, 10)).toBe('2027-02-28');
+    expect(dayjs(license.expiresAt!).format('YYYY-MM-DD')).toBe('2027-02-28');
   });
 
   it('R15: người khác không thấy / huỷ được đơn', () => {

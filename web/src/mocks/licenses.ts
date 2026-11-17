@@ -9,7 +9,7 @@ import type {
   User,
 } from '../api/types';
 import { isValidMachineId, MACHINE_ID_MESSAGE, normalizeMachineId } from '../shared/validators';
-import { MockError } from './errors';
+import { MockError, validationError } from './errors';
 import type { DbState } from './mockDb';
 
 export type StoredLicense = DbState['licenses'][number];
@@ -66,7 +66,7 @@ export function addActivation(
   const l = findOwnLicense(s, userId, licenseId);
   if (!isValidMachineId(i.machineId)) throw new MockError(400, 'INVALID_MACHINE_ID', MACHINE_ID_MESSAGE);
   const machineId = normalizeMachineId(i.machineId);
-  const machineName = i.machineName.trim();
+  const machineName = typeof i.machineName === 'string' ? i.machineName.trim() : '';
   if (!machineName) throw new MockError(400, 'INVALID_MACHINE_NAME', 'Vui lòng nhập tên máy');
   // Thứ tự theo bảng R: R9 (inactive) trước R10 (máy đã có) trước R11 (hết chỗ).
   if (effectiveLicenseStatus(l, now) !== 'active') {
@@ -112,7 +112,8 @@ export function adminListLicenses(s: DbState, now: Date, f: { status?: LicenseSt
     if (q) {
       const code = s.orders.find((o) => o.id === l.orderId)?.code ?? '';
       const machineHit =
-        qMachine !== '' && s.activations.some((a) => a.licenseId === l.id && a.machineId.includes(qMachine));
+        qMachine !== '' &&
+        s.activations.some((a) => a.licenseId === l.id && a.revokedAt === null && a.machineId.includes(qMachine));
       const hit = (u?.email ?? '').toLowerCase().includes(q) || code.toLowerCase().includes(q) || machineHit;
       if (!hit) return [];
     }
@@ -143,7 +144,10 @@ export function revokeLicense(s: DbState, now: Date, id: string): License {
 }
 
 export function extendLicense(s: DbState, now: Date, id: string, months: number): License {
+  if (!Number.isInteger(months) || months < 1 || months > 120) throw validationError('Số tháng gia hạn không hợp lệ');
   const l = findLicense(s, id);
+  // R22: bản quyền đã thu hồi không gia hạn được.
+  if (l.status === 'revoked') throw new MockError(409, 'LICENSE_REVOKED', 'Bản quyền đã bị thu hồi, không thể gia hạn');
   if (l.expiresAt === null) throw new MockError(409, 'LICENSE_PERMANENT', 'Bản quyền trọn đời không cần gia hạn');
   const base = Math.max(new Date(l.expiresAt).getTime(), now.getTime());
   l.expiresAt = dayjs(base).add(months, 'month').toISOString();

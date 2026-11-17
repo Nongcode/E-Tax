@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import type { AdminStats, AdminUserDetail, User, UserStatus, UserSummary } from '../api/types';
-import { MockError } from './errors';
+import { MockError, validationError } from './errors';
 import { toPublicLicense } from './licenses';
 import type { DbState } from './mockDb';
 import { effectiveOrderStatus, toPublicUser } from './views';
@@ -39,12 +39,17 @@ export function adminGetUser(s: DbState, now: Date, id: string): AdminUserDetail
 }
 
 export function adminSetUserStatus(s: DbState, adminId: string, id: string, status: UserStatus): User {
+  if (status !== 'active' && status !== 'locked') throw validationError('Trạng thái tài khoản không hợp lệ');
   // R19 kiểm tra trước: admin tự khoá mình phải ra CANNOT_LOCK_SELF.
   if (id === adminId && status === 'locked') {
     throw new MockError(409, 'CANNOT_LOCK_SELF', 'Không thể khoá tài khoản đang đăng nhập');
   }
   const u = s.users.find((x) => x.id === id);
   if (!u) throw notFound();
+  // R21: không khoá tài khoản quản trị khác.
+  if (u.role === 'admin' && status === 'locked') {
+    throw new MockError(409, 'CANNOT_LOCK_ADMIN', 'Không thể khoá tài khoản quản trị');
+  }
   u.status = status;
   return toPublicUser(u);
 }
