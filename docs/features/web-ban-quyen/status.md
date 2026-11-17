@@ -9,12 +9,12 @@
 |---|---|
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-001 — Dựng web bán bản quyền (giao diện + API giả lập) |
-| Bước Superpowers | nen-tang xong (finishing-a-development-branch) — chờ chọn tích hợp nhánh |
+| Bước Superpowers | trang-cong-khai: writing-plans |
 | Task đang làm | — |
-| **Bước tiếp theo** | writing-plans cho trang-cong-khai (cần người dùng duyệt) |
+| **Bước tiếp theo** | Người dùng duyệt plan trang-cong-khai |
 | Branch | feature/web-ban-quyen (tạo từ feature/giao-dien-hien-dai) |
-| Cập nhật lần cuối | 2026-11-17 00:31 |
-| Ghi chú dở dang | Code ở `web/`; nen-tang xong 11 task |
+| Cập nhật lần cuối | 2026-11-17 16:11 |
+| Ghi chú dở dang | Code ở `web/`; nen-tang xong (CR-001 + CR-002). Người dùng chọn giữ nhánh (2026-11-17 16:11), làm tiếp các chức năng con trên nhánh này |
 
 ## File chính
 
@@ -29,7 +29,7 @@
 | Chức năng con | Trạng thái | Bước tiếp theo |
 |---|---|---|
 | [nen-tang](nen-tang/status.md) | ✅ DONE | CR-001 11 task + CR-002 vá lỗi nhỏ (4 task), review tổng đã sửa |
-| [trang-cong-khai](trang-cong-khai/status.md) | ⬜ TODO | Tiếp theo: writing-plans |
+| [trang-cong-khai](trang-cong-khai/status.md) | 🟡 IN_PROGRESS | Plan 4 task chờ duyệt |
 | [tai-khoan-khach](tai-khoan-khach/status.md) | ⬜ TODO | Sau nen-tang |
 | [quan-tri](quan-tri/status.md) | ⬜ TODO | Sau tai-khoan-khach (dùng đơn do khách tạo) |
 

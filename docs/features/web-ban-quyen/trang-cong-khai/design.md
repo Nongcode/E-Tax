@@ -48,7 +48,17 @@
 
 ## Vị trí code
 
-Chưa có. Điền khi làm.
+Dự kiến (điền dòng thực tế khi làm):
+
+| File | Symbol | Vai trò |
+|---|---|---|
+| web/src/features/public/PlanCards.tsx | `PlanCards`, `formatPlanPeriod`, `buyPath` | Thẻ gói dùng chung, query `['plans']` |
+| web/src/features/public/PricingPage.tsx | `PricingPage` | `/bang-gia` |
+| web/src/features/public/HomePage.tsx | `HomePage` | `/` |
+| web/src/features/public/DownloadPage.tsx | `DownloadPage` | `/tai-ung-dung`, query `['app-latest']` |
+| web/src/router.tsx | `routes` | Thay `ComingSoon` ở 3 route công khai |
+
+**Quyết định thêm (chờ duyệt):** admin đang đăng nhập thì nút "Mua gói" bị vô hiệu, kèm chữ "Tài khoản quản trị không mua gói" (route mua gói chỉ cho khách).
 
 ## Nhật ký sửa đổi
 
@@ -56,4 +66,4 @@ Chưa có. Điền khi làm.
 
 | Task | File:dòng | Thay đổi | Lý do |
 |---|---|---|---|
-| — | — | Chưa bắt đầu | — |
+| — | — | Plan 4 task đã lập, chờ duyệt | — |
