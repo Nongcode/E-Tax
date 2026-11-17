@@ -177,7 +177,7 @@ Mọi đường dẫn có tiền tố `/api`. Xác thực bằng `Authorization:
 | R10 | Thêm máy mà mã máy đã có activation đang dùng trên license này thì trả lại activation cũ (cùng key), không tính thêm | — |
 | R11 | Thêm máy khi số máy đang dùng đã bằng maxMachines | 409 `MACHINE_LIMIT` "Đã dùng hết số máy của gói, hãy gỡ một máy trước" |
 | R12 | Gỡ máy: đặt `revokedAt`, `machineChangesUsed += 1`. Từ chối khi `machineChangesUsed >= maxMachineChanges` | 409 `CHANGE_LIMIT` "Đã hết số lần đổi máy của gói" |
-| R13 | Gia hạn: `expiresAt = max(expiresAt, now) + months`. Nếu license đang `expired` thì chuyển lại `active`. Gói vĩnh viễn không gia hạn | 409 `LICENSE_PERMANENT` |
+| R13 | Gia hạn: `expiresAt = max(expiresAt, now) + months`. Nếu license đang `expired` thì chuyển lại `active`. Gói vĩnh viễn không gia hạn | 409 `LICENSE_PERMANENT` "Bản quyền trọn đời không cần gia hạn" |
 | R14 | Thu hồi: status `revoked`, mọi activation đang dùng bị `revokedAt = now` | — |
 | R15 | Khách truy cập đơn/bản quyền của người khác | 404 `NOT_FOUND` (không lộ là tồn tại) |
 | R16 | Thiếu/sai token → 401 `UNAUTHORIZED`; sai vai trò → 403 `FORBIDDEN` | |
@@ -185,6 +185,29 @@ Mọi đường dẫn có tiền tố `/api`. Xác thực bằng `Authorization:
 | R18 | Đổi mật khẩu: mật khẩu hiện tại sai | 400 `WRONG_PASSWORD` "Mật khẩu hiện tại không đúng" |
 | R19 | Admin tự khoá chính mình | 409 `CANNOT_LOCK_SELF` "Không thể khoá tài khoản đang đăng nhập" |
 | R20 | Token của tài khoản đã bị khoá được coi như token không hợp lệ, trả 401 `UNAUTHORIZED` để phiên bị đăng xuất | — |
+| R21 | Admin khoá tài khoản admin khác (chỉ khoá được khách hàng; mở khoá thì không giới hạn) | 409 `CANNOT_LOCK_ADMIN` "Không thể khoá tài khoản quản trị" |
+| R22 | Gia hạn license đã thu hồi | 409 `LICENSE_REVOKED` "Bản quyền đã bị thu hồi, không thể gia hạn" |
+| R23 | Dữ liệu gửi lên sai ràng buộc ở mục "Kiểm tra phía máy chủ", hoặc body không phải JSON hợp lệ ("Dữ liệu gửi lên không hợp lệ") | 400 `VALIDATION_ERROR` kèm message của trường sai |
+| R24 | Thêm máy: tên máy thiếu, không phải chuỗi, hoặc chỉ toàn khoảng trắng (lưu bản đã `trim`) | 400 `INVALID_MACHINE_NAME` "Vui lòng nhập tên máy" |
+
+### Kiểm tra phía máy chủ
+
+Giao diện có validate riêng, nhưng máy chủ không tin giao diện: mọi ràng buộc dưới đây phải được kiểm lại ở `mockDb` và ở API C#, với đúng thứ tự (kiểm định dạng trước, tra dữ liệu sau) và đúng message.
+
+| Thao tác | Trường | Ràng buộc | Message (`VALIDATION_ERROR` trừ khi ghi khác) |
+|---|---|---|---|
+| Mọi POST/PUT/PATCH | body | JSON hợp lệ | "Dữ liệu gửi lên không hợp lệ" |
+| Tạo / sửa gói | name | chuỗi, sau `trim` không rỗng | "Tên gói không được để trống" |
+| | price | số nguyên ≥ 0 | "Giá gói phải là số nguyên không âm" |
+| | maxMachines | số nguyên ≥ 1 | "Số máy tối đa phải từ 1 trở lên" |
+| | maxMachineChanges | số nguyên ≥ 0 | "Số lần đổi máy phải là số nguyên không âm" |
+| | durationMonths | `null` (trọn đời) hoặc số nguyên ≥ 1 | "Thời hạn gói phải là số tháng nguyên từ 1 trở lên hoặc trọn đời" |
+| Gia hạn license | months | số nguyên 1–120 (kiểm trước khi tìm license) | "Số tháng gia hạn không hợp lệ" |
+| Khoá / mở tài khoản | status | `active` hoặc `locked` (kiểm trước khi tìm user) | "Trạng thái tài khoản không hợp lệ" |
+| Thêm máy | machineId | R8 | 400 `INVALID_MACHINE_ID` |
+| | machineName | R24 | 400 `INVALID_MACHINE_NAME` |
+
+Tìm license theo mã máy (`/admin/licenses?q=`) chỉ khớp máy đang dùng (`revokedAt = null`).
 
 `OrderDetail` có thêm `licenseId` (`null` khi đơn chưa `paid`) để nút "Đến bản quyền" biết đi đâu. `License` có thêm `activeMachines` (số activation chưa gỡ).
 
@@ -243,6 +266,8 @@ Theme Ant Design:
   - Đang tải: `Skeleton`.
   - Lỗi: `Result status="error"` kèm nút "Thử lại" (`refetch`).
   - Trống: `Empty` kèm lời gợi ý và nút hành động.
+  - Không truyền query có `enabled: false` cố định vào `QueryState` (query chưa chạy luôn `isPending`, sẽ hiện Skeleton mãi). Khi query phụ thuộc điều kiện, render có điều kiện ở ngoài: chưa đủ điều kiện thì không render `QueryState`.
+  - Lỗi 4xx không thử lại (`shouldRetry`); lỗi mạng/5xx thử lại 1 lần.
 - **Mutation:** nút có `loading` trong lúc gửi để chặn bấm hai lần. Thành công gọi `message.success`; lỗi gọi `message.error(err.message)`.
 - **`ErrorBoundary`:** bọc từng layout.
 - **Trang thanh toán:** khi đơn `pending`, `refetchInterval = 10s`; đổi sang `paid` thì hiện `Result success` và nút "Đến bản quyền".
@@ -260,7 +285,7 @@ Chi tiết màn hình của từng phần nằm trong `design.md` của chức n
 
 - **Vitest (`npm run test`):**
   - `shared/format`, `shared/validators`;
-  - `mocks/mockDb`: mỗi quy tắc R1–R20 có ít nhất một test;
+  - `mocks/mockDb`: mỗi quy tắc R1–R24 có ít nhất một test;
   - `api/client` (401, lỗi mạng);
   - các màn hình chính chạy cùng MSW `setupServer`.
 - **Playwright (`npm run e2e`):** khởi chạy `vite` với `VITE_USE_MOCK=true`, xoá localStorage trước mỗi test.
@@ -293,3 +318,9 @@ Chưa có code. Bảng này được điền khi thực hiện, theo từng ch�
 | Task | File:dòng | Thay đổi | Lý do |
 |---|---|---|---|
 | — | — | Chưa bắt đầu, chờ duyệt spec rồi lập kế hoạch | — |
+
+### CR-002 — Vá lỗi nhỏ còn tồn đọng (nen-tang)
+
+| Task | File:dòng | Thay đổi | Lý do |
+|---|---|---|---|
+| T-002.4 | design.md: bảng Quy tắc nghiệp vụ (R13 message, R21–R24), mục "Kiểm tra phía máy chủ", Xử lý lỗi (QueryState + `enabled:false`, `shouldRetry`), Kiểm thử (R1–R24) | Đồng bộ spec với mockDb sau T-002.1–T-002.3 | API ASP.NET Core sau này làm y hệt mock |

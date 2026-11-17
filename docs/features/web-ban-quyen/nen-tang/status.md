@@ -9,12 +9,12 @@
 |---|---|
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-002 — Vá lỗi nhỏ còn tồn đọng |
-| Bước Superpowers | change: executing-plans (inline), đang làm T-002.4 |
+| Bước Superpowers | change: executing-plans (inline), review tổng CR-002 (requesting-code-review) |
 | Task đang làm | — |
-| **Bước tiếp theo** | T-002.4 — cập nhật spec, rồi review tổng CR-002 |
+| **Bước tiếp theo** | Review tổng CR-002 (opus), sửa lỗi Critical/Important, kiểm tra cuối |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-17 15:58 |
-| Ghi chú dở dang | T-002.1 102e2de, T-002.2 25edc20, T-002.3 b711509; ledger ở .superpowers/sdd/plan/progress.md |
+| Cập nhật lần cuối | 2026-11-17 15:59 |
+| Ghi chú dở dang | T-002.1 102e2de, T-002.2 25edc20, T-002.3 b711509, T-002.4 (spec); ledger ở .superpowers/sdd/plan/progress.md |
 
 ## File chính
 
@@ -50,7 +50,7 @@
 | T-002.1 | Kiểm tra đầu vào của API giả lập | ✅ DONE | 102e2de | ✅ vitest 121/121, lint, build. Bỏ qua Playwright: chỉ đổi logic giả lập, chưa màn hình nào gọi các thao tác này |
 | T-002.2 | Lớp API và khởi động (encode, retry, non-JSON, worker lỗi, dist) | ✅ DONE | 25edc20 | ✅ vitest 125/125, lint, build (dist không có mockServiceWorker.js), e2e 4/4 |
 | T-002.3 | Giao diện và phiên (session, ngăn kéo, 404/403, StatusTag, màu, ngày) | ✅ DONE | b711509 | ✅ vitest 135/135, lint, build, e2e 6/6 (thêm drawer-resize ×2). Ảnh screenshots/T-002.3-*.png |
-| T-002.4 | Cập nhật spec (R21–R24, kiểm tra phía máy chủ) | ⬜ TODO | | |
+| T-002.4 | Cập nhật spec (R21–R24, kiểm tra phía máy chủ) | ✅ DONE | | Bỏ qua Playwright: chỉ đổi tài liệu |
 
 ## Kết quả test gần nhất
 
@@ -94,3 +94,4 @@
 - 2026-11-17 15:46 — Người dùng duyệt CR-002 ("thực hiện đi"). T-002.1 xong (102e2de): VALIDATION_ERROR, LICENSE_REVOKED, CANNOT_LOCK_ADMIN; INVALID_MACHINE_NAME khi thiếu tên máy; body JSON hỏng → 400; tìm mã máy chỉ khớp máy đang dùng; test cuối tháng theo giờ máy (không thấy RED được ở UTC+7 — ghi ruling).
 - 2026-11-17 15:51 — T-002.2 xong (25edc20): encodeURIComponent 13 chỗ trong api/*.ts; ApiError UNKNOWN khi 2xx không JSON; shouldRetry (không thử lại 4xx); main.tsx bắt lỗi worker.start; DevToolbar message.error; plugin dropMockWorker. Test mới: client.test (2), api.test (1), DevToolbar.test.tsx.
 - 2026-11-17 15:58 — T-002.3 xong (b711509): loadSession kiểm id/email/fullName/role; ngăn kéo lưu route lúc mở (openAt), đóng khi màn rộng/đổi route; 404/403 dùng Button+navigate; StatusTag trạng thái lạ; màu token.colorPrimary; formatDate/DateTime '—'. Test mới: auth (1), format (1), components (6), router (2), e2e drawer-resize (2).
+- 2026-11-17 15:59 — T-002.4 xong: spec cha thêm R21–R24, message LICENSE_PERMANENT, mục "Kiểm tra phía máy chủ" (bảng ràng buộc từng trường), ghi chú QueryState/enabled:false và shouldRetry.
