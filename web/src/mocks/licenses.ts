@@ -64,7 +64,7 @@ export function addActivation(
   i: { machineId: string; machineName: string },
 ): Activation {
   const l = findOwnLicense(s, userId, licenseId);
-  if (!isValidMachineId(i.machineId)) throw new MockError(400, 'INVALID_MACHINE_ID', MACHINE_ID_MESSAGE);
+  if (typeof i.machineId !== 'string' || !isValidMachineId(i.machineId)) throw new MockError(400, 'INVALID_MACHINE_ID', MACHINE_ID_MESSAGE);
   const machineId = normalizeMachineId(i.machineId);
   const machineName = typeof i.machineName === 'string' ? i.machineName.trim() : '';
   if (!machineName) throw new MockError(400, 'INVALID_MACHINE_NAME', 'Vui lòng nhập tên máy');

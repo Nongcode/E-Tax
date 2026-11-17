@@ -54,11 +54,17 @@ export function createHandlers(db: MockDb, opts: { delayMs?: number } = {}): Htt
           params: params as Record<string, string>,
           url: new URL(request.url),
           body: async <T>() => {
+            let v: unknown;
             try {
-              return (await request.json()) as T;
+              v = await request.json();
             } catch {
+              v = undefined;
+            }
+            // Mọi body của API là object; null, mảng, chuỗi, số đều bị từ chối.
+            if (typeof v !== 'object' || v === null || Array.isArray(v)) {
               throw validationError('Dữ liệu gửi lên không hợp lệ');
             }
+            return v as T;
           },
         });
         return result === undefined ? new HttpResponse(null, { status: 204 }) : HttpResponse.json(result as object);

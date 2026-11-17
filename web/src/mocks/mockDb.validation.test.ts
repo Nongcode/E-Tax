@@ -116,4 +116,15 @@ describe('mockDb kiểm tra đầu vào (R21–R24)', () => {
     expect(db.adminListLicenses({ q: '3FA2C91B' })).toHaveLength(0);
   });
 
+
+  it('R8: mã máy thiếu hoặc không phải chuỗi thì INVALID_MACHINE_ID, không phải lỗi hệ thống', () => {
+    const { db } = setup();
+    for (const machineId of [undefined, 123, null]) {
+      expectError(
+        () => db.addActivation('u-khach', 'l-1', { machineId: machineId as never, machineName: 'Máy A' }),
+        400,
+        'INVALID_MACHINE_ID',
+      );
+    }
+  });
 });

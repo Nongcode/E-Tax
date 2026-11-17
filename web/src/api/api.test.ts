@@ -101,4 +101,14 @@ describe('api qua MSW', () => {
     spy.mockRestore();
     expect(seen[0]).toContain('/api/orders/a%2F..%2Fb');
   });
+
+  it.each(['null', '[]', '"chuoi"', '1'])('R23: body JSON không phải object (%s) thì 400 VALIDATION_ERROR', async (body) => {
+    const res = await fetch('http://localhost/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ code: 'VALIDATION_ERROR', message: 'Dữ liệu gửi lên không hợp lệ' });
+  });
 });
