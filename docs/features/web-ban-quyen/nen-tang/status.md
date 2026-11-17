@@ -9,12 +9,12 @@
 |---|---|
 | Trạng thái | 🟡 IN_PROGRESS |
 | Yêu cầu đang làm | CR-002 — Vá lỗi nhỏ còn tồn đọng |
-| Bước Superpowers | change: executing-plans (inline), đang làm T-002.2 |
+| Bước Superpowers | change: executing-plans (inline), đang làm T-002.3 |
 | Task đang làm | — |
-| **Bước tiếp theo** | T-002.2 — lớp API và khởi động |
+| **Bước tiếp theo** | T-002.3 — giao diện và phiên |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-17 15:46 |
-| Ghi chú dở dang | T-002.1 đã commit 102e2de; ledger ở .superpowers/sdd/plan/progress.md |
+| Cập nhật lần cuối | 2026-11-17 15:51 |
+| Ghi chú dở dang | T-002.1 102e2de, T-002.2 25edc20; ledger ở .superpowers/sdd/plan/progress.md |
 
 ## File chính
 
@@ -48,7 +48,7 @@
 | ID | Task | Trạng thái | Test | Ghi chú |
 |---|---|---|---|---|
 | T-002.1 | Kiểm tra đầu vào của API giả lập | ✅ DONE | 102e2de | ✅ vitest 121/121, lint, build. Bỏ qua Playwright: chỉ đổi logic giả lập, chưa màn hình nào gọi các thao tác này |
-| T-002.2 | Lớp API và khởi động (encode, retry, non-JSON, worker lỗi, dist) | ⬜ TODO | | |
+| T-002.2 | Lớp API và khởi động (encode, retry, non-JSON, worker lỗi, dist) | ✅ DONE | 25edc20 | ✅ vitest 125/125, lint, build (dist không có mockServiceWorker.js), e2e 4/4 |
 | T-002.3 | Giao diện và phiên (session, ngăn kéo, 404/403, StatusTag, màu, ngày) | ⬜ TODO | | Playwright + ảnh |
 | T-002.4 | Cập nhật spec (R21–R24, kiểm tra phía máy chủ) | ⬜ TODO | | |
 
@@ -68,6 +68,7 @@
 | 2026-11-17 00:07 | `npm run test && npm run lint && npm run build` (T-001.10) | ✅ 102/102, lint, build OK, không stderr | |
 | 2026-11-17 00:18 | `npm run test && npm run lint && npm run build && npm run e2e` (T-001.11) | ✅ 108/108, lint, build, e2e 4/4; grep MSW trong dist = 0 | Ảnh: screenshots/T-001.11-*.png |
 | 2026-11-17 15:46 | `npm run test && npm run lint && npm run build` (T-002.1) | ✅ 121/121, lint 0, build OK | 8 test mới (mockDb.validation, body JSON hỏng) |
+| 2026-11-17 15:51 | test + lint + build + `vite build --mode development` + e2e (T-002.2) | ✅ 125/125, lint 0, build OK; dist prod không có worker, dist mock có; e2e 4/4 | |
 | 2026-11-17 00:31 | Kiểm tra cuối: `npm run test`, `lint`, `build`, `e2e`, grep giả lập trong dist | ✅ 113/113 (không stderr), lint 0, build không cảnh báo, e2e 4/4, grep = 0 | Sau sửa review tổng (6d5bc75) |
 
 ## Nhật ký phiên
@@ -90,3 +91,4 @@
 - 2026-11-17 00:32 — Bỏ qua Playwright mở index.html lần cuối: chỉ đổi chữ nhãn tiến độ; trình duyệt MCP chặn file:// và không được phép chạy máy chủ tĩnh tạm.
 - 2026-11-17 15:39 — Người dùng yêu cầu vá các lỗi nhỏ còn tồn đọng. Lập plan CR-002 (4 task), chờ duyệt.
 - 2026-11-17 15:46 — Người dùng duyệt CR-002 ("thực hiện đi"). T-002.1 xong (102e2de): VALIDATION_ERROR, LICENSE_REVOKED, CANNOT_LOCK_ADMIN; INVALID_MACHINE_NAME khi thiếu tên máy; body JSON hỏng → 400; tìm mã máy chỉ khớp máy đang dùng; test cuối tháng theo giờ máy (không thấy RED được ở UTC+7 — ghi ruling).
+- 2026-11-17 15:51 — T-002.2 xong (25edc20): encodeURIComponent 13 chỗ trong api/*.ts; ApiError UNKNOWN khi 2xx không JSON; shouldRetry (không thử lại 4xx); main.tsx bắt lỗi worker.start; DevToolbar message.error; plugin dropMockWorker. Test mới: client.test (2), api.test (1), DevToolbar.test.tsx.
