@@ -7,14 +7,14 @@
 
 | Mục | Giá trị |
 |---|---|
-| Trạng thái | 🟡 IN_PROGRESS |
-| Yêu cầu đang làm | CR-002 — Vá lỗi nhỏ còn tồn đọng |
-| Bước Superpowers | change: executing-plans (inline), review tổng CR-002 (requesting-code-review) |
+| Trạng thái | ✅ DONE |
+| Yêu cầu đang làm | — (CR-002 ✅ DONE) |
+| Bước Superpowers | change: executing-plans (inline), CR-002 hoàn tất (review tổng + kiểm tra cuối) |
 | Task đang làm | — |
-| **Bước tiếp theo** | Review tổng CR-002 (opus), sửa lỗi Critical/Important, kiểm tra cuối |
+| **Bước tiếp theo** | Chức năng con tiếp theo (trang-cong-khai) — writing-plans, chờ duyệt |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-17 15:59 |
-| Ghi chú dở dang | T-002.1 102e2de, T-002.2 25edc20, T-002.3 b711509, T-002.4 (spec); ledger ở .superpowers/sdd/plan/progress.md |
+| Cập nhật lần cuối | 2026-11-17 16:05 |
+| Ghi chú dở dang | T-002.1 102e2de, T-002.2 25edc20, T-002.3 b711509, T-002.4 3e2b392, sửa review 276d6c4. Không còn việc dở |
 
 ## File chính
 
@@ -43,7 +43,7 @@
 | T-001.10 | Thành phần dùng chung, 404/403, ErrorBoundary | ✅ DONE | ✅ vitest 102/102, lint, build. Playwright để T-001.11 (chưa có router/dev server) | 31f7d4f, 8ddfcb3 (QueryState isPending), review đạt |
 | T-001.11 | Layout, router, công cụ dev, e2e TC-05 | ✅ DONE | ✅ vitest 108/108, lint, build (không MSW), e2e 4/4 (TC-05a/b, login-admin, mobile-drawer). Ảnh screenshots/T-001.11-*.png | dcbaec5, f8529be (tách chunk, quyền /tai-khoan), review đạt |
 
-### CR-002 — Vá lỗi nhỏ còn tồn đọng · 🟡 IN_PROGRESS · 2026-11-17
+### CR-002 — Vá lỗi nhỏ còn tồn đọng · ✅ DONE · 2026-11-17
 
 | ID | Task | Trạng thái | Test | Ghi chú |
 |---|---|---|---|---|
@@ -70,6 +70,7 @@
 | 2026-11-17 15:46 | `npm run test && npm run lint && npm run build` (T-002.1) | ✅ 121/121, lint 0, build OK | 8 test mới (mockDb.validation, body JSON hỏng) |
 | 2026-11-17 15:51 | test + lint + build + `vite build --mode development` + e2e (T-002.2) | ✅ 125/125, lint 0, build OK; dist prod không có worker, dist mock có; e2e 4/4 | |
 | 2026-11-17 15:58 | test + lint + build + e2e (T-002.3) | ✅ 135/135, lint 0, build OK, e2e 6/6 | Ảnh: T-002.3-404, -403-khach, -drawer-sau-resize, -avatar-menu |
+| 2026-11-17 16:06 | Kiểm tra cuối CR-002: test, lint, build, e2e, grep giả lập trong dist | ✅ 140/140 (không stderr), lint 0, build OK, e2e 6/6, dist không có mockServiceWorker.js / mockDb | Sau sửa review (276d6c4) |
 | 2026-11-17 00:31 | Kiểm tra cuối: `npm run test`, `lint`, `build`, `e2e`, grep giả lập trong dist | ✅ 113/113 (không stderr), lint 0, build không cảnh báo, e2e 4/4, grep = 0 | Sau sửa review tổng (6d5bc75) |
 
 ## Nhật ký phiên
@@ -95,3 +96,4 @@
 - 2026-11-17 15:51 — T-002.2 xong (25edc20): encodeURIComponent 13 chỗ trong api/*.ts; ApiError UNKNOWN khi 2xx không JSON; shouldRetry (không thử lại 4xx); main.tsx bắt lỗi worker.start; DevToolbar message.error; plugin dropMockWorker. Test mới: client.test (2), api.test (1), DevToolbar.test.tsx.
 - 2026-11-17 15:58 — T-002.3 xong (b711509): loadSession kiểm id/email/fullName/role; ngăn kéo lưu route lúc mở (openAt), đóng khi màn rộng/đổi route; 404/403 dùng Button+navigate; StatusTag trạng thái lạ; màu token.colorPrimary; formatDate/DateTime '—'. Test mới: auth (1), format (1), components (6), router (2), e2e drawer-resize (2).
 - 2026-11-17 15:59 — T-002.4 xong: spec cha thêm R21–R24, message LICENSE_PERMANENT, mục "Kiểm tra phía máy chủ" (bảng ràng buộc từng trường), ghi chú QueryState/enabled:false và shouldRetry.
+- 2026-11-17 16:06 — Review tổng CR-002 (opus): With fixes, 0 Critical, 1 Important, 7 Minor. Đã sửa Important (276d6c4): body JSON null/mảng/chuỗi/số và mã máy thiếu từng trả 500 → nay 400. Lỗi nhỏ để sau: plugin dropMockWorker phụ thuộc thư mục chạy build; addActivation tìm license trước khi kiểm định dạng; ngăn kéo mở lại khi Back→Forward; PUT gói chưa kiểm active/sortOrder/description/featured; body auth/hồ sơ/ngân hàng/ứng dụng chưa kiểm trường (login thiếu email → 500 trong mock); DevToolbar.test dùng 423 thay 403. CR-002 ✅ DONE.

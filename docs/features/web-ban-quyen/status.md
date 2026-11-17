@@ -28,7 +28,7 @@
 
 | Chức năng con | Trạng thái | Bước tiếp theo |
 |---|---|---|
-| [nen-tang](nen-tang/status.md) | ✅ DONE | 11 task, review tổng đã sửa |
+| [nen-tang](nen-tang/status.md) | ✅ DONE | CR-001 11 task + CR-002 vá lỗi nhỏ (4 task), review tổng đã sửa |
 | [trang-cong-khai](trang-cong-khai/status.md) | ⬜ TODO | Tiếp theo: writing-plans |
 | [tai-khoan-khach](tai-khoan-khach/status.md) | ⬜ TODO | Sau nen-tang |
 | [quan-tri](quan-tri/status.md) | ⬜ TODO | Sau tai-khoan-khach (dùng đơn do khách tạo) |
