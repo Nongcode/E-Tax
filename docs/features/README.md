@@ -8,4 +8,4 @@ Trạng thái: 🟡 IN_PROGRESS · ✅ DONE · ⏸ PAUSED · 🔴 BLOCKED
 | Chức năng | Folder | Trạng thái | Yêu cầu đang làm | Cập nhật |
 |---|---|---|---|---|
 | Hiện đại hóa giao diện | [giao-dien/hien-dai-hoa](giao-dien/hien-dai-hoa/status.md) | ✅ DONE | CR-001, CR-002 — chờ tích hợp nhánh | 2026-11-16 16:50 |
-| Web bán bản quyền E-Tax | [web-ban-quyen](web-ban-quyen/status.md) | 🟡 IN_PROGRESS | CR-001 — nen-tang ✅ xong; tiếp: trang-cong-khai | 2026-11-17 00:31 |
+| Web bán bản quyền E-Tax | [web-ban-quyen](web-ban-quyen/status.md) | 🟡 IN_PROGRESS | CR-001 nen-tang ✅; nen-tang CR-002 vá lỗi nhỏ: plan chờ duyệt | 2026-11-17 15:39 |

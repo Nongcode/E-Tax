@@ -7,14 +7,14 @@
 
 | Mục | Giá trị |
 |---|---|
-| Trạng thái | ✅ DONE |
-| Yêu cầu đang làm | CR-001 — Nền tảng web |
-| Bước Superpowers | finishing-a-development-branch — chờ người dùng chọn cách tích hợp nhánh |
+| Trạng thái | 🟡 IN_PROGRESS |
+| Yêu cầu đang làm | CR-002 — Vá lỗi nhỏ còn tồn đọng |
+| Bước Superpowers | change: plan CR-002 chờ người dùng duyệt (thực hiện: executing-plans) |
 | Task đang làm | — |
-| **Bước tiếp theo** | Người dùng chọn tích hợp nhánh; sau đó writing-plans cho trang-cong-khai |
+| **Bước tiếp theo** | Người dùng duyệt plan CR-002, rồi làm T-002.1 |
 | Branch | feature/web-ban-quyen |
-| Cập nhật lần cuối | 2026-11-17 00:31 |
-| Ghi chú dở dang | Lỗi nhỏ để sau: xem mục "Review tổng" trong Nhật ký phiên |
+| Cập nhật lần cuối | 2026-11-17 15:39 |
+| Ghi chú dở dang | Chưa sửa code CR-002 |
 
 ## File chính
 
@@ -42,6 +42,15 @@
 | T-001.9 | Phiên đăng nhập, bảo vệ route, trang đăng nhập/đăng ký/quên mật khẩu | ✅ DONE | ✅ vitest 92/92, lint, build. Playwright để T-001.11 (chưa có router/dev server) | 5f8019a, 433b234 (sửa 401 muộn, đăng xuất), review sạch |
 | T-001.10 | Thành phần dùng chung, 404/403, ErrorBoundary | ✅ DONE | ✅ vitest 102/102, lint, build. Playwright để T-001.11 (chưa có router/dev server) | 31f7d4f, 8ddfcb3 (QueryState isPending), review đạt |
 | T-001.11 | Layout, router, công cụ dev, e2e TC-05 | ✅ DONE | ✅ vitest 108/108, lint, build (không MSW), e2e 4/4 (TC-05a/b, login-admin, mobile-drawer). Ảnh screenshots/T-001.11-*.png | dcbaec5, f8529be (tách chunk, quyền /tai-khoan), review đạt |
+
+### CR-002 — Vá lỗi nhỏ còn tồn đọng · 🟡 IN_PROGRESS · 2026-11-17
+
+| ID | Task | Trạng thái | Test | Ghi chú |
+|---|---|---|---|---|
+| T-002.1 | Kiểm tra đầu vào của API giả lập | ⬜ TODO | | |
+| T-002.2 | Lớp API và khởi động (encode, retry, non-JSON, worker lỗi, dist) | ⬜ TODO | | |
+| T-002.3 | Giao diện và phiên (session, ngăn kéo, 404/403, StatusTag, màu, ngày) | ⬜ TODO | | Playwright + ảnh |
+| T-002.4 | Cập nhật spec (R21–R24, kiểm tra phía máy chủ) | ⬜ TODO | | |
 
 ## Kết quả test gần nhất
 
@@ -78,3 +87,4 @@
 - 2026-11-17 00:31 — Review tổng (opus): sẵn sàng sau khi sửa. Đã sửa 4 lỗi Important (6d5bc75): `next` chứa ký tự điều khiển → màn lỗi vĩnh viễn; xoá cache React Query khi đăng xuất/hết phiên/đăng nhập; ErrorBoundary theo từng layout và reset khi đổi route; nội dung 403 theo vai trò. Lỗi nhỏ để sau: menu ngăn kéo tự mở lại sau khi đổi cỡ cửa sổ; phiên hỏng dạng `{user:{}}` làm vỡ layout; mockDb thiếu kiểm tra đầu vào (gia hạn tháng âm, khoá admin khác, giá/số máy, JSON hỏng → 500) — cần ghi "kiểm tra phía server" vào spec trước khi làm API C#; mã lỗi INVALID_MACHINE_NAME/LICENSE_PERMANENT chưa có trong spec; tham số đường dẫn chưa encode; retry cả lỗi 4xx; worker.start() lỗi trên HTTP LAN → trắng trang.
 - 2026-11-17 00:31 — verification-before-completion: 113/113, lint, build, e2e 4/4, dist không chứa giả lập. CR-001 nen-tang ✅ DONE.
 - 2026-11-17 00:32 — Bỏ qua Playwright mở index.html lần cuối: chỉ đổi chữ nhãn tiến độ; trình duyệt MCP chặn file:// và không được phép chạy máy chủ tĩnh tạm.
+- 2026-11-17 15:39 — Người dùng yêu cầu vá các lỗi nhỏ còn tồn đọng. Lập plan CR-002 (4 task), chờ duyệt.

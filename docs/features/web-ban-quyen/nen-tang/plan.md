@@ -594,3 +594,119 @@
 **Rủi ro / câu hỏi mở**
 - antd 5 chạy chính thức với React 18. Chọn React 18.3 để không cần gói vá tương thích React 19.
 - `npx playwright install chromium` tải trình duyệt (~150MB) ở lần đầu.
+
+---
+
+## CR-002 — Vá các lỗi nhỏ còn tồn đọng sau review tổng
+
+**Mục tiêu:** sửa toàn bộ các lỗi nhỏ đã ghi lại sau review tổng CR-001, trước khi làm màn hình thật và API C#.
+
+**Cách làm:**
+- Làm trong phiên này theo executing-plans.
+- Mỗi task theo TDD: viết test tái hiện lỗi, thấy FAIL, sửa, thấy PASS.
+- Sau mỗi task chạy `npm run test && npm run lint && npm run build`. Task có ảnh hưởng giao diện chạy thêm `npm run e2e`.
+- Cuối cùng review một lần toàn bộ thay đổi CR-002.
+
+**Mã lỗi mới / bổ sung** (thêm vào bảng quy tắc ở design.md cha):
+
+| HTTP | Mã | Message |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Nói rõ trường sai. Dùng cho số tháng, trạng thái, gói và body JSON hỏng |
+| 400 | `INVALID_MACHINE_NAME` | "Vui lòng nhập tên máy" |
+| 409 | `LICENSE_PERMANENT` | "Bản quyền trọn đời không cần gia hạn" |
+| 409 | `CANNOT_LOCK_ADMIN` | "Không thể khoá tài khoản quản trị" |
+| 409 | `LICENSE_REVOKED` | "Bản quyền đã bị thu hồi, không thể gia hạn" |
+
+### Task 1 (T-002.1): Kiểm tra đầu vào của API giả lập
+
+**Files:**
+- Modify: `web/src/mocks/licenses.ts`, `admin.ts`, `mockDb.ts`, `handlers.ts`
+- Test: các file `*.test.ts` sẵn có trong `web/src/mocks/`
+
+**Thay đổi:**
+- `extendLicense`:
+  - `months` phải là số nguyên từ 1 đến 120, nếu không thì `VALIDATION_ERROR` "Số tháng gia hạn không hợp lệ";
+  - license `revoked` thì `LICENSE_REVOKED`.
+- `adminSetUserStatus`:
+  - status chỉ nhận `active` hoặc `locked`, nếu không thì `VALIDATION_ERROR`;
+  - khoá một admin khác thì `CANNOT_LOCK_ADMIN`; R19 (tự khoá chính mình) giữ nguyên.
+- `createPlan` / `updatePlan`:
+  - `name` không rỗng;
+  - `price` là số nguyên ≥ 0;
+  - `maxMachines` ≥ 1;
+  - `maxMachineChanges` ≥ 0;
+  - `durationMonths` là `null` hoặc số nguyên ≥ 1.
+  - Sai thì trả `VALIDATION_ERROR` với message theo trường.
+- `addActivation`: thiếu `machineName`, hoặc không phải chuỗi, thì trả `INVALID_MACHINE_NAME` (không còn 500).
+- `handlers.ts`: body JSON hỏng thì trả 400 `VALIDATION_ERROR` "Dữ liệu gửi lên không hợp lệ" (không còn 500).
+- Tìm kiếm `q` của admin chỉ khớp mã máy của activation đang dùng, tức là chưa gỡ.
+- Test cộng tháng cuối tháng không phụ thuộc múi giờ: dựng mốc thời gian và so sánh đều bằng dayjs theo giờ máy.
+
+**Test:** mỗi gạch đầu dòng trên có một test mới, viết trước và FAIL trước khi sửa. Riêng `handlers`: POST với body `{bad` phải nhận 400 `VALIDATION_ERROR`.
+
+### Task 2 (T-002.2): Lớp API và khởi động
+
+**Files:**
+- Modify: `web/src/api/client.ts`, `web/src/api/{orders,licenses,admin,plans}.ts`, `web/src/App.tsx`, `web/src/main.tsx`, `web/src/dev/DevToolbar.tsx`, `web/vite.config.ts`
+- Test: `web/src/api/client.test.ts` và file test API sẵn có
+
+**Thay đổi:**
+- Mọi tham số đường dẫn trong `api/*.ts` đi qua `encodeURIComponent`.
+  - Test: `getOrder('a/../b')` gọi URL chứa `a%2F..%2Fb`.
+- `apiFetch`: response 2xx không phải JSON (trừ 204) thì ném `ApiError(status, 'UNKNOWN', 'Phản hồi không hợp lệ từ máy chủ')`.
+- QueryClient: hàm `shouldRetry(failureCount, error)`.
+  - Không thử lại `ApiError` có status từ 400 đến 499.
+  - Lỗi khác thử lại 1 lần.
+- `main.tsx`: nếu `worker.start()` lỗi (ví dụ HTTP qua IP mạng LAN), app vẫn render và ghi `console.warn`.
+- `DevToolbar.loginAs`: lỗi thì hiện `message.error(err.message)`.
+- Build production không có `mockServiceWorker.js`: thêm plugin nhỏ trong `vite.config.ts`, xoá `dist/mockServiceWorker.js` khi `VITE_USE_MOCK !== 'true'`.
+  - Kiểm tra: `npm run build` rồi `test ! -f dist/mockServiceWorker.js`.
+
+### Task 3 (T-002.3): Giao diện và phiên
+
+**Files:**
+- Modify:
+  - `web/src/auth/session.ts`
+  - `web/src/layouts/SideNavLayout.tsx`, `PublicLayout.tsx`
+  - `web/src/pages/NotFoundPage.tsx`, `ForbiddenPage.tsx`
+  - `web/src/shared/components/StatusTag.tsx`
+  - `web/src/shared/format.ts`
+- Test: các file test sẵn có, cùng `web/src/router.test.tsx` và `tests/e2e/nen-tang.spec.ts`
+
+**Thay đổi:**
+- `loadSession`: chỉ nhận khi `token` là chuỗi và `user` có đủ `id`, `email`, `fullName` (chuỗi) cùng `role` ∈ {customer, admin}. Nếu không thì xoá `etax-session` và trả `null`.
+  - Test: `{"token":"x","user":{}}` trả `null`, và storage bị xoá.
+- Ngăn kéo menu (SideNavLayout, PublicLayout): đóng lại khi chuyển sang màn rộng, và khi đổi route.
+  - Test e2e `drawer-resize`: viewport 390, mở menu, chuyển 1280, rồi về 390 thì menu không tự mở.
+- 404/403: bỏ cách lồng `<Link><Button>`, thay bằng `<Button onClick={() => navigate('/')}>`.
+  - Test: bấm "Về trang chủ" thì về `/`, và trang không còn phần tử `a button`.
+- `StatusTag`: gặp trạng thái lạ thì hiện `Tag` mặc định với chính giá trị đó, không làm vỡ trang.
+- Màu `#0075D6` viết cứng trong layout chuyển sang `theme.useToken().token.colorPrimary`.
+- `formatDate` / `formatDateTime` với chuỗi rỗng hoặc ngày không hợp lệ thì hiện "—".
+- Bổ sung test còn thiếu:
+  - QueryState: khung chờ khi đang tải, và `emptyAction`;
+  - PageHeader: nút quay lại;
+  - PublicLayout khi đã đăng nhập: menu avatar có "Quản trị" (admin) hoặc "Tài khoản" (khách), và "Đăng xuất".
+
+### Task 4 (T-002.4): Cập nhật spec
+
+**Files:** `docs/features/web-ban-quyen/design.md`
+
+- Thêm R21–R24 vào bảng quy tắc:
+  - R21: khoá tài khoản admin;
+  - R22: gia hạn license đã thu hồi;
+  - R23: `VALIDATION_ERROR` (số tháng, trạng thái, gói, body hỏng);
+  - R24: `INVALID_MACHINE_NAME`.
+- Ghi message cho `LICENSE_PERMANENT` ở R13.
+- Thêm mục "Kiểm tra phía máy chủ": ràng buộc của từng trường, để API ASP.NET Core làm giống hệt.
+- Ghi chú cho màn hình: không truyền query `enabled: false` cố định vào `QueryState`; dùng render có điều kiện thay thế.
+
+**Tiêu chí nghiệm thu**
+- [ ] Mọi lỗi nhỏ ghi trong "Nhật ký phiên" của CR-001 đều đã sửa và có test (FAIL trước, PASS sau).
+- [ ] `npm run test`, `lint`, `build`, `e2e` pass, output không có stderr hay cảnh báo.
+- [ ] `dist/` không chứa `mockServiceWorker.js` hay mã giả lập.
+
+**Kịch bản test (Playwright):**
+- Chạy các e2e sẵn có: TC-05a/b, `login-admin`, `mobile-drawer`.
+- Thêm `drawer-resize`.
+- Chụp `screenshots/T-002.3-*.png`: trang 404 và menu điện thoại sau khi sửa.

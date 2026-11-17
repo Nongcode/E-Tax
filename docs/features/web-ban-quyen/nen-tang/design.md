@@ -122,3 +122,12 @@ Luồng dữ liệu: màn hình → hook TanStack Query → `src/api/*.ts` → `
 | T-001.9 | web/src/auth/, web/src/features/auth/, web/src/pages/ForbiddenPage.tsx (mới); web/src/api/client.ts, App.tsx | Phiên đăng nhập, bảo vệ route, 3 trang xác thực; 401 muộn sau đăng xuất bị bỏ qua; đăng xuất về '/' | Nền cho khu tài khoản và quản trị |
 | T-001.10 | web/src/shared/components/, ErrorBoundary.tsx, pages/NotFoundPage.tsx (mới); pages/ForbiddenPage.tsx | Thành phần dùng chung và trang lỗi; QueryState coi query chưa chạy là đang tải | Dùng lại ở mọi màn hình |
 | T-001.11 | web/src/layouts/, router.tsx, dev/, features/placeholder/, playwright.config.ts, tests/e2e/ (mới); App.tsx, main.tsx, vite.config.ts | Layout, router, công cụ dev, e2e; /tai-khoan chỉ cho khách (theo bảng Route); tách chunk | Khung điều hướng cho các chức năng con |
+
+### CR-002 — Vá lỗi nhỏ còn tồn đọng (dự kiến)
+
+| Task | File:dòng | Thay đổi | Lý do |
+|---|---|---|---|
+| T-002.1 | web/src/mocks/licenses.ts:64-70, 145-149; admin.ts:40-57; mockDb.ts (createPlan/updatePlan); handlers.ts:55 | Kiểm tra đầu vào, mã lỗi mới, body JSON hỏng → 400 | Mock là bản mẫu cho API C# |
+| T-002.2 | web/src/api/*.ts, client.ts, App.tsx (retry), main.tsx, dev/DevToolbar.tsx, vite.config.ts | Encode tham số, không retry 4xx, 2xx không JSON, worker lỗi vẫn render, bỏ mockServiceWorker.js khỏi dist | Ổn định lớp API |
+| T-002.3 | web/src/auth/session.ts, layouts/SideNavLayout.tsx, PublicLayout.tsx, pages/NotFoundPage.tsx, ForbiddenPage.tsx, shared/components/StatusTag.tsx, shared/format.ts | Phiên hỏng, ngăn kéo tự mở, Link lồng Button, trạng thái lạ, màu theo token, ngày rỗng | Lỗi người dùng gặp |
+| T-002.4 | docs/features/web-ban-quyen/design.md (Quy tắc nghiệp vụ) | R21–R24, mục kiểm tra phía máy chủ | Đồng bộ spec với mock |
