@@ -385,7 +385,8 @@ namespace E_Tax
                 ws.Cell(row, 1).Value = $"[{code}]";
                 ws.Cell(row, 2).Value = VatReturnBuilder.Describe(code);
                 ws.Cell(row, 3).Value = vatReturn.Values.TryGetValue(code, out decimal v) ? v : 0m;
-                ws.Cell(row, 3).Style.NumberFormat.Format = NumberFormat;
+                // Hiện đúng số: số nguyên không lẻ, số thập phân giữ nguyên phần lẻ
+                ws.Cell(row, 3).Style.NumberFormat.Format = v == decimal.Truncate(v) ? "#,##0" : "#,##0.############";
                 row++;
             }
             SetThinBorders(ws.Range(headerRow, 1, row - 1, colCount));

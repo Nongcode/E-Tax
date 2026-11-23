@@ -107,6 +107,109 @@ namespace E_Tax.Tests
             Assert.Contains(bad.Warnings, w => w.Contains("[22]"));
         }
 
+        private static TaxListingGroup GS(string rate, decimal doanhSo, decimal thue, int? status) =>
+            new(rate, new[] { new TaxListingRow("A", 1, "01/05/2026", "X", "0101234567", rate, doanhSo, thue, status, false) }, doanhSo, thue);
+
+        [Fact]
+        public void Build_EachManualInputLandsInItsOwnKey()
+        {
+            // [24]=110+19=129; [25]=129+7=136
+            var r = VatReturnBuilder.Build(Bought, Sold, Input(c22: 11, c37: 12, c38: 13, c39a: 14, c40b: 15, c42: 16, c23a: 18, c24a: 19, adj: 7));
+            var v = r.Values;
+            Assert.Equal(11m, v["22"]); Assert.Equal(12m, v["37"]); Assert.Equal(13m, v["38"]); Assert.Equal(14m, v["39a"]);
+            Assert.Equal(15m, v["40b"]); Assert.Equal(16m, v["42"]); Assert.Equal(18m, v["23a"]); Assert.Equal(19m, v["24a"]);
+            Assert.Equal(1250m + 18m, v["23"]); Assert.Equal(129m, v["24"]); Assert.Equal(136m, v["25"]);
+        }
+
+        [Theory]
+        [InlineData("KKKNT")]
+        [InlineData("0%")]
+        [InlineData("8%")]
+        public void Build_PurchasesAtRate_CountInCt23AndCt24(string rate)
+        {
+            var r = VatReturnBuilder.Build(new[] { G(rate, 300, 24) }, new TaxListingGroup[0], Input());
+            Assert.Equal(300m, r.Values["23"]); Assert.Equal(24m, r.Values["24"]);
+            Assert.Empty(r.Warnings);
+        }
+
+        [Fact]
+        public void Build_Ct40bGreaterThanCt40a_ZeroPayableWithWarning()
+        {
+            // X = 140 - 20 = 120 -> [40a]=120; [40b]=150 -> [40]=0
+            var r = VatReturnBuilder.Build(Bought, Sold, Input(c22: 20, c40b: 150));
+            Assert.Equal(120m, r.Values["40a"]);
+            Assert.Equal(0m, r.Values["40"]);
+            Assert.Contains(r.Warnings, w => w.Contains("[40b]") && w.Contains("[40a]"));
+        }
+
+        [Theory]
+        [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)]
+        [InlineData(4)] [InlineData(5)] [InlineData(6)] [InlineData(7)]
+        public void Build_EachNonAdjustInputNegative_Warns(int index)
+        {
+            string[] codes = { "22", "37", "38", "39a", "40b", "42", "23a", "24a" };
+            decimal[] a = new decimal[8];
+            a[index] = -1m;
+            var r = VatReturnBuilder.Build(Bought, Sold, new VatReturnInput(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], 0m));
+            Assert.Contains(r.Warnings, w => w.Contains("[" + codes[index] + "]") && w.Contains("âm"));
+        }
+
+        [Fact]
+        public void Build_UnknownRateWarning_ShowsExactAmounts()
+        {
+            var r = VatReturnBuilder.Build(new[] { G("?", 1234.5m, 98.125m) }, new TaxListingGroup[0], Input());
+            var w = Assert.Single(r.Warnings);
+            Assert.Contains("1,234.5", w); Assert.Contains("98.125", w);
+        }
+
+        [Fact]
+        public void Build_NonOneStatus_WarnsWithCount()
+        {
+            var bought = new[] { GS("10%", 100, 10, 1), GS("5%", 100, 5, 3) };
+            var sold = new[] { GS("10%", 100, 10, null) };
+            var r = VatReturnBuilder.Build(bought, sold, Input());
+            var w = Assert.Single(r.Warnings);
+            Assert.Contains("2", w); Assert.Contains("trạng thái", w); Assert.Contains("kiểm tra", w);
+        }
+
+        [Theory]
+        [InlineData("KCT")]
+        [InlineData("KKKNT")]
+        [InlineData("0%")]
+        public void Build_TaxOnNoTaxSales_WarnsNotCountedInCt28(string rate)
+        {
+            var r = VatReturnBuilder.Build(new TaxListingGroup[0], new[] { G(rate, 1000, 77.5m) }, Input());
+            Assert.Equal(0m, r.Values["28"]);
+            Assert.Contains(r.Warnings, w => w.Contains(rate) && w.Contains("77.5") && w.Contains("[28]"));
+        }
+
+        [Fact]
+        public void ExportVatReturn_ShowsFractionsExactlyAndWholeNumbersWithoutDecimals()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"vat_{System.Guid.NewGuid():N}.xlsx");
+            try
+            {
+                var r = VatReturnBuilder.Build(Bought, Sold, Input(c22: 1234.5m, c37: 1234.125m));
+                ExcelExporter.ExportVatReturn(r, TaxPeriod.Month(2026, 5), "0101234567", path);
+                using var wb = new XLWorkbook(path);
+                var ws = wb.Worksheet(1);
+                string FormatOf(string code) =>
+                    ws.Cell(ws.CellsUsed().First(c => c.GetString() == "[" + code + "]").Address.RowNumber, 3).Style.NumberFormat.Format;
+                Assert.Equal("#,##0.############", FormatOf("22"));
+                Assert.Equal("#,##0.############", FormatOf("37"));
+                Assert.Equal("#,##0", FormatOf("26"));
+            }
+            finally { File.Delete(path); }
+        }
+
+        [Fact]
+        public void Describe_ManualImportAndHandoverLabels()
+        {
+            Assert.Contains("nhập khẩu", VatReturnBuilder.Describe("23a"));
+            Assert.Contains("nhập tay, không có trong bảng kê", VatReturnBuilder.Describe("24a"));
+            Assert.Contains("nhận bàn giao", VatReturnBuilder.Describe("39a"));
+        }
+
         [Fact]
         public void ExportVatReturn_WritesDraftBannerIndicatorsAndWarnings()
         {

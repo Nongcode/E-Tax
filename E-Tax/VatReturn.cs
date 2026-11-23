@@ -26,7 +26,6 @@ namespace E_Tax
         public static VatReturn Build(IReadOnlyList<TaxListingGroup> bought, IReadOnlyList<TaxListingGroup> sold, VatReturnInput input)
         {
             var warnings = new List<string>();
-            var ci = CultureInfo.InvariantCulture;
 
             // Mua vào: [23]/[24] cộng mọi thuế suất đã biết
             decimal boughtAmount = 0m, boughtTax = 0m;
@@ -43,13 +42,18 @@ namespace E_Tax
 
             // Bán ra
             decimal ct26 = 0m, ct29 = 0m, ct30 = 0m, ct31 = 0m, ct32 = 0m, ct32a = 0m, ct33 = 0m;
+            void WarnTax(TaxListingGroup g)
+            {
+                if (g.TongThue != 0m)
+                    warnings.Add($"Hàng bán ra thuế suất {g.ThueSuat} có thuế {Fmt(g.TongThue)} nhưng không được tính vào [28].");
+            }
             foreach (var g in sold)
             {
                 switch (g.ThueSuat)
                 {
-                    case "KCT": ct26 += g.TongDoanhSo; break;
-                    case "KKKNT": ct32a += g.TongDoanhSo; break;
-                    case "0%": ct29 += g.TongDoanhSo; break;
+                    case "KCT": ct26 += g.TongDoanhSo; WarnTax(g); break;
+                    case "KKKNT": ct32a += g.TongDoanhSo; WarnTax(g); break;
+                    case "0%": ct29 += g.TongDoanhSo; WarnTax(g); break;
                     case "5%": ct30 += g.TongDoanhSo; ct31 += g.TongThue; break;
                     case "8%":
                         ct32 += g.TongDoanhSo; ct33 += g.TongThue;
@@ -62,6 +66,10 @@ namespace E_Tax
                         break;
                 }
             }
+
+            int otherStatus = bought.Concat(sold).SelectMany(g => g.Rows).Count(r => r.TrangThai != 1);
+            if (otherStatus > 0)
+                warnings.Add($"Có {otherStatus} dòng thuộc hóa đơn có trạng thái khác 1 hoặc không rõ; các dòng này đã được tính vào tổng, cần kiểm tra lại.");
 
             if (bought.SelectMany(g => g.Rows).Any(r => r.ThieuSoTien))
                 warnings.Add("Bảng kê mua vào có dòng thiếu số tiền nên [23]/[24] có thể bị thiếu.");
@@ -90,7 +98,9 @@ namespace E_Tax
             decimal ct43 = ct41 - input.CT42;
 
             if (input.CT42 > ct41)
-                warnings.Add($"[42] ({input.CT42.ToString("#,##0.##", ci)}) lớn hơn [41] ({ct41.ToString("#,##0.##", ci)}): số đề nghị hoàn vượt số chưa được khấu trừ hết.");
+                warnings.Add($"[42] ({Fmt(input.CT42)}) lớn hơn [41] ({Fmt(ct41)}): số đề nghị hoàn vượt số chưa được khấu trừ hết.");
+            if (input.CT40b > ct40a)
+                warnings.Add($"[40b] ({Fmt(input.CT40b)}) lớn hơn [40a] ({Fmt(ct40a)}): [40] được tính bằng 0, phần vượt không được chuyển đi.");
 
             var values = new Dictionary<string, decimal>
             {
@@ -105,16 +115,18 @@ namespace E_Tax
 
         private static string UnknownRateWarning(string side, TaxListingGroup g) =>
             $"Bảng kê {side} có thuế suất \"{g.ThueSuat}\" không được cộng vào tờ khai " +
-            $"(doanh số {g.TongDoanhSo.ToString("#,##0.##", CultureInfo.InvariantCulture)}, thuế {g.TongThue.ToString("#,##0.##", CultureInfo.InvariantCulture)}). Hãy kiểm tra lại.";
+            $"(doanh số {Fmt(g.TongDoanhSo)}, thuế {Fmt(g.TongThue)}). Hãy kiểm tra lại.";
+
+        private static string Fmt(decimal v) => v.ToString("#,##0.############", CultureInfo.InvariantCulture);
 
         /// <summary>Diễn giải tiếng Việt của từng chỉ tiêu.</summary>
         public static string Describe(string code) => code switch
         {
             "22" => "Thuế GTGT còn được khấu trừ kỳ trước chuyển sang",
             "23" => "Giá trị hàng hóa, dịch vụ mua vào",
-            "23a" => "Giá trị hàng hóa, dịch vụ mua vào điều chỉnh thêm (nhập tay)",
+            "23a" => "Trong đó: hàng hóa, dịch vụ nhập khẩu (nhập tay, không có trong bảng kê; cộng vào [23])",
             "24" => "Thuế GTGT của hàng hóa, dịch vụ mua vào",
-            "24a" => "Thuế GTGT mua vào điều chỉnh thêm (nhập tay)",
+            "24a" => "Trong đó: hàng hóa, dịch vụ nhập khẩu (nhập tay, không có trong bảng kê; cộng vào [24])",
             "25" => "Tổng số thuế GTGT được khấu trừ kỳ này",
             "26" => "Hàng hóa, dịch vụ bán ra không chịu thuế GTGT",
             "27" => "Tổng doanh thu hàng hóa, dịch vụ bán ra chịu thuế",
@@ -130,7 +142,7 @@ namespace E_Tax
             "36" => "Thuế GTGT phát sinh trong kỳ ([35] - [25])",
             "37" => "Điều chỉnh giảm thuế GTGT còn được khấu trừ của các kỳ trước",
             "38" => "Điều chỉnh tăng thuế GTGT còn được khấu trừ của các kỳ trước",
-            "39a" => "Thuế GTGT đã nộp ở địa phương khác của hoạt động kinh doanh xây dựng, lắp đặt, bán hàng, bất động sản ngoại tỉnh",
+            "39a" => "Thuế GTGT nhận bàn giao được khấu trừ trong kỳ",
             "40a" => "Thuế GTGT phải nộp của hoạt động sản xuất kinh doanh trong kỳ",
             "40b" => "Thuế GTGT mua vào của dự án đầu tư được bù trừ với thuế GTGT còn phải nộp của hoạt động sản xuất kinh doanh cùng kỳ tính thuế",
             "40" => "Thuế GTGT còn phải nộp trong kỳ",
