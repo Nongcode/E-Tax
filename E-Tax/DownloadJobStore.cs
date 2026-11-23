@@ -114,7 +114,37 @@ namespace E_Tax
         }
 
         /// <summary>Job mới nhất cùng title và đúng cùng tập khóa mà còn mục Pending/Failed; không có thì null.</summary>
-        public string? FindResumable(string title, IEnumerable<string> keys)
+        public string? FindResumable(string title, IEnumerable<string> keys) => Find(title, keys, requireUnfinished: true);
+
+        /// <summary>Job mới nhất cùng title và đúng cùng tập khóa, ở mọi trạng thái; không có thì null.</summary>
+        public string? FindLatest(string title, IEnumerable<string> keys) => Find(title, keys, requireUnfinished: false);
+
+        /// <summary>Xóa job có title là đường dẫn nằm dưới workRoot mà thư mục đó không còn; không bao giờ đụng job có title ngoài workRoot.</summary>
+        public int DeleteOrphans(string workRoot)
+        {
+            string root = Path.GetFullPath(workRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            int removed = 0;
+            lock (_lock)
+            {
+                foreach (string id in JobIds())
+                {
+                    try
+                    {
+                        JobFile? job = TryLoad(id);
+                        if (job == null || !Path.IsPathFullyQualified(job.Title)) continue;
+                        string full = Path.GetFullPath(job.Title);
+                        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase) || full.Length == root.Length) continue;
+                        if (Directory.Exists(full)) continue;
+                        Delete(id);
+                        removed++;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
+                }
+            }
+            return removed;
+        }
+
+        private string? Find(string title, IEnumerable<string> keys, bool requireUnfinished)
         {
             var wanted = new HashSet<string>(keys.Where(k => k != null), StringComparer.Ordinal);
             lock (_lock)
@@ -126,7 +156,7 @@ namespace E_Tax
                     JobFile? job = TryLoad(id);
                     if (job == null || job.Title != (title ?? "")) continue;
                     if (!wanted.SetEquals(job.Items.Keys)) continue;
-                    if (!job.Items.Values.Any(i => i.State != DownloadItemState.Done)) continue;
+                    if (requireUnfinished && !job.Items.Values.Any(i => i.State != DownloadItemState.Done)) continue;
                     if (bestId == null || job.CreatedUtc > bestCreated)
                     {
                         bestId = id;
@@ -261,6 +291,35 @@ namespace E_Tax
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
             return removed;
+        }
+
+        /// <summary>Xóa file gộp cũ và file tạm của PdfMerger (.{name}.*.tmp) để bản cũ không lọt vào kết quả; không xóa được thì ném lỗi.</summary>
+        public static void RemoveMergedOutputs(string pdfFolder, string mergedName)
+        {
+            if (!Directory.Exists(pdfFolder)) return;
+            string merged = Path.Combine(pdfFolder, mergedName);
+            if (File.Exists(merged)) File.Delete(merged);
+            foreach (string tmp in Directory.GetFiles(pdfFolder, "." + mergedName + ".*.tmp"))
+                File.Delete(tmp);
+        }
+
+        /// <summary>
+        /// Quyết định dùng lại một HĐ đã Done: ZIP và PDF phải có và không rỗng; ZIP đọc được; nếu ZIP có entry .xml
+        /// thì file XML kết quả cũng phải có và không rỗng. ZIP hỏng thì false.
+        /// </summary>
+        public static bool CanSkipInvoice(string zipPath, string pdfPath, string xmlPath)
+        {
+            if (!CanSkip(DownloadItemState.Done, new[] { zipPath, pdfPath })) return false;
+            try
+            {
+                using var zip = System.IO.Compression.ZipFile.OpenRead(zipPath);
+                bool hasXml = zip.Entries.Any(e => e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+                return !hasXml || CanSkip(DownloadItemState.Done, new[] { xmlPath });
+            }
+            catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
         }
 
         /// <summary>Chỉ bỏ qua mục đã Done khi mọi file kết quả của nó còn đủ và không rỗng.</summary>

@@ -1166,49 +1166,63 @@ namespace E_Tax
                 // Thư mục làm việc bền vững theo tập HĐ; lỗi thì dùng thư mục tạm cũ và chạy không tiếp tục được
                 var planKeys = downloadPlan.Select(p => p.FileId).ToList();
                 var doneKeys = new HashSet<string>(StringComparer.Ordinal);
-                try
+                // Dọn thư mục/job cũ và tìm job có thể chậm: chạy nền, ghi log sau khi xong (không gọi AppendLog từ luồng nền)
+                var workLogs = new List<string>();
+                string? workFolder = null;
+                DownloadJobStore? foundStore = null;
+                string? foundJobId = null;
+                await Task.Run(() =>
                 {
-                    DownloadWorkFolder.CleanupStale(DownloadWorkFolder.DefaultRoot, DateTime.UtcNow, TimeSpan.FromDays(30));
-                    string workFolder = DownloadWorkFolder.PathFor(DownloadWorkFolder.DefaultRoot, planKeys);
-                    Directory.CreateDirectory(workFolder);
-                    foreach (string leftover in Directory.GetDirectories(workFolder, "_temp_extract_*"))
-                        Directory.Delete(leftover, true); // thư mục giải nén dở của lượt trước không được lọt vào ZIP
+                    try
+                    {
+                        DownloadWorkFolder.CleanupStale(DownloadWorkFolder.DefaultRoot, DateTime.UtcNow, TimeSpan.FromDays(30));
+                        string wf = DownloadWorkFolder.PathFor(DownloadWorkFolder.DefaultRoot, planKeys);
+                        Directory.CreateDirectory(wf);
+                        foreach (string leftover in Directory.GetDirectories(wf, "_temp_extract_*"))
+                            Directory.Delete(leftover, true); // thư mục giải nén dở của lượt trước không được lọt vào ZIP
+                        workFolder = wf;
+                    }
+                    catch (Exception exWork)
+                    {
+                        workLogs.Add($"⚠️ (Tải gốc) Không tạo được thư mục làm việc, chạy không tiếp tục được: {exWork.GetType().Name}");
+                        return;
+                    }
+
+                    try
+                    {
+                        var store = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
+                        store.DeleteOrphans(DownloadWorkFolder.DefaultRoot); // job của thư mục làm việc đã bị xóa
+                        string? found = store.FindLatest(workFolder!, planKeys);
+                        if (found != null)
+                        {
+                            store.RetryFailed(found);
+                            doneKeys.UnionWith(store.DoneKeys(found));
+                            workLogs.Add($"ℹ️ (Tải gốc) Tiếp tục lượt tải trước: {doneKeys.Count}/{planKeys.Count} HĐ đã xong.");
+                        }
+                        else
+                        {
+                            found = store.Create(workFolder!, planKeys);
+                        }
+                        foundStore = store;
+                        foundJobId = found;
+                    }
+                    catch (Exception exJob)
+                    {
+                        workLogs.Add($"⚠️ (Tải gốc) Không dùng được kho tiến độ tải, chạy không lưu tiến độ: {exJob.GetType().Name}");
+                        doneKeys.Clear();
+                    }
+                });
+                foreach (string line in workLogs) AppendLog(line);
+                if (workFolder != null)
+                {
                     baseTempDirectory = workFolder;
                     reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
                     zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
                     pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
                     xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
                     isWorkFolder = true;
-                }
-                catch (Exception exWork)
-                {
-                    AppendLog($"⚠️ (Tải gốc) Không tạo được thư mục làm việc, chạy không tiếp tục được: {exWork.GetType().Name}");
-                }
-
-                if (isWorkFolder)
-                {
-                    try
-                    {
-                        jobStore = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
-                        jobId = jobStore.FindResumable(baseTempDirectory, planKeys);
-                        if (jobId != null)
-                        {
-                            jobStore.RetryFailed(jobId);
-                            doneKeys.UnionWith(jobStore.DoneKeys(jobId));
-                            AppendLog($"ℹ️ (Tải gốc) Tiếp tục lượt tải trước: {doneKeys.Count}/{totalInvoices} HĐ đã xong.");
-                        }
-                        else
-                        {
-                            jobId = jobStore.Create(baseTempDirectory, planKeys);
-                        }
-                    }
-                    catch (Exception exJob)
-                    {
-                        AppendLog($"⚠️ (Tải gốc) Không dùng được kho tiến độ tải, chạy không lưu tiến độ: {exJob.GetType().Name}");
-                        jobStore = null;
-                        jobId = null;
-                        doneKeys.Clear();
-                    }
+                    jobStore = foundStore;
+                    jobId = foundJobId;
                 }
 
                 Directory.CreateDirectory(reportSubFolder);
@@ -1247,7 +1261,7 @@ namespace E_Tax
 
                     // Đã xong ở lượt trước và đủ file (ZIP, PDF không rỗng): dùng lại, vẫn tính vào số đếm và file gộp
                     if (doneKeys.Contains(invoiceIdentifier) &&
-                        DownloadWorkFolder.CanSkip(DownloadItemState.Done, new[] { itemZipPath, outputPdfPath }))
+                        DownloadWorkFolder.CanSkipInvoice(itemZipPath, outputPdfPath, itemXmlPath))
                     {
                         successCount++;
                         convertSuccessCount++;
@@ -1347,6 +1361,8 @@ namespace E_Tax
                 modal.Report(new BatchProgress("Xử lý HĐ", totalInvoices, totalInvoices, failedChunks.Count));
 
                 // --- Gộp tất cả PDF thành một file (theo ký hiệu rồi số HĐ) ---
+                // Xóa bản gộp cũ (và file tạm của PdfMerger) trước; không xóa được thì ném lỗi IO, không đóng gói bản cũ
+                DownloadWorkFolder.RemoveMergedOutputs(pdfSubFolder, "_GopTatCa.pdf");
                 try
                 {
                     // Chỉ gộp PDF thực sự tạo được cho từng HĐ trong lượt này
@@ -1446,6 +1462,11 @@ namespace E_Tax
                     if (!keepWork && Directory.Exists(baseTempDirectory))
                     {
                         Directory.Delete(baseTempDirectory, true);
+                        if (isWorkFolder && jobStore != null && jobId != null)
+                        {
+                            try { jobStore.Delete(jobId); }
+                            catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không xóa được job đã xong: {exJob.GetType().Name}"); }
+                        }
                     }
                 }
                 catch (Exception ex)

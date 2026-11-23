@@ -141,6 +141,79 @@ namespace E_Tax.Tests
         }
     }
 
+    public class DownloadJobStoreExtraTests : IDisposable
+    {
+        private readonly string _dir = Path.Combine(Path.GetTempPath(), "etax-jobs2-" + Guid.NewGuid());
+        private readonly string _work = Path.Combine(Path.GetTempPath(), "etax-workroot-" + Guid.NewGuid());
+
+        public DownloadJobStoreExtraTests() => Directory.CreateDirectory(_work);
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
+            if (Directory.Exists(_work)) Directory.Delete(_work, true);
+        }
+
+        private static string[] Keys(int n) => Enumerable.Range(0, n).Select(i => "k" + i).ToArray();
+
+        [Fact]
+        public void FindLatest_ReturnsFullyDoneJob()
+        {
+            var store = new DownloadJobStore(_dir);
+            string id = store.Create("T", Keys(2));
+            store.Mark(id, "k0", DownloadItemState.Done, null);
+            store.Mark(id, "k1", DownloadItemState.Done, null);
+            store.Flush(id);
+
+            Assert.Equal(id, new DownloadJobStore(_dir).FindLatest("T", Keys(2)));
+            Assert.Null(store.FindResumable("T", Keys(2)));
+        }
+
+        [Fact]
+        public void FindLatest_DifferentKeys_ReturnsNull()
+        {
+            var store = new DownloadJobStore(_dir);
+            store.Create("T", Keys(2));
+            Assert.Null(store.FindLatest("T", Keys(3)));
+            Assert.Null(store.FindLatest("U", Keys(2)));
+        }
+
+        [Fact]
+        public void DeleteOrphans_RemovesJobWhoseFolderIsGone()
+        {
+            var store = new DownloadJobStore(_dir);
+            string gone = store.Create(Path.Combine(_work, new string('a', 64)), Keys(1));
+
+            Assert.Equal(1, store.DeleteOrphans(_work));
+            Assert.Empty(store.List());
+            Assert.Empty(Directory.GetFiles(_dir, gone + "*"));
+        }
+
+        [Fact]
+        public void DeleteOrphans_KeepsJobWhoseFolderExists()
+        {
+            var store = new DownloadJobStore(_dir);
+            string live = Path.Combine(_work, new string('b', 64));
+            Directory.CreateDirectory(live);
+            store.Create(live, Keys(1));
+
+            Assert.Equal(0, store.DeleteOrphans(_work));
+            Assert.Single(store.List());
+        }
+
+        [Fact]
+        public void DeleteOrphans_KeepsJobWithTitleOutsideRoot()
+        {
+            var store = new DownloadJobStore(_dir);
+            store.Create(Path.Combine(Path.GetTempPath(), "etax-elsewhere-" + Guid.NewGuid()), Keys(1));
+            store.Create(_work + "-sibling", Keys(1));
+            store.Create("not a path", Keys(1));
+
+            Assert.Equal(0, store.DeleteOrphans(_work));
+            Assert.Equal(3, store.List().Count);
+        }
+    }
+
     public class DownloadWorkFolderTests : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "etax-work-" + Guid.NewGuid());
@@ -226,6 +299,85 @@ namespace E_Tax.Tests
             File.WriteAllText(f1, "x");
             Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Failed, new[] { f1 }));
             Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Pending, new[] { f1 }));
+        }
+
+        private string MakeZip(string name, params string[] entries)
+        {
+            string path = Path.Combine(_root, name);
+            using var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Create);
+            foreach (string e in entries)
+            {
+                using var w = new StreamWriter(zip.CreateEntry(e).Open());
+                w.Write("x");
+            }
+            return path;
+        }
+
+        [Fact]
+        public void CanSkipInvoice_ZipWithXmlAndXmlPresent_True()
+        {
+            string zip = MakeZip("a.zip", "a.pdf", "a.xml");
+            string pdf = Path.Combine(_root, "a.pdf"), xml = Path.Combine(_root, "a.xml");
+            File.WriteAllText(pdf, "x");
+            File.WriteAllText(xml, "x");
+            Assert.True(DownloadWorkFolder.CanSkipInvoice(zip, pdf, xml));
+        }
+
+        [Fact]
+        public void CanSkipInvoice_ZipWithXmlAndXmlMissing_False()
+        {
+            string zip = MakeZip("b.zip", "b.pdf", "b.XML");
+            string pdf = Path.Combine(_root, "b.pdf");
+            File.WriteAllText(pdf, "x");
+            Assert.False(DownloadWorkFolder.CanSkipInvoice(zip, pdf, Path.Combine(_root, "b.xml")));
+        }
+
+        [Fact]
+        public void CanSkipInvoice_ZipWithoutXml_True()
+        {
+            string zip = MakeZip("c.zip", "c.pdf");
+            string pdf = Path.Combine(_root, "c.pdf");
+            File.WriteAllText(pdf, "x");
+            Assert.True(DownloadWorkFolder.CanSkipInvoice(zip, pdf, Path.Combine(_root, "c.xml")));
+        }
+
+        [Fact]
+        public void CanSkipInvoice_CorruptZip_False()
+        {
+            string zip = Path.Combine(_root, "d.zip");
+            File.WriteAllText(zip, "not a zip");
+            string pdf = Path.Combine(_root, "d.pdf");
+            File.WriteAllText(pdf, "x");
+            Assert.False(DownloadWorkFolder.CanSkipInvoice(zip, pdf, Path.Combine(_root, "d.xml")));
+        }
+
+        [Fact]
+        public void CanSkipInvoice_PdfMissing_False()
+        {
+            string zip = MakeZip("e.zip", "e.pdf");
+            Assert.False(DownloadWorkFolder.CanSkipInvoice(zip, Path.Combine(_root, "e.pdf"), Path.Combine(_root, "e.xml")));
+        }
+
+        [Fact]
+        public void RemoveMergedOutputs_DeletesMergedAndItsTempFilesOnly()
+        {
+            File.WriteAllText(Path.Combine(_root, "_GopTatCa.pdf"), "old");
+            File.WriteAllText(Path.Combine(_root, "._GopTatCa.pdf.abc123.tmp"), "t");
+            File.WriteAllText(Path.Combine(_root, "HD_1.pdf"), "keep");
+            File.WriteAllText(Path.Combine(_root, "other.tmp"), "keep");
+
+            DownloadWorkFolder.RemoveMergedOutputs(_root, "_GopTatCa.pdf");
+
+            Assert.False(File.Exists(Path.Combine(_root, "_GopTatCa.pdf")));
+            Assert.False(File.Exists(Path.Combine(_root, "._GopTatCa.pdf.abc123.tmp")));
+            Assert.True(File.Exists(Path.Combine(_root, "HD_1.pdf")));
+            Assert.True(File.Exists(Path.Combine(_root, "other.tmp")));
+        }
+
+        [Fact]
+        public void RemoveMergedOutputs_MissingFolder_DoesNothing()
+        {
+            DownloadWorkFolder.RemoveMergedOutputs(Path.Combine(_root, "nope"), "_GopTatCa.pdf");
         }
     }
 }
