@@ -7,9 +7,10 @@ namespace E_Tax
     {
         /// <summary>
         /// Đọc số nhập tay theo kiểu Việt Nam có dung sai. Rỗng là 0. Khi có cả '.' và ',' thì dấu xuất hiện sau cùng là
-        /// dấu thập phân. Chỉ một loại dấu: lặp lại nhiều lần là phân cách nghìn; xuất hiện một lần thì ',' là thập phân,
-        /// còn '.' là phân cách nghìn nếu sau nó đúng 3 chữ số và phần nguyên có 1-3 chữ số không bắt đầu bằng 0
-        /// (nên "1.234" là 1234, "1234.567" và "0.123" là thập phân).
+        /// dấu thập phân. Chỉ một loại dấu: lặp lại nhiều lần là phân cách nghìn; xuất hiện một lần thì là phân cách nghìn
+        /// nếu sau nó đúng 3 chữ số và phần nguyên có 1-3 chữ số không bắt đầu bằng 0 ("1.234" là 1234), còn lại là thập phân
+        /// ("0.123", "1234567.5"). Từ chối dạng mơ hồ: một dấu, đúng 3 số sau và phần nguyên từ 4 chữ số ("1234.567"),
+        /// phần nguyên nhiều chữ số bắt đầu bằng 0 ("012.345") và dạng nhóm bắt đầu bằng 0 ("0.123.456").
         /// </summary>
         public static bool TryParseAmount(string? text, out decimal value)
         {
@@ -42,13 +43,15 @@ namespace E_Tax
             else if (dots > 0)
             {
                 if (dots > 1) thou = '.';
-                else if (s.Length - lastDot - 1 == 3 && lastDot >= 1 && lastDot <= 3 && s[0] != '0') thou = '.';
+                else if (IsAmbiguousSingleSeparator(s, lastDot)) return false;
+                else if (s.Length - lastDot - 1 == 3 && lastDot >= 1 && s[0] != '0') thou = '.';
                 else dec = '.';
             }
             else if (commas > 0)
             {
                 if (commas > 1) thou = ',';
-                else if (s.Length - lastComma - 1 == 3 && lastComma >= 1 && lastComma <= 3 && s[0] != '0') thou = ',';
+                else if (IsAmbiguousSingleSeparator(s, lastComma)) return false;
+                else if (s.Length - lastComma - 1 == 3 && lastComma >= 1 && s[0] != '0') thou = ',';
                 else dec = ',';
             }
 
@@ -69,7 +72,7 @@ namespace E_Tax
                 {
                     var g = groups[i];
                     if (g.Any(c => c < '0' || c > '9')) return false;
-                    if (i == 0 ? (g.Length < 1 || g.Length > 3) : g.Length != 3) return false;
+                    if (i == 0 ? (g.Length < 1 || g.Length > 3 || g[0] == '0') : g.Length != 3) return false;
                 }
                 integerPart = string.Concat(groups);
             }
@@ -82,6 +85,10 @@ namespace E_Tax
             value = negative ? -parsed : parsed;
             return true;
         }
+
+        // Một dấu phân cách tại pos: phần nguyên nhiều chữ số bắt đầu bằng 0, hoặc từ 4 chữ số với đúng 3 số sau dấu
+        private static bool IsAmbiguousSingleSeparator(string s, int pos) =>
+            (pos >= 2 && s[0] == '0') || (pos >= 4 && s.Length - pos - 1 == 3);
 
         /// <summary>Giá trị tuyệt đối tối đa của ô nhập, để các phép cộng trong tờ khai không tràn decimal.</summary>
         public const decimal MaxAbsAmount = 999_999_999_999_999_999m;

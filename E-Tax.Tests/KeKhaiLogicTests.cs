@@ -16,11 +16,10 @@ namespace E_Tax.Tests
         [InlineData("12,345", "12345")]
         [InlineData("250,000", "250000")]
         [InlineData("0,123", "0.123")]
-        [InlineData("1234,567", "1234.567")]
         [InlineData("999999999999999999", "999999999999999999")]
         [InlineData("-999999999999999999", "-999999999999999999")]
         [InlineData("0.123", "0.123")]
-        [InlineData("1234.567", "1234.567")]
+        [InlineData("1234.56", "1234.56")]
         [InlineData("1234567", "1234567")]
         [InlineData("  500  ", "500")]
         [InlineData("-1.000", "-1000")]
@@ -52,6 +51,14 @@ namespace E_Tax.Tests
         [InlineData("-1000000000000000000")]
         [InlineData("999999999999999999,5")]
         [InlineData("79228162514264337593543950335")]
+        [InlineData("1000.000")]                 // mơ hồ: một dấu, đúng 3 số sau, phần nguyên từ 4 chữ số
+        [InlineData("1234.567")]
+        [InlineData("1234,567")]
+        [InlineData("012.345")]                  // phần nguyên có số 0 đứng đầu
+        [InlineData("00,5")]
+        [InlineData("0.123.456")]                // dạng nhóm bắt đầu bằng 0
+        [InlineData("0,123,456")]
+        [InlineData("01.234,5")]
         public void TryParseAmount_Rejects(string text)
         {
             Assert.False(KeKhaiLogic.TryParseAmount(text, out _));
