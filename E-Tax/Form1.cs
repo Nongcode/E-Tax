@@ -2255,6 +2255,7 @@ namespace E_Tax
                 modal.Report(new BatchProgress("Kiểm tra NCC", 0, codes.Count, 0));
                 results = await _riskService.CheckManyAsync(codes,
                     done => modal.Report(new BatchProgress("Kiểm tra NCC", done, codes.Count, 0)), ct);
+                ct.ThrowIfCancellationRequested(); // Hủy sát cuối: bỏ toàn bộ kết quả
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

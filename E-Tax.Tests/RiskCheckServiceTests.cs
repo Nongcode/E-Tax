@@ -31,6 +31,11 @@ namespace E_Tax.Tests
         [InlineData("{\"success\":false,\"message\":\"x\"}", "Unknown")]
         [InlineData("{\"success\":false,\"blacklisted\":false}", "Unknown")]
         [InlineData("{\"error\":\"token sai\",\"blacklisted\":false}", "Unknown")]
+        [InlineData("{\"success\":\"false\",\"blacklisted\":false}", "Unknown")]
+        [InlineData("{\"success\":0,\"blacklisted\":false}", "Unknown")]
+        [InlineData("{\"error\":{\"code\":401},\"blacklisted\":false}", "Unknown")]
+        [InlineData("{\"error\":true,\"blacklisted\":false}", "Unknown")]
+        [InlineData("{\"success\":true,\"error\":null,\"blacklisted\":false}", "Safe")]
         [InlineData("không phải json", "Unknown")]
         [InlineData("", "Unknown")]
         public async Task Check_MapsResponse(string body, string expected) =>

@@ -120,12 +120,12 @@ namespace E_Tax
                     return Unknown(taxCode, null);
                 }
 
-                if (root.TryGetProperty("success", out var successEl) && successEl.ValueKind == JsonValueKind.False)
+                if (root.TryGetProperty("success", out var successEl) && !IsSuccessFlag(successEl))
                 {
                     reason = "API báo không thành công";
                     return Unknown(taxCode, null);
                 }
-                if (root.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.String)
+                if (root.TryGetProperty("error", out var errorEl) && IsErrorSignal(errorEl))
                 {
                     reason = "API báo lỗi";
                     return Unknown(taxCode, null);
@@ -159,6 +159,25 @@ namespace E_Tax
                 return Unknown(taxCode, null);
             }
         }
+
+        /// <summary>"success" chỉ được coi là thành công khi là true/1/"true"/"1"; kiểu lạ coi là thất bại.</summary>
+        private static bool IsSuccessFlag(JsonElement el) => el.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.Number => el.TryGetDecimal(out var n) && n == 1m,
+            JsonValueKind.String => el.GetString()?.Trim() is string s &&
+                                    (string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1"),
+            _ => false
+        };
+
+        /// <summary>"error" là tín hiệu lỗi trừ khi vắng/null/""/false; mọi giá trị khác (object, true, số...) là lỗi.</summary>
+        private static bool IsErrorSignal(JsonElement el) => el.ValueKind switch
+        {
+            JsonValueKind.Null => false,
+            JsonValueKind.False => false,
+            JsonValueKind.String => !string.IsNullOrEmpty(el.GetString()),
+            _ => true
+        };
 
         private static RiskStatus MapFlag(JsonElement el)
         {
