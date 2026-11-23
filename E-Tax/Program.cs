@@ -8,6 +8,8 @@ namespace E_Tax
         [STAThread]
         static void Main()
         {
+            // Phải cài trước khi tạo bất kỳ form nào
+            AppErrorHandler.Install();
             // To customize application configuration such as set high DPI settings or default font,
            // see https://hoadondientu.gdt.gov.vn:30000/security-taxpayer/authenticate.
             ApplicationConfiguration.Initialize();

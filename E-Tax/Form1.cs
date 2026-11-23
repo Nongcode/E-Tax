@@ -28,6 +28,7 @@ namespace E_Tax
         private Dictionary<string, RiskResult> _riskResults = new Dictionary<string, RiskResult>();
         private readonly InvoiceDetailService _detailService;
         private readonly DetailGridManager _detailGridManager;
+        private readonly UserPreferences _prefs = new UserPreferences(UserPreferences.DefaultPath);
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
 
         private string jwtToken = "";
@@ -104,11 +105,35 @@ namespace E_Tax
         {
             CheckForLicense();
             _notes.Load();
+            _prefs.Load();
+            if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
             dgvMain.AutoGenerateColumns = false;
+            _ = CheckForUpdateAsync();
             await LoadCaptchaAsync();
         }
 
         #region Đăng nhập & bản quyền
+
+        /// <summary>Kiểm tra bản cập nhật ở nền; mọi lỗi bị bỏ qua. ManifestUrl rỗng thì không gọi mạng.</summary>
+        private async Task CheckForUpdateAsync()
+        {
+            try
+            {
+                var current = typeof(Form1).Assembly.GetName().Version ?? new Version(1, 0, 0);
+                var info = await UpdateChecker.CheckAsync(_riskHttp, UpdateChecker.ManifestUrl, current, CancellationToken.None);
+                if (info == null || IsDisposed) return;
+
+                AppendLog($"ℹ️ Có phiên bản mới {info.Version}.");
+                string notes = string.IsNullOrWhiteSpace(info.Notes) ? "" : Environment.NewLine + info.Notes;
+                MessageBox.Show(this,
+                    $"Có phiên bản mới {info.Version} (đang dùng {current.ToString(3)}).{notes}{Environment.NewLine}{Environment.NewLine}Tải về tại: {info.DownloadUrl}",
+                    "Cập nhật E-Tax", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception)
+            {
+                // Kiểm tra cập nhật không được ảnh hưởng ứng dụng
+            }
+        }
 
         private async void btnRefreshCaptcha_Click(object sender, EventArgs e)
         {
@@ -218,6 +243,7 @@ namespace E_Tax
 
                 if (success)
                 {
+                    SaveLastUsername(username);
                     MessageBox.Show("✅ Đăng nhập thành công!");
 
                     panelLogin.Visible = false;
@@ -244,8 +270,34 @@ namespace E_Tax
             }
         }
 
+        /// <summary>Chỉ lưu tên đăng nhập, không bao giờ lưu mật khẩu/captcha/JWT. Lỗi ghi không làm hỏng đăng nhập.</summary>
+        private void SaveLastUsername(string username)
+        {
+            try
+            {
+                _prefs.LastUsername = username;
+                _prefs.Save();
+            }
+            catch (Exception ex)
+            {
+                AppendLog("⚠️ Không lưu được tên đăng nhập: " + ex.GetType().Name);
+            }
+        }
+
+        /// <summary>Xóa phiên cũ để đăng nhập lại thất bại không dùng lại token/cookie cũ.</summary>
+        private void ClearStoredSession()
+        {
+            jwtToken = "";
+            client.DefaultRequestHeaders.Authorization = null;
+            foreach (Cookie cookie in cookieContainer.GetCookies(new Uri(GdtApi.PortalUrl)))
+            {
+                if (cookie.Name == "jwt" || cookie.Name == "jwtToken") cookie.Expired = true;
+            }
+        }
+
         private async Task<bool> LoginAsync(string username, string password, string captchaValue)
         {
+            ClearStoredSession();
             try
             {
                 AppendLog("👉 Gửi yêu cầu đăng nhập...");
@@ -739,22 +791,34 @@ namespace E_Tax
             lblDownloadStatus.Text = "Đang kiểm tra/tải Chromium (chỉ lần đầu)...";
             AppendLog("   -> Đang kiểm tra/tải trình duyệt Chromium...");
 
-            var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
-            var installedBrowser = await browserFetcher.DownloadAsync();
-
-            string? path = null;
-            if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+            try
             {
-                path = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
-            }
-            if (string.IsNullOrEmpty(path))
-            {
-                throw new Exception("Không thể xác định đường dẫn thực thi Chromium. Quá trình convert PDF không thể tiếp tục.");
-            }
+                var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
+                var installedBrowser = await browserFetcher.DownloadAsync();
 
-            lblDownloadStatus.Text = previousStatus;
-            _chromiumExecutablePath = path;
-            return path;
+                string? path = null;
+                if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+                {
+                    path = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
+                }
+                if (string.IsNullOrEmpty(path))
+                {
+                    throw new Exception("Không thể xác định đường dẫn thực thi Chromium. Quá trình convert PDF không thể tiếp tục.");
+                }
+
+                _chromiumExecutablePath = path;
+                return path;
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is IOException || ex is OperationCanceledException || ex is PuppeteerException)
+            {
+                AppendLog("❌ Tải Chromium thất bại: " + ex.GetType().Name);
+                throw new InvalidOperationException(
+                    "Không tải được trình duyệt Chromium để chuyển PDF. Vui lòng kiểm tra kết nối mạng hoặc tường lửa rồi thử lại.", ex);
+            }
+            finally
+            {
+                lblDownloadStatus.Text = previousStatus;
+            }
         }
 
         private static string? FindFirstFile(string directory, string pattern) =>
