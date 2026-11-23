@@ -124,6 +124,11 @@ namespace E_Tax
         {
             CheckForLicense();
             _notes.Load();
+            if (_notes.LoadProblem != null)
+            {
+                AppendLog("❌ " + _notes.LoadProblem);
+                MessageBox.Show(this, _notes.LoadProblem, "Ghi chú bị lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             _prefs.Load();
             if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
             dgvMain.AutoGenerateColumns = false;

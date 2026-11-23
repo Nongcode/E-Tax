@@ -469,8 +469,10 @@ namespace E_Tax
             string path = dlg.FileName;
             await RunBusyAsync("Đang sao lưu...", async () =>
             {
-                await Task.Run(() => BackupService.Create(_store.Root, NotesStore.DefaultPath, path));
-                MessageBox.Show(this, "Đã sao lưu kho hóa đơn và ghi chú ra:\n" + path, "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var warnings = await Task.Run(() => BackupService.Create(_store.Root, NotesStore.DefaultPath, path));
+                string extra = warnings.Count > 0 ? "\n\nLưu ý:\n - " + string.Join("\n - ", warnings) : "";
+                MessageBox.Show(this, "Đã sao lưu kho hóa đơn và ghi chú ra:\n" + path + extra, "Hoàn tất", MessageBoxButtons.OK,
+                    warnings.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             });
         }
 
@@ -482,18 +484,25 @@ namespace E_Tax
 
             var answer = MessageBox.Show(this,
                 "Khôi phục từ file sao lưu:\n" + path + "\n\n" +
-                "Có: GHI ĐÈ các file trùng trong kho và ghi chú hiện tại bằng bản trong file sao lưu.\n" +
-                "Không: chỉ thêm những file chưa có, KHÔNG ghi đè file hiện có.\n" +
-                "Hủy: không làm gì.",
+                "Hóa đơn được GỘP theo từng hóa đơn: hóa đơn chỉ có trong kho vẫn được giữ, hóa đơn chỉ có trong bản sao lưu được thêm.\n\n" +
+                "Có: khi trùng hóa đơn thì lấy bản trong file sao lưu; file đính kèm và ghi chú bị ghi đè.\n" +
+                "Không: khi trùng hóa đơn thì giữ bản trong kho; không ghi đè file đính kèm và ghi chú.\n" +
+                "Hủy: không làm gì.\n\n" +
+                "Kho hiện tại được tự động sao lưu trước khi khôi phục.",
                 "Xác nhận khôi phục", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button3);
             if (answer == DialogResult.Cancel) return;
             bool overwrite = answer == DialogResult.Yes;
 
             await RunBusyAsync("Đang khôi phục...", async () =>
             {
-                int written = await Task.Run(() => BackupService.Restore(path, _store.Root, NotesStore.DefaultPath, null, overwrite));
+                var (written, safety) = await Task.Run(() =>
+                {
+                    int n = BackupService.Restore(path, _store.Root, NotesStore.DefaultPath, null, overwrite, out string? safetyPath);
+                    return (n, safetyPath);
+                });
                 _notes.Load();
-                MessageBox.Show(this, $"Đã khôi phục {written} file ({(overwrite ? "có ghi đè" : "không ghi đè")}).", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string safetyText = safety != null ? $"\nBản sao lưu an toàn của kho trước khi khôi phục:\n{safety}" : "";
+                MessageBox.Show(this, $"Đã khôi phục {written} file ({(overwrite ? "ưu tiên bản sao lưu khi trùng" : "ưu tiên kho hiện tại khi trùng")}).{safetyText}", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             await LoadCompaniesAsync(); // tải lại danh sách sau khôi phục
         }

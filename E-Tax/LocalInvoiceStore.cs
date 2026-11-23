@@ -301,7 +301,12 @@ namespace E_Tax
                 if (!DataFilePattern.IsMatch(fileName)) continue;
                 result[Path.GetFileNameWithoutExtension(fileName)] = ReadFile(file);
             }
+            ResolveDuplicates(result, cleaned);
+            return result;
+        }
 
+        private static void ResolveDuplicates(Dictionary<string, List<StoredInvoice>> result, List<string> cleaned)
+        {
             var owner = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string name in result.Keys.OrderBy(n => n == UnknownDate ? 0 : 1).ThenBy(n => n, StringComparer.Ordinal))
             {
@@ -318,14 +323,15 @@ namespace E_Tax
                     owner[k] = name;
                 }
             }
-            return result;
         }
 
-        private static List<StoredInvoice> ReadFile(string path)
+        private static List<StoredInvoice> ReadFile(string path) => ParseData(File.ReadAllText(path, Encoding.UTF8), path);
+
+        private static List<StoredInvoice> ParseData(string json, string path)
         {
             try
             {
-                var list = JsonSerializer.Deserialize<List<StoredInvoice>>(File.ReadAllText(path, Encoding.UTF8), JsonOptions);
+                var list = JsonSerializer.Deserialize<List<StoredInvoice>>(json, JsonOptions);
                 if (list == null || list.Any(x => x == null || x.Invoice == null))
                     throw CorruptFile(path, null);
                 return list;
@@ -334,6 +340,80 @@ namespace E_Tax
             {
                 throw CorruptFile(path, ex);
             }
+        }
+
+        /// <summary>Tên file có phải file tháng của kho (yyyy-MM.json hoặc unknown-date.json).</summary>
+        internal static bool IsDataFileName(string fileName) => DataFilePattern.IsMatch(fileName);
+
+        /// <summary>Ném InvalidDataException nêu tên file nếu nội dung không phải file tháng hợp lệ.</summary>
+        internal static void ValidateDataJson(string json, string fileName) => ParseData(json, fileName);
+
+        /// <summary>
+        /// Tính nội dung mới của các file tháng khi khôi phục, chưa ghi gì. Gộp theo khóa hóa đơn trên toàn doanh nghiệp:
+        /// bản ghi chỉ có ở một bên được giữ; trùng khóa thì overwrite=true lấy bản sao lưu (kể cả chuyển tháng), false giữ kho.
+        /// Trả về các file cần ghi, file nhận bản ghi trước để lỗi giữa chừng chỉ gây trùng, không mất.
+        /// </summary>
+        internal static IReadOnlyList<(string Path, string Json)> PlanRestoreMerge(string companyDir, IReadOnlyDictionary<string, string> backupFiles, bool overwrite)
+        {
+            var store = LoadCompany(companyDir, out _);
+            var backup = new Dictionary<string, List<StoredInvoice>>(StringComparer.Ordinal);
+            foreach (var (fileName, json) in backupFiles)
+                backup[Path.GetFileNameWithoutExtension(fileName)] = ParseData(json, fileName);
+            ResolveDuplicates(backup, new List<string>());
+
+            var index = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (name, list) in store)
+                foreach (var item in list)
+                    if (KeyOf(item.Invoice, item.Loai) is string k) index[k] = name;
+
+            var gained = new List<string>();
+            var lost = new List<string>();
+            void Mark(List<string> marks, string m) { if (!marks.Contains(m)) marks.Add(m); }
+
+            foreach (string month in backup.Keys.OrderBy(n => n, StringComparer.Ordinal))
+            {
+                foreach (var record in backup[month])
+                {
+                    string? key = KeyOf(record.Invoice, record.Loai);
+                    if (key == null)
+                    {
+                        // Không có khóa: chỉ tránh thêm lại đúng bản ghi đã có trong tháng
+                        var target = GetList(store, month);
+                        if (target.Any(x => Serialize(x) == Serialize(record))) continue;
+                        target.Add(record);
+                        Mark(gained, month);
+                        continue;
+                    }
+                    if (!index.TryGetValue(key, out string? current))
+                    {
+                        GetList(store, month).Add(record);
+                        index[key] = month;
+                        Mark(gained, month);
+                        continue;
+                    }
+                    if (!overwrite) continue;
+
+                    var currentList = store[current];
+                    int pos = currentList.FindIndex(x => KeyOf(x.Invoice, x.Loai) == key);
+                    if (current == month)
+                    {
+                        if (Serialize(currentList[pos]) == Serialize(record)) continue;
+                        currentList[pos] = record;
+                    }
+                    else
+                    {
+                        currentList.RemoveAt(pos);
+                        Mark(lost, current);
+                        GetList(store, month).Add(record);
+                        index[key] = month;
+                    }
+                    Mark(gained, month);
+                }
+            }
+
+            return gained.Concat(lost.Where(l => !gained.Contains(l)))
+                .Select(m => (Path.Combine(companyDir, m + ".json"), JsonSerializer.Serialize(store[m], JsonOptions)))
+                .ToList();
         }
 
         private static InvalidDataException CorruptFile(string path, Exception? inner)

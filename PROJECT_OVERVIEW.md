@@ -172,9 +172,10 @@ Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `c
 
 #### Bảng kê (mua vào / bán ra)
 - Dữ liệu từ `LatestItems` (dòng hàng của lần tìm gần nhất); thuế suất chuẩn hóa bởi `TaxListing.NormalizeRate` (có `%` là phần trăm; số trần 0<x<1 là tỷ lệ; KCT/KKKNT giữ nguyên; rỗng = "Không rõ"). Đối tác: Mua vào = người bán, Bán ra = người mua (thiếu thì để trống).
-- **Chặn xuất** (`ExportBlockReason`) khi `LastFailedCount + _lastFailedSearchPages > 0` (HĐ lỗi/thiếu chi tiết hoặc trang tìm kiếm lỗi): không bao giờ xuất bảng kê thiếu số liệu. Chưa tìm kiếm thì báo chưa có dữ liệu.
-- **Một** xác nhận Yes/No trước khi xuất (`TaxListing.ExportWarnings`, rỗng thì không hỏi, No thì dừng): dòng có trạng thái khác 1 hoặc null (vẫn tính vào tổng); dòng thiếu số tiền (tính là 0); HĐ không có dòng hàng (`LastNoLineCount`, sẽ vắng trong bảng kê); HĐ ngoại tệ (`CountNonVnd`, cộng nguyên số tiền, không quy đổi). Hai cảnh báo đầu được ghi thêm ở dòng 3 của file (`TaxListing.ExportNotes`).
-- Dòng có `DoanhSo` null, hoặc `TienThue` null trên thuế suất phần trăm, bị đánh dấu `ThieuSoTien` (KCT/KKKNT thuế null không tính là thiếu). Dòng có `tthai` null hoặc khác 1 được tô vàng trong Excel.
+- **Chọn hóa đơn** (`TaxableInvoices`, dùng chung cho bảng kê, tờ khai, phụ lục, file kế toán): loại `BiHuy` (6) và `BiThayThe` (4); giữ `Goc`, `ThayThe`, `DieuChinh`, `BiDieuChinh`; `KhongRo` (kể cả null) không được tính và chặn xuất. Ánh xạ `tthai` vẫn là giả định chưa đối chiếu dữ liệu thật.
+- **Chặn xuất** (`ExportBlockReason`, `UnknownBlockReason`) khi `LastFailedCount + _lastFailedSearchPages > 0` (HĐ lỗi/thiếu chi tiết hoặc trang tìm kiếm lỗi) hoặc có HĐ không rõ trạng thái ở chiều đang xuất. Chưa tìm kiếm thì báo chưa có dữ liệu.
+- **Một** xác nhận Yes/No trước khi xuất (`TaxListing.ExportWarnings` + `TaxableInvoices.OutputNotes`, rỗng thì không hỏi, No thì dừng): số HĐ bị loại và lý do; HĐ thay thế/điều chỉnh đã tính vào tổng (đếm theo HĐ, cần kiểm tra dấu); dòng thiếu số tiền (tính là 0); HĐ không có dòng hàng; HĐ ngoại tệ; HĐ gốc ở kỳ khác; tổng dòng lệch tổng HĐ; số HĐ lấy được ít hơn `total` của cổng. Mọi cảnh báo được ghi vào file.
+- Dòng có `DoanhSo` null, hoặc `TienThue` null trên thuế suất phần trăm, bị đánh dấu `ThieuSoTien` (KCT/KKKNT thuế null không tính là thiếu). Dòng thay thế/điều chỉnh được tô vàng trong Excel.
 
 ### 5.5 Tiện ích
 - `AppendLog(string)` → `Logger.Write` ghi file `%LocalAppData%/E-Tax/logs/etax_yyyyMMdd.log` (giữ 30 ngày, không ném lỗi). DetailGridManager cũng log qua delegate này. **Không log token/mật khẩu.**
@@ -253,11 +254,13 @@ Các điểm dưới đây dựa trên giả định/test giả lập, chưa ch�
 - `LocalInvoiceStore.cs`: kho HĐ cục bộ theo doanh nghiệp, `{root}\{mst}\{yyyy-MM}.json` (HĐ không rõ ngày: `unknown-date.json`), file đính kèm ở `{root}\{mst}\files\`.
 - `KhoHoaDonForm.cs`: màn hình kho (dựng bằng code): xem theo doanh nghiệp, lọc, phân trang, mở PDF/XML, ghi chú, xuất Excel, sao lưu/khôi phục, quản lý tác vụ tải.
 - `DownloadJobStore.cs`: tiến độ tải theo từng khóa HĐ, ghi nguyên tử, cho phép tiếp tục tác vụ bị dừng.
-- `BackupService.cs`: sao lưu/khôi phục kho và ghi chú ra file ZIP.
+- `BackupService.cs`: sao lưu/khôi phục kho và ghi chú ra file ZIP. Bản sao lưu được kiểm tra trước khi đưa vào chỗ. Khôi phục kiểm tra toàn bộ JSON, tự tạo `{kho}-safety-*.zip` cạnh thư mục kho, rồi gộp file tháng theo khóa HĐ (`overwrite` chỉ quyết định khi trùng khóa).
 - `BusyGate.cs`: một cổng bận chung cho mọi luồng dài (không chạy đồng thời).
 - `InvoiceClassifier.cs`, `InvoiceLinker.cs`: phân loại HĐ và gắn HĐ thay thế/điều chỉnh với HĐ gốc.
 - `LocalRiskList.cs`: danh sách NCC rủi ro nhập từ CSV/XLSX. Chỉ trả Risky hoặc Unknown; không có trong danh sách không có nghĩa là an toàn.
-- `VatReturn.cs`, `ReductionAppendix.cs`, `KeKhaiForm.cs`: màn hình lập tờ khai 01/GTGT dự thảo và phụ lục giảm thuế. Chỉ là dự thảo, chưa đối chiếu mẫu gốc.
+- `VatReturn.cs`, `ReductionAppendix.cs`, `KeKhaiForm.cs`: màn hình lập tờ khai 01/GTGT dự thảo và phụ lục giảm thuế. Chỉ là dự thảo, chưa đối chiếu mẫu gốc. `KeKhaiLogic.DecideBlocks`: tờ khai cần cả Mua vào và Bán ra, phụ lục cần Bán ra; thiếu dữ liệu, trạng thái không rõ hoặc ngoại tệ khóa cả tờ khai, phụ lục và file kế toán.
+- `TaxableInvoices.cs`: bộ chọn HĐ được tính thuế và các cảnh báo (HĐ bị loại, HĐ gốc khác kỳ, lệch tổng). Kỳ vẫn tính theo ngày lập; quy tắc kỳ của HĐ điều chỉnh chờ chủ dự án quyết định.
+- An toàn dữ liệu: mỗi người dùng chỉ chạy một bản (`SingleInstance`, mutex); kho và ghi chú ghi nguyên tử có `Flush(true)`; file tháng hỏng có thể cách ly thành `.corrupt`; `notes.json` hỏng được giữ bản `.corrupt` và `Save` bị từ chối đến khi xử lý xong.
 - `AccountingExport.cs`: xuất dữ liệu cho phần mềm kế toán theo mẫu cột chung; file xuất có dòng `CHƯA ĐỐI CHIẾU VỚI MẪU GỐC`.
 - `UserPreferences.cs` (nhớ tên đăng nhập gần nhất, không lưu mật khẩu), `AppErrorHandler.cs` (bắt lỗi toàn cục), `UpdateChecker.cs` (`ManifestUrl` rỗng thì không kiểm tra, không gọi mạng), `FlexibleStringConverter.cs`, `ChromiumUnavailableException.cs`.
 
