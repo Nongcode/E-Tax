@@ -191,7 +191,7 @@ namespace E_Tax
             }
         }
 
-        private static string Truncate(string text) =>
+        internal static string Truncate(string text) =>
             string.IsNullOrEmpty(text) || text.Length <= 300 ? text : text.Substring(0, 300) + "...";
     }
 }

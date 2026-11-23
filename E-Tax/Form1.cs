@@ -199,7 +199,6 @@ namespace E_Tax
 
                 captchaKey = keyEl.GetString();
                 string svgText = contentEl.GetString();
-                AppendLog($"📌 Captcha Key: {captchaKey}");
 
                 if (string.IsNullOrEmpty(svgText))
                     throw new Exception("Trường content rỗng.");
@@ -213,17 +212,16 @@ namespace E_Tax
                 }
                 catch (Exception exSvg)
                 {
-                    // Không render được SVG: lưu ra file tạm và hiển thị ảnh thông báo
-                    string tmp = Path.Combine(Path.GetTempPath(), $"captcha_{DateTime.Now.Ticks}.svg");
-                    File.WriteAllText(tmp, svgText, Encoding.UTF8);
-                    AppendLog("⚠️ Không convert trực tiếp SVG -> Bitmap: " + exSvg.Message);
+                    // Không render được: không ghi captcha ra đĩa, chỉ báo người dùng tải lại
+                    AppendLog("⚠️ Không hiển thị được captcha: " + exSvg.GetType().Name);
 
                     var bmp = new Bitmap(220, 80);
                     using (Graphics g = Graphics.FromImage(bmp))
+                    using (var font = new Font("Segoe UI", 9))
                     {
                         g.Clear(Color.White);
-                        g.DrawString("Captcha (SVG) lưu vào file", new Font("Segoe UI", 9), Brushes.Black, new PointF(6, 10));
-                        g.DrawString(Path.GetFileName(tmp), new Font("Segoe UI", 8), Brushes.Gray, new PointF(6, 30));
+                        g.DrawString("Không hiển thị được captcha.", font, Brushes.Black, new PointF(6, 10));
+                        g.DrawString("Hãy bấm làm mới để tải lại.", font, Brushes.Black, new PointF(6, 30));
                     }
                     SetCaptchaImage(bmp);
                 }
@@ -684,7 +682,7 @@ namespace E_Tax
                 if (!response.IsSuccessStatusCode)
                 {
                     string errorText = await response.Content.ReadAsStringAsync(ct);
-                    AppendLog($"❌ Lỗi khi tải HĐ [{invoice.Ky_hieu_hoa_don} - {invoice.So_hoa_don}]: {(int)response.StatusCode} - {errorText}");
+                    AppendLog($"❌ Lỗi khi tải HĐ [{invoice.Ky_hieu_hoa_don} - {invoice.So_hoa_don}]: {(int)response.StatusCode} - {InvoiceDetailService.Truncate(errorText)}");
                     return null;
                 }
 
