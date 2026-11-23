@@ -120,6 +120,56 @@ namespace E_Tax.Tests
             Assert.All(results, r => Assert.NotNull(r));
         }
 
+        [Fact]
+        public async Task Cancel_DoesNotCachePartialResult()
+        {
+            using var cts = new CancellationTokenSource();
+            // Trang 1 đủ 50 SP, hủy ngay sau khi trang 1 trả về (trước khi xin trang 2)
+            var handler = new FakeHttpHandler((req, _) =>
+            {
+                if (req.RequestUri!.Query.Contains("page=0")) cts.Cancel();
+                return FakeHttpHandler.Json(FakeHttpHandler.DetailJson(req.RequestUri!.Query.Contains("page=0") ? 50 : 3));
+            });
+            var service = CreateService(handler);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetDetailPagesAsync(Invoice("a"), cts.Token));
+            int requestsBeforeRetry = handler.RequestCount;
+
+            var after = await service.GetDetailPagesAsync(Invoice("a"));
+
+            Assert.True(handler.RequestCount > requestsBeforeRetry); // không lấy từ cache
+            Assert.NotNull(after);
+            Assert.Equal(2, after!.Count);
+        }
+
+        [Fact]
+        public async Task Prefetch_Cancelled_ReturnsNullsAndStopsRequests()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var handler = new FakeHttpHandler((_, _) => FakeHttpHandler.Json(FakeHttpHandler.DetailJson(1)));
+            var service = CreateService(handler);
+            var invoices = Enumerable.Range(1, 5).Select(i => Invoice("id" + i, i)).ToList();
+
+            var results = await service.PrefetchAsync(invoices, null, cts.Token);
+
+            Assert.Equal(5, results.Count);
+            Assert.All(results, r => Assert.Null(r));
+            Assert.Equal(0, handler.RequestCount);
+        }
+
+        [Fact]
+        public async Task HttpTimeout_IsNotCancel_ReturnsNull()
+        {
+            // TaskCanceledException do timeout của HttpClient (token của người dùng chưa hủy) vẫn trả null như cũ
+            var handler = new FakeHttpHandler((_, _) => throw new TaskCanceledException("timeout"));
+            var service = CreateService(handler);
+
+            var pages = await service.GetDetailPagesAsync(Invoice("a"), CancellationToken.None);
+
+            Assert.Null(pages);
+        }
+
         private static void InterlockedMax(ref int target, int value)
         {
             int seen;

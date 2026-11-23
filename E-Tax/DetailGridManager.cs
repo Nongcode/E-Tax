@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -138,7 +139,7 @@ namespace E_Tax
         /// Dòng hàng được dựng theo đúng thứ tự danh sách để STT ổn định. Phải được gọi từ UI thread.
         /// </summary>
         /// <returns>Số hóa đơn không lấy được chi tiết.</returns>
-        public async Task<int> PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
+        public async Task<int> PopulateDetailGridAsync(List<SearchResult> invoiceHeaders, CancellationToken ct = default, Action<int>? onProgress = null)
         {
             _dgvDetails.DataSource = null;
             _dgvMua.DataSource = null;
@@ -161,11 +162,26 @@ namespace E_Tax
 
             int total = invoiceHeaders.Count;
             _logAction($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {total} hóa đơn (tối đa {InvoiceDetailService.MaxConcurrency} request đồng thời)...");
-            var allPages = await _detailService.PrefetchAsync(invoiceHeaders, done =>
+            IReadOnlyList<IReadOnlyList<string>?> allPages;
+            try
             {
-                _progressBar.Value = Math.Min(done, _progressBar.Maximum);
-                _statusLabel.Text = $"Đang tải chi tiết HĐ ({done}/{total})...";
-            });
+                allPages = await _detailService.PrefetchAsync(invoiceHeaders, done =>
+                {
+                    // Callback có thể đến trễ sau khi hủy/hoàn tất: bỏ qua để không ghi đè trạng thái
+                    if (ct.IsCancellationRequested) return;
+                    _progressBar.Value = Math.Min(done, _progressBar.Maximum);
+                    _statusLabel.Text = $"Đang tải chi tiết HĐ ({done}/{total})...";
+                    onProgress?.Invoke(done);
+                }, ct);
+                // PrefetchAsync trả null cho HĐ bị hủy: không dựng/gán dữ liệu thiếu
+                ct.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                _statusLabel.Visible = false;
+                _progressBar.Visible = false;
+                throw;
+            }
 
             var allDetailItems = new List<InvoiceDetailItem>();
             var boughtDetailItems = new List<InvoiceDetailItem>();

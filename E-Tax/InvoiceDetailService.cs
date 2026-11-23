@@ -42,8 +42,9 @@ namespace E_Tax
         /// JSON của từng trang sản phẩm (trang đầu luôn có, kể cả khi HĐ không có hàng hóa).
         /// Trả về null nếu thiếu khóa, chưa đăng nhập hoặc có trang lỗi (không trả dữ liệu thiếu trang). Kết quả lỗi không được cache.
         /// </summary>
-        public async Task<IReadOnlyList<string>?> GetDetailPagesAsync(SearchResult invoice)
+        public async Task<IReadOnlyList<string>?> GetDetailPagesAsync(SearchResult invoice, CancellationToken ct = default)
         {
+            ct.ThrowIfCancellationRequested();
             if (invoice == null || !invoice.HasLookupKeys()) return null;
 
             bool cacheable = !string.IsNullOrEmpty(invoice.Id);
@@ -59,7 +60,7 @@ namespace E_Tax
             bool complete = false;
             for (int page = 0; ; page++)
             {
-                string? json = await FetchPageAsync(invoice, page).ConfigureAwait(false);
+                string? json = await FetchPageAsync(invoice, page, ct).ConfigureAwait(false);
                 if (json == null) break;
 
                 int productCount;
@@ -93,7 +94,7 @@ namespace E_Tax
         /// Tải chi tiết cho cả danh sách (song song có giới hạn). Kết quả trả theo đúng thứ tự danh sách.
         /// onCompleted(n) báo số HĐ đã xong, chạy trên SynchronizationContext của nơi gọi (UI thread).
         /// </summary>
-        public async Task<IReadOnlyList<IReadOnlyList<string>?>> PrefetchAsync(IReadOnlyList<SearchResult> invoices, Action<int>? onCompleted = null)
+        public async Task<IReadOnlyList<IReadOnlyList<string>?>> PrefetchAsync(IReadOnlyList<SearchResult> invoices, Action<int>? onCompleted = null, CancellationToken ct = default)
         {
             var context = SynchronizationContext.Current;
             int completed = 0;
@@ -110,7 +111,11 @@ namespace E_Tax
             {
                 try
                 {
-                    return await GetDetailPagesAsync(invoice).ConfigureAwait(false);
+                    return await GetDetailPagesAsync(invoice, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return null; // Người dùng hủy: không báo lỗi, không có dữ liệu
                 }
                 catch (Exception ex)
                 {
@@ -128,7 +133,7 @@ namespace E_Tax
             return await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        private async Task<string?> FetchPageAsync(SearchResult invoice, int page)
+        private async Task<string?> FetchPageAsync(SearchResult invoice, int page, CancellationToken ct)
         {
             string url = GdtApi.BuildDetailUrl(invoice.Ma_so_thue, invoice.Ky_hieu_hoa_don,
                 invoice.So_hoa_don!.Value, invoice.Ky_hieu_ma_so!.Value, page, ProductPageSize);
@@ -137,12 +142,12 @@ namespace E_Tax
             for (int attempt = 0; ; attempt++)
             {
                 bool canRetry = attempt < _retryDelays.Length;
-                await _throttle.WaitAsync().ConfigureAwait(false);
+                await _throttle.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
                     using var req = GdtApi.CreateRequest(HttpMethod.Get, url, "application/json", _getJwtToken());
-                    using var response = await _client.SendAsync(req).ConfigureAwait(false);
-                    string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    using var response = await _client.SendAsync(req, ct).ConfigureAwait(false);
+                    string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                     if (response.IsSuccessStatusCode) return body;
 
                     int status = (int)response.StatusCode;
@@ -153,6 +158,10 @@ namespace E_Tax
                         return null;
                     }
                     _log($"⚠️ (Chi tiết HĐ) {label} trả {status}, thử lại lần {attempt + 1}...");
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw; // Hủy của người dùng; timeout của HttpClient không rơi vào đây
                 }
                 catch (HttpRequestException ex) when (canRetry)
                 {
@@ -173,7 +182,7 @@ namespace E_Tax
                     _throttle.Release();
                 }
 
-                await Task.Delay(_retryDelays[attempt]).ConfigureAwait(false);
+                await Task.Delay(_retryDelays[attempt], ct).ConfigureAwait(false);
             }
         }
 
