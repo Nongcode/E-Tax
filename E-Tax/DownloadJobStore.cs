@@ -1,0 +1,219 @@
+﻿using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
+
+namespace E_Tax
+{
+    public enum DownloadItemState { Pending, Done, Failed }
+
+    public sealed record DownloadJobSummary(string JobId, string Title, DateTime CreatedUtc, int Pending, int Done, int Failed);
+
+    /// <summary>
+    /// Lưu tiến độ tải theo từng khóa HĐ: {directory}\{jobId}.json, ghi nguyên tử (.tmp rồi Move).
+    /// Trạng thái nằm trong bộ nhớ đến khi Flush.
+    /// </summary>
+    public sealed class DownloadJobStore
+    {
+        private const int MaxErrorLength = 200;
+        private static readonly Regex JobIdPattern = new(@"^[0-9a-f]{32}\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex TokenPattern = new("token=[^&\\s\"']*", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            WriteIndented = false
+        };
+
+        private sealed class JobItem
+        {
+            [JsonPropertyName("s")] public DownloadItemState State { get; set; }
+            [JsonPropertyName("e")] public string? Error { get; set; }
+        }
+
+        private sealed class JobFile
+        {
+            [JsonPropertyName("title")] public string Title { get; set; } = "";
+            [JsonPropertyName("created")] public DateTime CreatedUtc { get; set; }
+            [JsonPropertyName("items")] public Dictionary<string, JobItem> Items { get; set; } = new(StringComparer.Ordinal);
+        }
+
+        private readonly string _directory;
+        private readonly object _lock = new();
+        private readonly Dictionary<string, JobFile> _jobs = new(StringComparer.Ordinal);
+
+        public DownloadJobStore(string directory)
+        {
+            if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("Thư mục không hợp lệ.", nameof(directory));
+            _directory = Path.GetFullPath(directory);
+        }
+
+        public static string DefaultDirectory =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "E-Tax", "jobs");
+
+        public string Create(string title, IEnumerable<string> itemKeys)
+        {
+            var job = new JobFile { Title = title ?? "", CreatedUtc = DateTime.UtcNow };
+            foreach (string key in itemKeys)
+                if (key != null) job.Items.TryAdd(key, new JobItem { State = DownloadItemState.Pending });
+
+            string id = Guid.NewGuid().ToString("N");
+            lock (_lock)
+            {
+                _jobs[id] = job;
+                Save(id, job);
+            }
+            return id;
+        }
+
+        public void Mark(string jobId, string key, DownloadItemState state, string? error)
+        {
+            lock (_lock)
+            {
+                var job = Get(jobId);
+                if (!job.Items.TryGetValue(key, out var item))
+                    throw new KeyNotFoundException("Khóa không thuộc job: " + key);
+                item.State = state;
+                item.Error = state == DownloadItemState.Failed ? Sanitize(error) : null;
+            }
+        }
+
+        public void Flush(string jobId)
+        {
+            lock (_lock) Save(jobId, Get(jobId));
+        }
+
+        public IReadOnlyList<string> PendingKeys(string jobId)
+        {
+            lock (_lock)
+                return Get(jobId).Items.Where(p => p.Value.State == DownloadItemState.Pending).Select(p => p.Key).ToList();
+        }
+
+        public int RetryFailed(string jobId)
+        {
+            lock (_lock)
+            {
+                var job = Get(jobId);
+                int n = 0;
+                foreach (var item in job.Items.Values.Where(i => i.State == DownloadItemState.Failed))
+                {
+                    item.State = DownloadItemState.Pending;
+                    item.Error = null;
+                    n++;
+                }
+                if (n > 0) Save(jobId, job);
+                return n;
+            }
+        }
+
+        /// <summary>Job mới nhất cùng title và đúng cùng tập khóa mà còn mục Pending/Failed; không có thì null.</summary>
+        public string? FindResumable(string title, IEnumerable<string> keys)
+        {
+            var wanted = new HashSet<string>(keys.Where(k => k != null), StringComparer.Ordinal);
+            lock (_lock)
+            {
+                string? bestId = null;
+                DateTime bestCreated = DateTime.MinValue;
+                foreach (string id in JobIds())
+                {
+                    JobFile? job = TryLoad(id);
+                    if (job == null || job.Title != (title ?? "")) continue;
+                    if (!wanted.SetEquals(job.Items.Keys)) continue;
+                    if (!job.Items.Values.Any(i => i.State != DownloadItemState.Done)) continue;
+                    if (bestId == null || job.CreatedUtc > bestCreated)
+                    {
+                        bestId = id;
+                        bestCreated = job.CreatedUtc;
+                    }
+                }
+                return bestId;
+            }
+        }
+
+        public IReadOnlyList<DownloadJobSummary> List()
+        {
+            lock (_lock)
+            {
+                var result = new List<DownloadJobSummary>();
+                foreach (string id in JobIds())
+                {
+                    JobFile? job = TryLoad(id);
+                    if (job == null) continue;
+                    result.Add(new DownloadJobSummary(id, job.Title, job.CreatedUtc,
+                        job.Items.Values.Count(i => i.State == DownloadItemState.Pending),
+                        job.Items.Values.Count(i => i.State == DownloadItemState.Done),
+                        job.Items.Values.Count(i => i.State == DownloadItemState.Failed)));
+                }
+                return result.OrderByDescending(s => s.CreatedUtc).ToList();
+            }
+        }
+
+        public void Delete(string jobId)
+        {
+            lock (_lock)
+            {
+                string path = PathOf(jobId);
+                _jobs.Remove(jobId);
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        private static string? Sanitize(string? error)
+        {
+            if (string.IsNullOrEmpty(error)) return error;
+            string clean = TokenPattern.Replace(error, "token=***");
+            return clean.Length > MaxErrorLength ? clean.Substring(0, MaxErrorLength) : clean;
+        }
+
+        private string PathOf(string jobId)
+        {
+            if (!JobIdPattern.IsMatch(jobId ?? "")) throw new ArgumentException("Mã job không hợp lệ.", nameof(jobId));
+            return Path.Combine(_directory, jobId + ".json");
+        }
+
+        private JobFile Get(string jobId)
+        {
+            if (_jobs.TryGetValue(jobId, out var cached)) return cached;
+            var job = TryLoad(jobId) ?? throw new KeyNotFoundException("Không tìm thấy job: " + jobId);
+            _jobs[jobId] = job;
+            return job;
+        }
+
+        private IEnumerable<string> JobIds()
+        {
+            if (!Directory.Exists(_directory)) return Array.Empty<string>();
+            return Directory.GetFiles(_directory, "*.json")
+                .Select(f => Path.GetFileNameWithoutExtension(f))
+                .Where(n => JobIdPattern.IsMatch(n))
+                .ToList();
+        }
+
+        // Ưu tiên bản trong bộ nhớ (chưa Flush) rồi mới đọc file; file hỏng thì bỏ qua, không ném lỗi.
+        private JobFile? TryLoad(string id)
+        {
+            if (_jobs.TryGetValue(id, out var cached)) return cached;
+            try
+            {
+                string path = PathOf(id);
+                if (!File.Exists(path)) return null;
+                var job = JsonSerializer.Deserialize<JobFile>(File.ReadAllText(path, Encoding.UTF8), JsonOptions);
+                if (job == null || job.Items == null || job.Items.Values.Any(i => i == null)) return null;
+                return job;
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        private void Save(string jobId, JobFile job)
+        {
+            string path = PathOf(jobId);
+            Directory.CreateDirectory(_directory);
+            string temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(job, JsonOptions), new UTF8Encoding(false));
+            File.Move(temp, path, true);
+        }
+    }
+}
