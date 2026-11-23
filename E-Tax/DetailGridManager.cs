@@ -315,11 +315,8 @@ namespace E_Tax
 
         private static string FormatNgayLap(string ngayLapJson)
         {
-            if (DateTime.TryParse(ngayLapJson, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
-                return dt.ToString("dd/MM/yyyy");
-            if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
-                return dt.ToString("dd/MM/yyyy");
-            return ngayLapJson;
+            DateTime? dt = InvoiceDate.ToVietnamDate(ngayLapJson);
+            return dt.HasValue ? dt.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : ngayLapJson;
         }
     }
 }

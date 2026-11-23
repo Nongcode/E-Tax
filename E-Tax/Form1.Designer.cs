@@ -72,6 +72,10 @@ namespace E_Tax
             dtpFromDate = new DateTimePicker();
             label2 = new Label();
             dtpToDate = new DateTimePicker();
+            lblPeriod = new Label();
+            cbPeriodKind = new ComboBox();
+            cbPeriodNumber = new ComboBox();
+            nudPeriodYear = new NumericUpDown();
             btnTaiHDGoc = new Button();
             btnCnKoPdf = new Button();
             btnXemHD = new Button();
@@ -398,6 +402,10 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(dtpFromDate);
             mainSplitContainer.Panel1.Controls.Add(label2);
             mainSplitContainer.Panel1.Controls.Add(dtpToDate);
+            mainSplitContainer.Panel1.Controls.Add(lblPeriod);
+            mainSplitContainer.Panel1.Controls.Add(cbPeriodKind);
+            mainSplitContainer.Panel1.Controls.Add(cbPeriodNumber);
+            mainSplitContainer.Panel1.Controls.Add(nudPeriodYear);
             mainSplitContainer.Panel1.Controls.Add(btnTaiHDGoc);
             mainSplitContainer.Panel1.Controls.Add(btnCnKoPdf);
             mainSplitContainer.Panel1.Controls.Add(btnXemHD);
@@ -455,6 +463,52 @@ namespace E_Tax
             dtpToDate.Name = "dtpToDate";
             dtpToDate.Size = new Size(156, 23);
             dtpToDate.TabIndex = 25;
+            // 
+            // lblPeriod
+            // 
+            lblPeriod.AutoSize = true;
+            lblPeriod.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            lblPeriod.ForeColor = Color.FromArgb(0, 117, 214);
+            lblPeriod.Location = new Point(400, 27);
+            lblPeriod.Name = "lblPeriod";
+            lblPeriod.Size = new Size(54, 20);
+            lblPeriod.TabIndex = 26;
+            lblPeriod.Text = "Kỳ thuế";
+            // 
+            // cbPeriodKind
+            // 
+            cbPeriodKind.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbPeriodKind.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cbPeriodKind.Items.AddRange(new object[] { "Tùy chọn", "Tháng", "Quý", "Năm" });
+            cbPeriodKind.Location = new Point(400, 62);
+            cbPeriodKind.Name = "cbPeriodKind";
+            cbPeriodKind.Size = new Size(82, 23);
+            cbPeriodKind.TabIndex = 27;
+            cbPeriodKind.SelectedIndexChanged += cbPeriodKind_SelectedIndexChanged;
+            // 
+            // cbPeriodNumber
+            // 
+            cbPeriodNumber.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbPeriodNumber.Enabled = false;
+            cbPeriodNumber.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cbPeriodNumber.Location = new Point(488, 62);
+            cbPeriodNumber.Name = "cbPeriodNumber";
+            cbPeriodNumber.Size = new Size(46, 23);
+            cbPeriodNumber.TabIndex = 28;
+            cbPeriodNumber.SelectedIndexChanged += PeriodValue_Changed;
+            // 
+            // nudPeriodYear
+            // 
+            nudPeriodYear.Enabled = false;
+            nudPeriodYear.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            nudPeriodYear.Location = new Point(540, 62);
+            nudPeriodYear.Maximum = new decimal(new int[] { 2100, 0, 0, 0 });
+            nudPeriodYear.Minimum = new decimal(new int[] { 2000, 0, 0, 0 });
+            nudPeriodYear.Name = "nudPeriodYear";
+            nudPeriodYear.Size = new Size(62, 23);
+            nudPeriodYear.TabIndex = 29;
+            nudPeriodYear.Value = new decimal(new int[] { 2026, 0, 0, 0 });
+            nudPeriodYear.ValueChanged += PeriodValue_Changed;
             // 
             // btnTaiHDGoc
             // 
@@ -1054,6 +1108,10 @@ namespace E_Tax
         private Label label2;
         private DateTimePicker dtpToDate;
         private DateTimePicker dtpFromDate;
+        private Label lblPeriod;
+        private ComboBox cbPeriodKind;
+        private ComboBox cbPeriodNumber;
+        private NumericUpDown nudPeriodYear;
         private System.Windows.Forms.ProgressBar downloadProgressBar;
         private System.Windows.Forms.Label lblDownloadStatus;
         private GroupBox gbInvoiceType;

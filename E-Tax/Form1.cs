@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Globalization;
 using System.Drawing.Printing;
 using System.IO.Compression;
 using System.Net;
@@ -33,6 +34,7 @@ namespace E_Tax
         public Form1()
         {
             InitializeComponent();
+            InitPeriodSelector();
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
             dgvMain.DataError += DataGridView_DataError;
@@ -370,6 +372,45 @@ namespace E_Tax
                 if (c != panelActivation)
                     c.Enabled = enabled;
             }
+        }
+
+        #endregion
+
+        #region Kỳ thuế
+
+        private void InitPeriodSelector()
+        {
+            nudPeriodYear.Value = DateTime.Today.Year;
+            cbPeriodKind.SelectedIndex = 0;
+        }
+
+        private void cbPeriodKind_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            int kind = cbPeriodKind.SelectedIndex;
+            int count = kind == 1 ? 12 : kind == 2 ? 4 : 0;
+            cbPeriodNumber.Items.Clear();
+            for (int i = 1; i <= count; i++) cbPeriodNumber.Items.Add(i);
+            if (count > 0) cbPeriodNumber.SelectedIndex = 0;
+
+            cbPeriodNumber.Enabled = count > 0;
+            nudPeriodYear.Enabled = kind > 0;
+            ApplyPeriod();
+        }
+
+        private void PeriodValue_Changed(object sender, EventArgs e) => ApplyPeriod();
+
+        /// <summary>Gán khoảng ngày theo kỳ đã chọn. "Tùy chọn" giữ nguyên ô ngày người dùng nhập.</summary>
+        private void ApplyPeriod()
+        {
+            int kind = cbPeriodKind.SelectedIndex;
+            if (kind <= 0) return;
+            int year = (int)nudPeriodYear.Value;
+            TaxPeriod period;
+            if (kind == 3) period = TaxPeriod.Year(year);
+            else if (cbPeriodNumber.SelectedItem is not int number) return;
+            else period = kind == 1 ? TaxPeriod.Month(year, number) : TaxPeriod.Quarter(year, number);
+            dtpFromDate.Value = period.From;
+            dtpToDate.Value = period.To;
         }
 
         #endregion
@@ -787,9 +828,9 @@ namespace E_Tax
                         row.Cells["colDgvLoaiHD"].Value = item.Loai_hoa_don;
                     }
                     var cellNgayLap = row.Cells["colDgvNgayLap"];
-                    if (cellNgayLap.Value is string ngayLapStr && DateTime.TryParse(ngayLapStr, out DateTime ngayLap))
+                    if (cellNgayLap.Value is string ngayLapStr && InvoiceDate.ToVietnamDate(ngayLapStr) is DateTime ngayLap)
                     {
-                        cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy");
+                        cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
                     }
                 }
             }
