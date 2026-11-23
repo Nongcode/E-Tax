@@ -107,8 +107,8 @@ namespace E_Tax.Tests
             Assert.Contains(bad.Warnings, w => w.Contains("[22]"));
         }
 
-        private static TaxListingGroup GS(string rate, decimal doanhSo, decimal thue, int? status) =>
-            new(rate, new[] { new TaxListingRow("A", 1, "01/05/2026", "X", "0101234567", rate, doanhSo, thue, status, false) }, doanhSo, thue);
+        private static TaxListingGroup GS(string rate, decimal doanhSo, decimal thue, int? status, string key) =>
+            new(rate, new[] { new TaxListingRow("A", 1, "01/05/2026", "X", "0101234567", rate, doanhSo, thue, status, false, key) }, doanhSo, thue);
 
         [Fact]
         public void Build_EachManualInputLandsInItsOwnKey()
@@ -163,13 +163,13 @@ namespace E_Tax.Tests
         }
 
         [Fact]
-        public void Build_NonOneStatus_WarnsWithCount()
+        public void Build_NonOneStatus_WarnsWithInvoiceCount()
         {
-            var bought = new[] { GS("10%", 100, 10, 1), GS("5%", 100, 5, 3) };
-            var sold = new[] { GS("10%", 100, 10, null) };
+            var bought = new[] { GS("10%", 100, 10, 1, "a"), GS("5%", 100, 5, 3, "b"), GS("8%", 100, 8, 3, "b") };
+            var sold = new[] { GS("10%", 100, 10, 5, "c") };
             var r = VatReturnBuilder.Build(bought, sold, Input());
-            var w = Assert.Single(r.Warnings);
-            Assert.Contains("2", w); Assert.Contains("trạng thái", w); Assert.Contains("kiểm tra", w);
+            var w = r.Warnings.Single(x => x.Contains("trạng thái"));
+            Assert.Contains("2 hóa đơn", w); Assert.Contains("kiểm tra", w);
         }
 
         [Theory]

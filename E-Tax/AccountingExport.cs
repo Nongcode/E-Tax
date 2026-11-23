@@ -52,11 +52,15 @@ namespace E_Tax
         private static IReadOnlyList<AccountingColumn> GenericColumns() => new[]
         {
             new AccountingColumn("STT", nameof(InvoiceDetailItem.STT), null),
+            new AccountingColumn("Loại hóa đơn", nameof(InvoiceDetailItem.LoaiHoaDon), null),
+            new AccountingColumn("Trạng thái HĐ", nameof(InvoiceDetailItem.TrangThaiHD), null),
             new AccountingColumn("Ngày hóa đơn", nameof(InvoiceDetailItem.NgayHD), null),
             new AccountingColumn("Ký hiệu", nameof(InvoiceDetailItem.KyHieuHD), null),
             new AccountingColumn("Số hóa đơn", nameof(InvoiceDetailItem.SoHD), null),
             new AccountingColumn("MST người bán", nameof(InvoiceDetailItem.MSTNguoiBan), null),
             new AccountingColumn("Tên người bán", nameof(InvoiceDetailItem.TenNguoiBan), null),
+            new AccountingColumn("MST người mua", nameof(InvoiceDetailItem.MSTNguoiMua), null),
+            new AccountingColumn("Tên người mua", nameof(InvoiceDetailItem.TenNguoiMua), null),
             new AccountingColumn("Tên hàng hóa, dịch vụ", nameof(InvoiceDetailItem.TenSanPham), null),
             new AccountingColumn("Đơn vị tính", nameof(InvoiceDetailItem.DonViTinh), null),
             new AccountingColumn("Số lượng", nameof(InvoiceDetailItem.SoLuong), null),
@@ -148,8 +152,10 @@ namespace E_Tax
         private const string NoteSheet = "Ghi chú";
         internal const string UnverifiedWarning = "CHƯA ĐỐI CHIẾU VỚI MẪU GỐC";
 
+        /// <summary>Chỉ ghi các hóa đơn được tính thuế (TaxableInvoices).</summary>
         public static void Export(AccountingProfile profile, IReadOnlyList<InvoiceDetailItem> items, string filePath)
         {
+            items = TaxableInvoices.Select(items).Items;
             using var wb = new XLWorkbook();
             var ws = wb.Worksheets.Add("Dữ liệu");
 

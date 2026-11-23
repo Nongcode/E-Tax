@@ -14,7 +14,7 @@ namespace E_Tax
             const string NoName = "(Không có tên hàng)";
             // Khóa gộp: tên đã cắt khoảng trắng, không phân biệt hoa thường; giữ cách viết gặp đầu tiên
             var totals = new Dictionary<string, (string Name, decimal Sum)>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items)
+            foreach (var item in TaxableInvoices.Select(items).Items)
             {
                 if (item.LoaiHoaDon != "Bán ra" || TaxListing.NormalizeRate(item.ThueSuat) != "8%" || item.DoanhSoChuaThue is not decimal amount)
                     continue;

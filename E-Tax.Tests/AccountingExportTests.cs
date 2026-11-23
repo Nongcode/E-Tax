@@ -24,7 +24,7 @@ namespace E_Tax.Tests
         private static InvoiceDetailItem Item(string name = "Bút bi", decimal? qty = 2m) => new()
         {
             STT = 1, KyHieuHD = "C24TAA", SoHD = 12, NgayHD = "01/10/2024", TenSanPham = name,
-            SoLuong = qty, DonGia = 1500.5m, ThanhTien = 3001m, InvoiceKey = "SECRET-KEY"
+            SoLuong = qty, DonGia = 1500.5m, ThanhTien = 3001m, InvoiceKey = "SECRET-KEY", TrangThaiHD = 1
         };
 
         [Fact]

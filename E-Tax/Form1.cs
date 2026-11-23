@@ -882,7 +882,9 @@ namespace E_Tax
                 return;
             }
 
-            string? blockReason = TaxListing.ExportBlockReason(_detailGridManager.LastFailedCount + _lastFailedSearchPages);
+            var selection = TaxableInvoices.Select(items, _latestResults, TaxListing.DirectionLabel(type));
+            string? blockReason = TaxListing.ExportBlockReason(_detailGridManager.LastFailedCount + _lastFailedSearchPages)
+                ?? TaxableInvoices.UnknownBlockReason(selection.Unknown);
             if (blockReason != null)
             {
                 MessageBox.Show(this, blockReason, "Không thể xuất bảng kê", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -892,12 +894,15 @@ namespace E_Tax
             var groups = TaxListing.Build(items, type);
             if (groups.Count == 0)
             {
-                MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string excludedText = string.Concat(selection.ExclusionNotes().Select(n => "\n" + n));
+                MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.{excludedText}", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất
-            var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount, TaxListing.CountNonVnd(_latestResults, type));
+            // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất. Các cảnh báo này cũng được ghi vào file.
+            var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount,
+                    TaxListing.CountNonVnd(TaxableInvoices.IncludedHeaders(_latestResults), type))
+                .Concat(selection.ExclusionNotes()).ToList();
             if (warnings.Count > 0 && MessageBox.Show(this,
                     $"Bảng kê {kindText} có các điểm cần lưu ý:\n\n - {string.Join("\n - ", warnings)}\n\nVẫn xuất bảng kê?",
                     "Cảnh báo trước khi xuất", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -916,7 +921,7 @@ namespace E_Tax
 
             try
             {
-                ExcelExporter.ExportTaxListing(groups, type, period, sfd.FileName);
+                ExcelExporter.ExportTaxListing(groups, type, period, sfd.FileName, warnings);
                 MessageBox.Show(this, $"Đã xuất bảng kê {kindText} ({period.Label}) vào file:\n{sfd.FileName}", "Xuất thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)

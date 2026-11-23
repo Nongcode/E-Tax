@@ -256,10 +256,11 @@ namespace E_Tax
 
         /// <summary>
         /// Bảng kê mua vào/bán ra theo kỳ: mỗi thuế suất một nhóm có dòng cộng, cuối là dòng tổng cộng.
-        /// Không loại hóa đơn theo trạng thái: dòng trạng thái khác 1 (hoặc không rõ) tô vàng,
-        /// dòng thiếu số tiền tô đỏ (đỏ ưu tiên hơn vàng).
+        /// Nhóm đã được lọc bởi TaxableInvoices: dòng thay thế/điều chỉnh tô vàng, dòng thiếu số tiền tô đỏ
+        /// (đỏ ưu tiên hơn vàng). notes là toàn bộ cảnh báo ghi vào file; null thì dùng ghi chú của bảng kê.
         /// </summary>
-        public static void ExportTaxListing(IReadOnlyList<TaxListingGroup> groups, InvoiceType type, TaxPeriod period, string filePath)
+        public static void ExportTaxListing(IReadOnlyList<TaxListingGroup> groups, InvoiceType type, TaxPeriod period, string filePath,
+            IReadOnlyList<string>? fileNotes = null)
         {
             int colCount = TaxListingHeaders.Length;
             using var wb = new XLWorkbook();
@@ -277,7 +278,7 @@ namespace E_Tax
             ws.Cell(2, 1).Style.Font.Italic = true;
 
             // Ghi chú ngay trên bảng để người đọc file biết tổng có gồm dòng cần kiểm tra
-            var notes = TaxListing.ExportNotes(groups);
+            var notes = fileNotes ?? TaxListing.ExportNotes(groups);
             if (notes.Count > 0)
             {
                 var noteCell = ws.Cell(3, 1);
@@ -287,7 +288,7 @@ namespace E_Tax
                 noteCell.Style.Font.FontColor = XLColor.DarkRed;
                 noteCell.Style.Alignment.WrapText = true;
                 noteCell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-                ws.Row(3).Height = 48 * notes.Count; // ô gộp không tự giãn chiều cao
+                ws.Row(3).Height = Math.Min(409, 48 * notes.Count); // ô gộp không tự giãn chiều cao; Excel giới hạn 409
             }
 
             const int headerRow = 4;

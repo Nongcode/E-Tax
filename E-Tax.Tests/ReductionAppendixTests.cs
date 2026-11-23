@@ -10,7 +10,7 @@ namespace E_Tax.Tests
     public class ReductionAppendixTests
     {
         private static InvoiceDetailItem L(string? ten, decimal? doanhSo, string? rate = "8%", string loai = "Bán ra") =>
-            new() { LoaiHoaDon = loai, TenSanPham = ten!, DoanhSoChuaThue = doanhSo, ThueSuat = rate! };
+            new() { LoaiHoaDon = loai, TenSanPham = ten!, DoanhSoChuaThue = doanhSo, ThueSuat = rate!, TrangThaiHD = 1 };
 
         [Fact]
         public void Build_OnlySoldLinesAtEightPercent_AcceptingRateVariants()

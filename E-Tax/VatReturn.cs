@@ -67,9 +67,9 @@ namespace E_Tax
                 }
             }
 
-            int otherStatus = bought.Concat(sold).SelectMany(g => g.Rows).Count(r => r.TrangThai != 1);
-            if (otherStatus > 0)
-                warnings.Add($"Có {otherStatus} dòng thuộc hóa đơn có trạng thái khác 1 hoặc không rõ; các dòng này đã được tính vào tổng, cần kiểm tra lại.");
+            int adjustments = TaxListing.CountAdjustmentInvoices(bought.Concat(sold).SelectMany(g => g.Rows));
+            if (adjustments > 0)
+                warnings.Add(TaxableInvoices.AdjustmentWarning(adjustments));
 
             if (bought.SelectMany(g => g.Rows).Any(r => r.ThieuSoTien))
                 warnings.Add("Bảng kê mua vào có dòng thiếu số tiền nên [23]/[24] có thể bị thiếu.");
