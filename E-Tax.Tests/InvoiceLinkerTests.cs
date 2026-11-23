@@ -67,5 +67,26 @@ namespace E_Tax.Tests
             Assert.Equal(new DateTime(2026, 2, 10), InvoiceLinker.EffectiveDate(child, map["c1"]));
             Assert.Equal(new DateTime(2026, 2, 10), InvoiceLinker.EffectiveDate(child, null));
         }
+
+        [Fact]
+        public void Link_OriginalNumberWithLeadingZeros_IsLinked()
+        {
+            var map = InvoiceLinker.Link(new[] { Orig("o1"), Child("c1", 3, gocSo: "0000010") });
+            Assert.Equal("o1", map["c1"].OriginalId);
+        }
+
+        [Fact]
+        public void Link_OriginalInList_NoOriginalDate_UsesOriginalInvoiceDate()
+        {
+            var map = InvoiceLinker.Link(new[] { Orig("o1"), Child("c1", 3) });
+            Assert.Equal(new DateTime(2026, 1, 15), map["c1"].OriginalDate);
+        }
+
+        [Fact]
+        public void Link_OriginalDateField_TakesPriorityOverListedInvoice()
+        {
+            var map = InvoiceLinker.Link(new[] { Orig("o1"), Child("c1", 3, gocNgay: "05/01/2026") });
+            Assert.Equal(new DateTime(2026, 1, 5), map["c1"].OriginalDate);
+        }
     }
 }
