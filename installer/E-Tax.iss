@@ -1,4 +1,4 @@
-; Inno Setup script cho E-Tax. Biên dịch bằng installer\publish-v1.ps1 (truyền /DAppVersion, /DSourceDir, /DOutputDir).
+﻿; Inno Setup script cho E-Tax. Biên dịch bằng installer\publish-v1.ps1 (truyền /DAppVersion, /DSourceDir, /DOutputDir).
 ; Cài theo từng người dùng, không cần quyền admin. Gỡ cài đặt KHÔNG xóa dữ liệu trong %AppData%\E-Tax và %LocalAppData%\E-Tax.
 #ifndef AppVersion
   #define AppVersion "0.0.0"

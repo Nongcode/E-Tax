@@ -1,6 +1,7 @@
-# Đóng gói E-Tax V1: publish self-contained win-x64, kiểm tra file bí mật, nén ZIP, biên dịch installer nếu có Inno Setup.
+﻿# Đóng gói E-Tax V1: publish self-contained win-x64, kiểm tra file bí mật, nén ZIP, biên dịch installer nếu có Inno Setup.
 # Chạy: powershell -NoProfile -ExecutionPolicy Bypass -File installer\publish-v1.ps1
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $root = Split-Path -Parent $PSScriptRoot
 $csproj = Join-Path $root 'E-Tax\E-Tax.csproj'
