@@ -116,8 +116,10 @@ namespace E_Tax
             lblGhiChu = new Label();
             txtGhiChu = new TextBox();
             btnMoGhiChu = new Button();
-            lblTimMST = new Label();
-            txtTimMST = new TextBox();
+            txtLocSoHD = new TextBox();
+            txtLocNCC = new TextBox();
+            cboLocLoai = new ComboBox();
+            chkChiCoGhiChu = new CheckBox();
             btnRightSearch = new Button();
             downloadProgressBar = new ProgressBar();
             lblDownloadStatus = new Label();
@@ -886,8 +888,10 @@ namespace E_Tax
             gbNguoiBan.Controls.Add(lblGhiChu);
             gbNguoiBan.Controls.Add(txtGhiChu);
             gbNguoiBan.Controls.Add(btnMoGhiChu);
-            gbNguoiBan.Controls.Add(lblTimMST);
-            gbNguoiBan.Controls.Add(txtTimMST);
+            gbNguoiBan.Controls.Add(txtLocSoHD);
+            gbNguoiBan.Controls.Add(txtLocNCC);
+            gbNguoiBan.Controls.Add(cboLocLoai);
+            gbNguoiBan.Controls.Add(chkChiCoGhiChu);
             gbNguoiBan.Controls.Add(btnRightSearch);
             gbNguoiBan.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
             gbNguoiBan.Location = new Point(642, 10);
@@ -953,33 +957,55 @@ namespace E_Tax
             btnMoGhiChu.UseVisualStyleBackColor = false;
             btnMoGhiChu.Click += btnMoGhiChu_Click;
             // 
-            // lblTimMST
-            // 
-            lblTimMST.AutoSize = true;
-            lblTimMST.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblTimMST.Location = new Point(14, 170);
-            lblTimMST.Name = "lblTimMST";
-            lblTimMST.Size = new Size(124, 15);
-            lblTimMST.TabIndex = 4;
-            lblTimMST.Text = "Tìm kiếm MST ng bán";
-            // 
-            // txtTimMST
-            // 
-            txtTimMST.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            txtTimMST.Location = new Point(14, 192);
-            txtTimMST.Name = "txtTimMST";
-            txtTimMST.Size = new Size(170, 23);
-            txtTimMST.TabIndex = 5;
-            // 
+            // txtLocSoHD
+            //
+            txtLocSoHD.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            txtLocSoHD.Location = new Point(14, 165);
+            txtLocSoHD.Name = "txtLocSoHD";
+            txtLocSoHD.PlaceholderText = "Số HĐ";
+            txtLocSoHD.Size = new Size(80, 23);
+            txtLocSoHD.TabIndex = 4;
+            //
+            // txtLocNCC
+            //
+            txtLocNCC.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            txtLocNCC.Location = new Point(100, 165);
+            txtLocNCC.Name = "txtLocNCC";
+            txtLocNCC.PlaceholderText = "NCC (tên/MST)";
+            txtLocNCC.Size = new Size(174, 23);
+            txtLocNCC.TabIndex = 5;
+            //
+            // cboLocLoai
+            //
+            cboLocLoai.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboLocLoai.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cboLocLoai.Items.AddRange(new object[] { "Tất cả", "Mua vào", "Bán ra" });
+            cboLocLoai.Location = new Point(14, 193);
+            cboLocLoai.Name = "cboLocLoai";
+            cboLocLoai.SelectedIndex = 0;
+            cboLocLoai.Size = new Size(95, 23);
+            cboLocLoai.TabIndex = 8;
+            //
+            // chkChiCoGhiChu
+            //
+            chkChiCoGhiChu.AutoSize = true;
+            chkChiCoGhiChu.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            chkChiCoGhiChu.Location = new Point(118, 195);
+            chkChiCoGhiChu.Name = "chkChiCoGhiChu";
+            chkChiCoGhiChu.Size = new Size(120, 19);
+            chkChiCoGhiChu.TabIndex = 9;
+            chkChiCoGhiChu.Text = "Chỉ HĐ có ghi chú";
+            chkChiCoGhiChu.UseVisualStyleBackColor = true;
+            //
             // btnRightSearch
             // 
             btnRightSearch.BackColor = Color.LightGray;
             btnRightSearch.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnRightSearch.Location = new Point(199, 188);
+            btnRightSearch.Location = new Point(14, 219);
             btnRightSearch.Name = "btnRightSearch";
-            btnRightSearch.Size = new Size(85, 27);
+            btnRightSearch.Size = new Size(260, 27);
             btnRightSearch.TabIndex = 6;
-            btnRightSearch.Text = "Tìm kiếm";
+            btnRightSearch.Text = "Lọc";
             btnRightSearch.UseVisualStyleBackColor = false;
             btnRightSearch.Click += btnRightSearch_Click;
             // 
@@ -1131,8 +1157,10 @@ namespace E_Tax
         private System.Windows.Forms.Label lblGhiChu;
         private System.Windows.Forms.TextBox txtGhiChu;
         private System.Windows.Forms.Button btnMoGhiChu;
-        private System.Windows.Forms.Label lblTimMST;
-        private System.Windows.Forms.TextBox txtTimMST;
+        private System.Windows.Forms.TextBox txtLocSoHD;
+        private System.Windows.Forms.TextBox txtLocNCC;
+        private System.Windows.Forms.ComboBox cboLocLoai;
+        private System.Windows.Forms.CheckBox chkChiCoGhiChu;
         private System.Windows.Forms.Button btnRightSearch;
         private System.Windows.Forms.Button btnXemHD;
         private System.Windows.Forms.Button btnCnKoPdf;

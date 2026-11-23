@@ -50,6 +50,20 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void SearchResults_NoteColumn()
+        {
+            var results = new List<SearchResult> { new SearchResult { Id = "1", Ma_so_thue = "0101234567" } };
+            string path = NewFile("ds-note.xlsx");
+
+            ExcelExporter.ExportSearchResults(results, path, getNote: _ => "ghi chú A");
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("DanhSachHoaDon");
+            Assert.Equal("GHI CHÚ", ws.Cell("Q4").GetString());
+            Assert.Equal("ghi chú A", ws.Cell("Q5").GetString());
+        }
+
+        [Fact]
         public void DetailSummary_NumericCells()
         {
             var rows = new List<Dictionary<string, string>>

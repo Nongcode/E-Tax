@@ -16,10 +16,10 @@ namespace E_Tax
             "Mã số thuế", "Ký hiệu mã số", "Ký hiệu hóa đơn", "Số hóa đơn", "Ngày lập",
             "Thông tin hóa đơn", "Tổng tiền chưa thuế", "Tổng tiền thuế", "Tổng tiền chiết khấu",
             "Tổng tiền phí", "Tổng tiền thanh toán", "Đơn vị tiền tệ",
-            "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Loại hóa đơn"
+            "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Loại hóa đơn", "Ghi chú"
         };
 
-        public static void ExportSearchResults(IReadOnlyList<SearchResult> results, string filePath)
+        public static void ExportSearchResults(IReadOnlyList<SearchResult> results, string filePath, Func<SearchResult, string>? getNote = null)
         {
             int colCount = SearchResultHeaders.Length;
             using var wb = new XLWorkbook();
@@ -68,6 +68,7 @@ namespace E_Tax
                 ws.Cell(row, 14).Value = Text(item.Ket_qua_kiem_tra_hoa_don);
                 ws.Cell(row, 15).Value = Text(item.Hoa_don_lien_quan);
                 ws.Cell(row, 16).Value = Text(item.Loai_hoa_don);
+                ws.Cell(row, 17).Value = getNote?.Invoke(item) ?? "";
 
                 ws.Range(row, 7, row, 11).Style.NumberFormat.Format = NumberFormat;
 

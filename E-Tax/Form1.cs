@@ -29,6 +29,8 @@ namespace E_Tax
         private string jwtToken = "";
         private string captchaKey = "";
         private List<SearchResult> _latestResults = new List<SearchResult>();
+        /// <summary>Danh sách đang hiện trên dgvMain (đã lọc); là nguồn cho nút xuất danh sách.</summary>
+        private List<SearchResult> _visibleResults = new List<SearchResult>();
         private string? _chromiumExecutablePath;
 
         public Form1()
@@ -591,7 +593,7 @@ namespace E_Tax
                 return;
             }
 
-            await Task.Run(() => ExcelExporter.ExportSearchResults(results, filePath));
+            await Task.Run(() => ExcelExporter.ExportSearchResults(results, filePath, r => _notes.Get(r.Id ?? "")));
             AppendLog($"✅ Đã tạo file Excel danh sách tại: {filePath}");
         }
 
@@ -733,6 +735,8 @@ namespace E_Tax
             this.Cursor = Cursors.WaitCursor;
             dgvMain.DataSource = null;
             _latestResults.Clear();
+            _visibleResults = new List<SearchResult>();
+            ResetFilterInputs();
 
             var modal = new ProcessingForm();
             modal.Show(this);
@@ -753,7 +757,7 @@ namespace E_Tax
                 if (_latestResults.Any())
                 {
                     modal.UpdateStatus($"Đang hiển thị {_latestResults.Count} hóa đơn...");
-                    BindMainGrid();
+                    BindMainGrid(_latestResults);
 
                     dgvGiamThue.DataSource = null;
                     dgvGiamThue.DataSource = _latestResults;
@@ -770,6 +774,7 @@ namespace E_Tax
                 {
                     lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                     MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    _visibleResults = new List<SearchResult>();
                     dgvMain.DataSource = null;
                     dgvDetails.DataSource = null;
                     dgvMua.DataSource = null;
@@ -812,11 +817,13 @@ namespace E_Tax
         }
 
         /// <summary>
-        /// Bind _latestResults vào lưới tổng hợp, điền cột loại HĐ và đổi ngày lập sang dd/MM/yyyy.
+        /// Bind danh sách (đã lọc) vào lưới tổng hợp, điền cột loại HĐ, đổi ngày lập sang dd/MM/yyyy và đánh lại STT.
         /// </summary>
-        private void BindMainGrid()
+        private void BindMainGrid(List<SearchResult> items)
         {
-            dgvMain.DataSource = _latestResults;
+            _visibleResults = items;
+            dgvMain.DataSource = null;
+            dgvMain.DataSource = items;
             UpdateGridRowNumbers();
             dgvMain.SuspendLayout();
             try
@@ -840,38 +847,35 @@ namespace E_Tax
             }
         }
 
+        private void ResetFilterInputs()
+        {
+            txtLocSoHD.Clear();
+            txtLocNCC.Clear();
+            cboLocLoai.SelectedIndex = 0;
+            chkChiCoGhiChu.Checked = false;
+        }
+
         private void btnRightSearch_Click(object sender, EventArgs e)
         {
-            string filterTaxCode = txtTimMST.Text.Trim();
-
             if (_latestResults == null || !_latestResults.Any())
             {
                 MessageBox.Show("Chưa có dữ liệu hóa đơn để lọc. Vui lòng nhấn nút 'Tìm kiếm' trước.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Ô lọc trống -> hiển thị lại toàn bộ
-            if (string.IsNullOrEmpty(filterTaxCode))
-            {
-                dgvMain.DataSource = null;
-                dgvMain.DataSource = _latestResults;
-                UpdateGridRowNumbers();
-                return;
-            }
+            string? typeLabel = cboLocLoai.SelectedIndex > 0 ? cboLocLoai.SelectedItem?.ToString() : null;
+            var criteria = new InvoiceFilterCriteria(txtLocSoHD.Text, txtLocNCC.Text, typeLabel, chkChiCoGhiChu.Checked);
+            var filteredResults = InvoiceFilter.Apply(_latestResults, criteria, id => _notes.Get(id));
 
-            var filteredResults = _latestResults
-                .Where(invoice => invoice.Ma_so_thue != null && invoice.Ma_so_thue.Contains(filterTaxCode))
-                .ToList();
-
-            dgvMain.DataSource = null;
             if (filteredResults.Any())
             {
-                dgvMain.DataSource = filteredResults;
-                UpdateGridRowNumbers();
+                BindMainGrid(filteredResults);
             }
             else
             {
-                MessageBox.Show($"Không tìm thấy hóa đơn nào có Mã số thuế chứa '{filterTaxCode}'.", "Không có kết quả", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                _visibleResults = new List<SearchResult>();
+                dgvMain.DataSource = null;
+                MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện lọc.", "Không có kết quả", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -1241,7 +1245,7 @@ namespace E_Tax
 
         private async void btnExportDS_Click(object sender, EventArgs e)
         {
-            if (_latestResults == null || !_latestResults.Any())
+            if (_visibleResults == null || !_visibleResults.Any())
             {
                 MessageBox.Show("Chưa có dữ liệu hóa đơn nào để xuất. Vui lòng nhấn 'Tìm kiếm' trước.",
                         "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1266,7 +1270,7 @@ namespace E_Tax
 
             try
             {
-                await ExportSearchResultsToExcelAsync(_latestResults, sfd.FileName);
+                await ExportSearchResultsToExcelAsync(_visibleResults, sfd.FileName);
                 MessageBox.Show($"Đã tạo và lưu thành công file Excel danh sách vào:\n{sfd.FileName}",
                     "Tạo file thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
