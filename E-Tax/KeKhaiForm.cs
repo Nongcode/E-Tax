@@ -47,7 +47,9 @@ namespace E_Tax
             }
             else if (commas > 0)
             {
-                if (commas > 1) thou = ','; else dec = ',';
+                if (commas > 1) thou = ',';
+                else if (s.Length - lastComma - 1 == 3 && lastComma >= 1 && lastComma <= 3 && s[0] != '0') thou = ',';
+                else dec = ',';
             }
 
             string integerPart = s, fraction = "";
@@ -76,9 +78,17 @@ namespace E_Tax
             string normalized = (integerPart.Length == 0 ? "0" : integerPart) + (fraction.Length > 0 ? "." + fraction : "");
             if (!decimal.TryParse(normalized, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var parsed))
                 return false;
+            if (parsed > MaxAbsAmount) return false;
             value = negative ? -parsed : parsed;
             return true;
         }
+
+        /// <summary>Giá trị tuyệt đối tối đa của ô nhập, để các phép cộng trong tờ khai không tràn decimal.</summary>
+        public const decimal MaxAbsAmount = 999_999_999_999_999_999m;
+
+        /// <summary>Được xuất khi không bị khóa, không đang xuất, ô nhập hợp lệ và có kết quả tính hợp lệ.</summary>
+        public static bool CanExport(string? blockReason, bool exporting, bool inputValid, bool hasCurrent) =>
+            blockReason == null && !exporting && inputValid && hasCurrent;
 
         /// <summary>Danh sách cảnh báo hiển thị: lý do khóa (nếu có), cảnh báo bảng kê, rồi cảnh báo tờ khai.</summary>
         public static IReadOnlyList<string> ComposeWarnings(string? blockReason, IEnumerable<string> listingWarnings, IEnumerable<string> returnWarnings)
@@ -328,28 +338,47 @@ namespace E_Tax
             }
             _inputValid = ok;
 
-            if (ok)
+            // Mọi lần tính lại đều bỏ kết quả cũ trước, để lỗi bất ngờ không để số cũ còn xuất được
+            _current = null;
+            try
             {
-                _current = VatReturnBuilder.Build(_bought, _sold, new VatReturnInput(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]));
-                for (int r = 0; r < VatReturnBuilder.Codes.Count; r++)
-                    _grid.Rows[r].Cells[2].Value = _current.Values[VatReturnBuilder.Codes[r]].ToString("#,##0.##", ViCulture);
-                _txtWarnings.Text = string.Join(Environment.NewLine,
-                    KeKhaiLogic.ComposeWarnings(_blockReason, _listingWarnings, _current.Warnings).Select(w => "- " + w));
-                _lblStale.Visible = false;
-                _grid.ForeColor = SystemColors.ControlText;
+                if (ok)
+                {
+                    var result = VatReturnBuilder.Build(_bought, _sold, new VatReturnInput(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8]));
+                    for (int r = 0; r < VatReturnBuilder.Codes.Count; r++)
+                        _grid.Rows[r].Cells[2].Value = result.Values[VatReturnBuilder.Codes[r]].ToString("#,##0.##", ViCulture);
+                    _txtWarnings.Text = string.Join(Environment.NewLine,
+                        KeKhaiLogic.ComposeWarnings(_blockReason, _listingWarnings, result.Warnings).Select(w => "- " + w));
+                    _lblStale.Visible = false;
+                    _grid.ForeColor = SystemColors.ControlText;
+                    _current = result;
+                }
+                else
+                {
+                    ShowStale("Có ô nhập không hợp lệ. Bảng dưới là lần tính hợp lệ gần nhất và không được dùng để xuất; hãy sửa ô báo lỗi.");
+                }
             }
-            else
+            catch (OverflowException)
             {
-                _lblStale.Text = "Có ô nhập không hợp lệ. Bảng dưới là lần tính hợp lệ gần nhất và không được dùng để xuất; hãy sửa ô báo lỗi.";
-                _lblStale.Visible = true;
-                _grid.ForeColor = SystemColors.GrayText;
+                _inputValid = false;
+                ShowStale("Số quá lớn nên không tính được. Bảng dưới là lần tính gần nhất và không được dùng để xuất; hãy giảm các số nhập.");
             }
-            UpdateButtons();
+            finally
+            {
+                UpdateButtons();
+            }
+        }
+
+        private void ShowStale(string message)
+        {
+            _lblStale.Text = message;
+            _lblStale.Visible = true;
+            _grid.ForeColor = SystemColors.GrayText;
         }
 
         private void UpdateButtons()
         {
-            bool allowed = _blockReason == null && !_exporting && _inputValid && _current != null;
+            bool allowed = CanExportNow();
             _btnVat.Enabled = allowed;
             _btnReduction.Enabled = allowed;
             _btnAccounting.Enabled = allowed && _cboProfile.SelectedItem is ProfileItem;
@@ -363,7 +392,7 @@ namespace E_Tax
             return string.Concat(_period.Label.Select(c => invalid.Contains(c) ? '-' : c)).Replace(' ', '_');
         }
 
-        private bool CanExportNow() => _blockReason == null && !_exporting && _inputValid && _current != null;
+        private bool CanExportNow() => KeKhaiLogic.CanExport(_blockReason, _exporting, _inputValid, _current != null);
 
         private Task ExportVatAsync()
         {

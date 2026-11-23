@@ -12,6 +12,13 @@ namespace E_Tax.Tests
         [InlineData("1.234.567", "1234567")]
         [InlineData("1,234,567", "1234567")]
         [InlineData("1,5", "1.5")]
+        [InlineData("1,234", "1234")]
+        [InlineData("12,345", "12345")]
+        [InlineData("250,000", "250000")]
+        [InlineData("0,123", "0.123")]
+        [InlineData("1234,567", "1234.567")]
+        [InlineData("999999999999999999", "999999999999999999")]
+        [InlineData("-999999999999999999", "-999999999999999999")]
         [InlineData("0.123", "0.123")]
         [InlineData("1234.567", "1234.567")]
         [InlineData("1234567", "1234567")]
@@ -41,6 +48,10 @@ namespace E_Tax.Tests
         [InlineData("1 234")]
         [InlineData("--5")]
         [InlineData("1e5")]
+        [InlineData("1000000000000000000")]
+        [InlineData("-1000000000000000000")]
+        [InlineData("999999999999999999,5")]
+        [InlineData("79228162514264337593543950335")]
         public void TryParseAmount_Rejects(string text)
         {
             Assert.False(KeKhaiLogic.TryParseAmount(text, out _));
@@ -51,6 +62,17 @@ namespace E_Tax.Tests
         {
             Assert.True(KeKhaiLogic.TryParseAmount(null, out var v));
             Assert.Equal(0m, v);
+        }
+
+        [Theory]
+        [InlineData(null, false, true, true, true)]
+        [InlineData("khoa", false, true, true, false)]
+        [InlineData(null, true, true, true, false)]
+        [InlineData(null, false, false, true, false)]
+        [InlineData(null, false, true, false, false)]
+        public void CanExport_RequiresAllConditions(string? block, bool exporting, bool inputValid, bool hasCurrent, bool expected)
+        {
+            Assert.Equal(expected, KeKhaiLogic.CanExport(block, exporting, inputValid, hasCurrent));
         }
 
         [Fact]
