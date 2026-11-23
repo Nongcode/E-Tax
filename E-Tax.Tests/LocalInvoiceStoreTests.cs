@@ -236,6 +236,62 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void Load_SameKeyInTwoMonthFiles_KeepsOneRecord()
+        {
+            _store.Upsert(Own, new[] { Inv(date: "") });
+            string undated = File.ReadAllText(MonthFile("unknown-date"));
+            _store.Upsert(Own, new[] { Inv(date: "2026-03-15T00:00:00") });
+            // mô phỏng sự cố: file tháng đã ghi nhưng file unknown-date cũ còn nguyên
+            File.WriteAllText(MonthFile("unknown-date"), undated);
+
+            var all = _store.Query(Own, new StoreQuery(null, null, null, null, null, null));
+            var only = Assert.Single(all);
+            Assert.Equal("2026-03-15T00:00:00", only.Ngay_lap);
+
+            var r = _store.Upsert(Own, new[] { Inv(date: "2026-03-15T00:00:00") });
+            Assert.Equal(new StoreUpsertResult(0, 0, 1), r);
+            Assert.Single(_store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
+        }
+
+        [Fact]
+        public void Upsert_MoveWritesDestinationBeforeSource()
+        {
+            _store.Upsert(Own, new[] { Inv(date: "") });
+            string undated = File.ReadAllText(MonthFile("unknown-date"));
+            // ghi file đích thất bại (đường dẫn là thư mục): file nguồn phải còn nguyên bản ghi
+            Directory.CreateDirectory(MonthFile("2026-03"));
+
+            Assert.ThrowsAny<Exception>(() => _store.Upsert(Own, new[] { Inv(date: "2026-03-15T00:00:00") }));
+
+            Assert.Equal(undated, File.ReadAllText(MonthFile("unknown-date")));
+        }
+
+        [Fact]
+        public void Upsert_DateMissingLater_KeepsStoredDateAndMonth()
+        {
+            _store.Upsert(Own, new[] { Inv(status: 1, date: "2026-03-15T00:00:00") });
+
+            var incoming = Inv(status: 5, date: "");
+            var r = _store.Upsert(Own, new[] { incoming });
+            Assert.Equal(new StoreUpsertResult(0, 1, 0), r);
+            Assert.Equal("", incoming.Ngay_lap);
+
+            var r2 = _store.Upsert(Own, new[] { Inv(status: 5, date: "khong-phai-ngay") });
+            Assert.Equal(new StoreUpsertResult(0, 0, 1), r2);
+
+            var only = Assert.Single(_store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
+            Assert.Equal("2026-03-15T00:00:00", only.Ngay_lap);
+            Assert.Equal(5, only.Trang_thai_hoa_don);
+            Assert.False(File.Exists(MonthFile("unknown-date")));
+        }
+
+        [Fact]
+        public void TaxCode_TrailingNewline_IsRejected()
+        {
+            Assert.Throws<ArgumentException>(() => _store.Upsert("0101\n", new[] { Inv() }));
+        }
+
+        [Fact]
         public void Companies_ListsOnlyValidStoreFolders()
         {
             string root = Path.Combine(_dir, "store");

@@ -19,8 +19,8 @@ namespace E_Tax
         private const string UnknownDate = "unknown-date";
         private const string UnknownSupplier = "khong-ro";
 
-        private static readonly Regex TaxCodePattern = new(@"^[0-9]+(-[0-9]+)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-        private static readonly Regex DataFilePattern = new(@"^(\d{4}-(0[1-9]|1[0-2])|unknown-date)\.json$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex TaxCodePattern = new(@"^[0-9]+(-[0-9]+)?\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex DataFilePattern = new(@"^(\d{4}-(0[1-9]|1[0-2])|unknown-date)\.json\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -55,7 +55,7 @@ namespace E_Tax
             string companyDir = CompanyDir(ownTaxCode);
             lock (_lock)
             {
-                var files = LoadCompany(companyDir);
+                var files = LoadCompany(companyDir, out var cleaned);
                 var index = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var (name, list) in files)
                     foreach (var item in list)
@@ -64,21 +64,37 @@ namespace E_Tax
                         if (k != null) index[k] = name;
                     }
 
-                var dirty = new HashSet<string>(StringComparer.Ordinal);
+                // gained: file nhận thêm/ghi đè bản ghi; lost: file chỉ bị bớt bản ghi (ghi sau để lỗi giữa chừng chỉ gây trùng, không mất)
+                var gained = new List<string>();
+                var lost = new List<string>(cleaned);
+                void MarkGained(string m) { if (!gained.Contains(m)) gained.Add(m); }
+                void MarkLost(string m) { if (!lost.Contains(m)) lost.Add(m); }
                 int added = 0, updated = 0, unchanged = 0;
 
-                foreach (var invoice in invoices)
+                foreach (var source in invoices)
                 {
-                    string? key = KeyOf(invoice, invoice.Loai_hoa_don);
+                    string? key = KeyOf(source, source.Loai_hoa_don);
                     if (key == null) continue;
+
+                    var invoice = source;
+                    bool exists = index.TryGetValue(key, out string? oldMonth);
+                    int pos = exists ? files[oldMonth!].FindIndex(x => KeyOf(x.Invoice, x.Loai) == key) : -1;
+
+                    // ngày mới trống/không đọc được thì giữ ngày đã lưu, không chuyển sang unknown-date
+                    if (exists && InvoiceDate.ToVietnamDate(invoice.Ngay_lap) == null &&
+                        InvoiceDate.ToVietnamDate(files[oldMonth!][pos].Invoice.Ngay_lap) != null)
+                    {
+                        invoice = JsonSerializer.Deserialize<SearchResult>(JsonSerializer.Serialize(source, JsonOptions), JsonOptions)!;
+                        invoice.Ngay_lap = files[oldMonth!][pos].Invoice.Ngay_lap;
+                        invoice.Loai_hoa_don = source.Loai_hoa_don;
+                    }
 
                     string month = MonthOf(invoice);
                     var record = new StoredInvoice { Loai = invoice.Loai_hoa_don ?? "", Invoice = invoice };
 
-                    if (index.TryGetValue(key, out string? oldMonth))
+                    if (exists)
                     {
-                        var oldList = files[oldMonth];
-                        int pos = oldList.FindIndex(x => KeyOf(x.Invoice, x.Loai) == key);
+                        var oldList = files[oldMonth!];
                         if (oldMonth == month && Serialize(oldList[pos]) == Serialize(record))
                         {
                             unchanged++;
@@ -91,26 +107,27 @@ namespace E_Tax
                         else
                         {
                             oldList.RemoveAt(pos);
-                            dirty.Add(oldMonth);
+                            MarkLost(oldMonth!);
                             GetList(files, month).Add(record);
                         }
-                        dirty.Add(month);
+                        MarkGained(month);
                         index[key] = month;
                         updated++;
                     }
                     else
                     {
                         GetList(files, month).Add(record);
-                        dirty.Add(month);
+                        MarkGained(month);
                         index[key] = month;
                         added++;
                     }
                 }
 
-                if (dirty.Count > 0)
+                if (gained.Count > 0 || lost.Count > 0)
                 {
                     Directory.CreateDirectory(companyDir);
-                    foreach (string name in dirty) SaveFile(Path.Combine(companyDir, name + ".json"), files[name]);
+                    foreach (string name in gained.Concat(lost.Where(l => !gained.Contains(l))))
+                        SaveFile(Path.Combine(companyDir, name + ".json"), files[name]);
                 }
                 return new StoreUpsertResult(added, updated, unchanged);
             }
@@ -123,7 +140,7 @@ namespace E_Tax
             lock (_lock)
             {
                 var found = new List<(DateTime? Date, SearchResult Invoice)>();
-                foreach (var (name, list) in LoadCompany(companyDir))
+                foreach (var (name, list) in LoadCompany(companyDir, out _))
                 {
                     foreach (var item in list)
                     {
@@ -234,9 +251,11 @@ namespace E_Tax
 
         private static string Serialize(StoredInvoice record) => JsonSerializer.Serialize(record, JsonOptions);
 
-        // Đọc toàn bộ file tháng của doanh nghiệp; bất kỳ file hỏng nào đều ném InvalidDataException
-        private static Dictionary<string, List<StoredInvoice>> LoadCompany(string companyDir)
+        // Đọc toàn bộ file tháng của doanh nghiệp; bất kỳ file hỏng nào đều ném InvalidDataException.
+        // Cùng một khóa ở hai file (sự cố giữa lúc chuyển tháng): giữ bản ở tháng có ngày, bỏ bản còn lại; cleaned = file bị bớt bản trùng.
+        private static Dictionary<string, List<StoredInvoice>> LoadCompany(string companyDir, out List<string> cleaned)
         {
+            cleaned = new List<string>();
             var result = new Dictionary<string, List<StoredInvoice>>(StringComparer.Ordinal);
             if (!Directory.Exists(companyDir)) return result;
             foreach (string file in Directory.GetFiles(companyDir, "*.json"))
@@ -244,6 +263,23 @@ namespace E_Tax
                 string fileName = Path.GetFileName(file);
                 if (!DataFilePattern.IsMatch(fileName)) continue;
                 result[Path.GetFileNameWithoutExtension(fileName)] = ReadFile(file);
+            }
+
+            var owner = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string name in result.Keys.OrderBy(n => n == UnknownDate ? 0 : 1).ThenBy(n => n, StringComparer.Ordinal))
+            {
+                foreach (var item in result[name].ToList())
+                {
+                    string? k = KeyOf(item.Invoice, item.Loai);
+                    if (k == null) continue;
+                    if (owner.TryGetValue(k, out string? prev) && prev != name)
+                    {
+                        // name đứng sau prev trong thứ tự (unknown-date trước, rồi tháng tăng dần): giữ bản của name
+                        result[prev].RemoveAll(x => KeyOf(x.Invoice, x.Loai) == k);
+                        if (!cleaned.Contains(prev)) cleaned.Add(prev);
+                    }
+                    owner[k] = name;
+                }
             }
             return result;
         }
