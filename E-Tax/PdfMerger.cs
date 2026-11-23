@@ -24,6 +24,7 @@ namespace E_Tax
 
                 foreach (string path in inputPaths)
                 {
+                    int pagesBefore = output.PageCount;
                     try
                     {
                         if (!File.Exists(path))
@@ -48,6 +49,9 @@ namespace E_Tax
                     }
                     catch (Exception)
                     {
+                        // File lỗi không được để lại trang nào trong kết quả
+                        while (output.PageCount > pagesBefore)
+                            output.Pages.RemoveAt(output.PageCount - 1);
                         failed.Add(path);
                     }
                 }

@@ -1393,6 +1393,7 @@ namespace E_Tax
             }
 
             btnCnKoPdf.Enabled = false;
+            btnGopPdf.Enabled = false;
             btnCnKoPdf.Text = $"Xử lý {validInvoices.Count}...";
             downloadProgressBar.Visible = true;
             downloadProgressBar.Minimum = 0;
@@ -1461,6 +1462,7 @@ namespace E_Tax
             finally
             {
                 btnCnKoPdf.Enabled = true;
+                btnGopPdf.Enabled = true;
                 btnCnKoPdf.Text = "In HĐ";
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
