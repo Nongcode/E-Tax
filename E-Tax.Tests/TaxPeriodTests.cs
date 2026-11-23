@@ -30,9 +30,17 @@ namespace E_Tax.Tests
         [InlineData("20261231235959", 2026, 12, 31)]
         [InlineData("01/02/2026 10:00:00", 2026, 2, 1)]
         [InlineData("01/02/2026 10:00", 2026, 2, 1)]
+        [InlineData("1/2/2026", 2026, 2, 1)]
+        [InlineData("1/2/2026 10:00:00", 2026, 2, 1)]
+        [InlineData("01/02/2026 9:00:00", 2026, 2, 1)]
+        [InlineData("1/2/2026 9:05", 2026, 2, 1)]
+        [InlineData("01/02/2026 10:00:00 +07:00", 2026, 2, 1)]
+        [InlineData("31/01/2026 17:30:00Z", 2026, 2, 1)]
+        [InlineData("1/2/2026 23:30:00 -05:00", 2026, 2, 2)]
         public void ToVietnamDate_Parses(string raw, int y, int m, int d) =>
             Assert.Equal(new DateTime(y, m, d), InvoiceDate.ToVietnamDate(raw));
         [Theory] [InlineData(null)] [InlineData("")] [InlineData("abc")]
+        [InlineData("02/13/2026")] [InlineData("31/02/2026")] [InlineData("02/13/2026 10:00:00")] [InlineData("02/13/2026 10:00:00 +07:00")]
         public void ToVietnamDate_Invalid_ReturnsNull(string? raw) => Assert.Null(InvoiceDate.ToVietnamDate(raw));
 
         [Theory]
