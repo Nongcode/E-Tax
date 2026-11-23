@@ -90,6 +90,12 @@ namespace E_Tax
                 return Get(jobId).Items.Where(p => p.Value.State == DownloadItemState.Pending).Select(p => p.Key).ToList();
         }
 
+        public IReadOnlySet<string> DoneKeys(string jobId)
+        {
+            lock (_lock)
+                return Get(jobId).Items.Where(p => p.Value.State == DownloadItemState.Done).Select(p => p.Key).ToHashSet(StringComparer.Ordinal);
+        }
+
         public int RetryFailed(string jobId)
         {
             lock (_lock)
@@ -214,6 +220,63 @@ namespace E_Tax
             string temp = path + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(job, JsonOptions), new UTF8Encoding(false));
             File.Move(temp, path, true);
+        }
+    }
+
+    /// <summary>Thư mục làm việc bền vững cho một lượt tải: tên là SHA-256 của tập khóa HĐ.</summary>
+    public static class DownloadWorkFolder
+    {
+        private static readonly Regex HashName = new(@"^[0-9a-f]{64}\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        public static string DefaultRoot =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "E-Tax", "work");
+
+        public static string PathFor(string root, IEnumerable<string> keys)
+        {
+            var distinct = keys.Where(k => k != null).Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal);
+            byte[] hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', distinct)));
+            return Path.Combine(root, Convert.ToHexString(hash).ToLowerInvariant());
+        }
+
+        /// <summary>Xóa thư mục con trực tiếp tên đúng 64 ký tự hex thường, quá hạn; lỗi một thư mục không dừng các thư mục khác.</summary>
+        public static int CleanupStale(string root, DateTime utcNow, TimeSpan maxAge)
+        {
+            if (!Directory.Exists(root)) return 0;
+            int removed = 0;
+            IEnumerable<string> dirs;
+            try { dirs = Directory.GetDirectories(root).ToList(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
+
+            foreach (string dir in dirs)
+            {
+                try
+                {
+                    var info = new DirectoryInfo(dir);
+                    if (!HashName.IsMatch(info.Name)) continue;
+                    if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                    if (utcNow - info.LastWriteTimeUtc <= maxAge) continue;
+                    info.Delete(true);
+                    removed++;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+            return removed;
+        }
+
+        /// <summary>Chỉ bỏ qua mục đã Done khi mọi file kết quả của nó còn đủ và không rỗng.</summary>
+        public static bool CanSkip(DownloadItemState state, IEnumerable<string> requiredFiles)
+        {
+            if (state != DownloadItemState.Done) return false;
+            foreach (string f in requiredFiles)
+            {
+                try
+                {
+                    var fi = new FileInfo(f);
+                    if (!fi.Exists || fi.Length == 0) return false;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+            }
+            return true;
         }
     }
 }

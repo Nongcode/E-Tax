@@ -140,4 +140,92 @@ namespace E_Tax.Tests
             Assert.NotEqual(older, newer);
         }
     }
+
+    public class DownloadWorkFolderTests : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "etax-work-" + Guid.NewGuid());
+
+        public DownloadWorkFolderTests() => Directory.CreateDirectory(_root);
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        }
+
+        [Fact]
+        public void PathFor_SameKeysAnyOrder_SamePath()
+        {
+            string a = DownloadWorkFolder.PathFor(_root, new[] { "b", "a", "c", "a" });
+            string b = DownloadWorkFolder.PathFor(_root, new[] { "c", "a", "b" });
+            Assert.Equal(a, b);
+            Assert.Equal(_root, Path.GetDirectoryName(a));
+            Assert.Matches("^[0-9a-f]{64}$", Path.GetFileName(a));
+        }
+
+        [Fact]
+        public void PathFor_DifferentKeys_DifferentPath()
+        {
+            Assert.NotEqual(
+                DownloadWorkFolder.PathFor(_root, new[] { "a", "b" }),
+                DownloadWorkFolder.PathFor(_root, new[] { "a", "c" }));
+        }
+
+        [Fact]
+        public void CleanupStale_RemovesOnlyOldHashNamedFolders()
+        {
+            var now = DateTime.UtcNow;
+            string oldHash = Path.Combine(_root, new string('a', 64));
+            string newHash = Path.Combine(_root, new string('b', 64));
+            string oldOther = Path.Combine(_root, "keep-me");
+            string oldUpper = Path.Combine(_root, new string('D', 64));
+            foreach (var d in new[] { oldHash, newHash, oldOther, oldUpper }) Directory.CreateDirectory(d);
+            string oldFile = Path.Combine(_root, new string('c', 64));
+            File.WriteAllText(oldFile, "x");
+            foreach (var d in new[] { oldHash, oldOther, oldUpper }) Directory.SetLastWriteTimeUtc(d, now.AddDays(-40));
+            File.SetLastWriteTimeUtc(oldFile, now.AddDays(-40));
+
+            int removed = DownloadWorkFolder.CleanupStale(_root, now, TimeSpan.FromDays(30));
+
+            Assert.Equal(1, removed);
+            Assert.False(Directory.Exists(oldHash));
+            Assert.True(Directory.Exists(newHash));
+            Assert.True(Directory.Exists(oldOther));
+            Assert.True(Directory.Exists(oldUpper));
+            Assert.True(File.Exists(oldFile));
+        }
+
+        [Fact]
+        public void CanSkip_DoneWithAllFilesNonEmpty_True()
+        {
+            string f1 = Path.Combine(_root, "1.zip"), f2 = Path.Combine(_root, "1.pdf");
+            File.WriteAllText(f1, "x");
+            File.WriteAllText(f2, "x");
+            Assert.True(DownloadWorkFolder.CanSkip(DownloadItemState.Done, new[] { f1, f2 }));
+        }
+
+        [Fact]
+        public void CanSkip_FileMissing_False()
+        {
+            string f1 = Path.Combine(_root, "1.zip");
+            File.WriteAllText(f1, "x");
+            Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Done, new[] { f1, Path.Combine(_root, "none.pdf") }));
+        }
+
+        [Fact]
+        public void CanSkip_EmptyFile_False()
+        {
+            string f1 = Path.Combine(_root, "1.pdf");
+            File.WriteAllBytes(f1, Array.Empty<byte>());
+            Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Done, new[] { f1 }));
+        }
+
+        [Fact]
+        public void CanSkip_NotDone_False()
+        {
+            string f1 = Path.Combine(_root, "1.pdf");
+            File.WriteAllText(f1, "x");
+            Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Failed, new[] { f1 }));
+            Assert.False(DownloadWorkFolder.CanSkip(DownloadItemState.Pending, new[] { f1 }));
+        }
+    }
 }

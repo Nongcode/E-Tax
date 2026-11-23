@@ -1103,11 +1103,32 @@ namespace E_Tax
                 modal.CloseFromOwner();
             }
 
+            // Mặc định là thư mục tạm riêng của lượt này; có kế hoạch tải rồi thì chuyển sang thư mục làm việc bền vững để tiếp tục được
             string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
             string reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
             string zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
             string pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
             string xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+            bool isWorkFolder = false;   // true: baseTempDirectory là thư mục làm việc bền vững
+            bool cancelled = false;
+            bool outputSaved = false;    // ZIP kết quả đã được lưu vào thư mục người dùng chọn
+            int itemsNotDone = 0;        // số HĐ chưa xong trong lượt này (lỗi hoặc chưa xử lý)
+            DownloadJobStore? jobStore = null;
+            string? jobId = null;
+            int sinceFlush = 0;
+
+            void JobMark(string key, DownloadItemState state, string? error)
+            {
+                if (jobStore == null || jobId == null) return;
+                try { jobStore.Mark(jobId, key, state, error); }
+                catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không ghi được tiến độ tải: {exJob.GetType().Name}"); jobStore = null; }
+            }
+            void JobFlush()
+            {
+                if (jobStore == null || jobId == null) return;
+                try { jobStore.Flush(jobId); }
+                catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không lưu được tiến độ tải: {exJob.GetType().Name}"); jobStore = null; }
+            }
 
             try
             {
@@ -1142,6 +1163,54 @@ namespace E_Tax
                     AppendLog($"ℹ️ (Tải gốc) {duplicateCount} dòng là cùng hóa đơn ở cả Bán ra và Mua vào, chỉ tải một lần.");
                 int totalInvoices = downloadPlan.Count;
 
+                // Thư mục làm việc bền vững theo tập HĐ; lỗi thì dùng thư mục tạm cũ và chạy không tiếp tục được
+                var planKeys = downloadPlan.Select(p => p.FileId).ToList();
+                var doneKeys = new HashSet<string>(StringComparer.Ordinal);
+                try
+                {
+                    DownloadWorkFolder.CleanupStale(DownloadWorkFolder.DefaultRoot, DateTime.UtcNow, TimeSpan.FromDays(30));
+                    string workFolder = DownloadWorkFolder.PathFor(DownloadWorkFolder.DefaultRoot, planKeys);
+                    Directory.CreateDirectory(workFolder);
+                    foreach (string leftover in Directory.GetDirectories(workFolder, "_temp_extract_*"))
+                        Directory.Delete(leftover, true); // thư mục giải nén dở của lượt trước không được lọt vào ZIP
+                    baseTempDirectory = workFolder;
+                    reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
+                    zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
+                    pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
+                    xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+                    isWorkFolder = true;
+                }
+                catch (Exception exWork)
+                {
+                    AppendLog($"⚠️ (Tải gốc) Không tạo được thư mục làm việc, chạy không tiếp tục được: {exWork.GetType().Name}");
+                }
+
+                if (isWorkFolder)
+                {
+                    try
+                    {
+                        jobStore = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
+                        jobId = jobStore.FindResumable(baseTempDirectory, planKeys);
+                        if (jobId != null)
+                        {
+                            jobStore.RetryFailed(jobId);
+                            doneKeys.UnionWith(jobStore.DoneKeys(jobId));
+                            AppendLog($"ℹ️ (Tải gốc) Tiếp tục lượt tải trước: {doneKeys.Count}/{totalInvoices} HĐ đã xong.");
+                        }
+                        else
+                        {
+                            jobId = jobStore.Create(baseTempDirectory, planKeys);
+                        }
+                    }
+                    catch (Exception exJob)
+                    {
+                        AppendLog($"⚠️ (Tải gốc) Không dùng được kho tiến độ tải, chạy không lưu tiến độ: {exJob.GetType().Name}");
+                        jobStore = null;
+                        jobId = null;
+                        doneKeys.Clear();
+                    }
+                }
+
                 Directory.CreateDirectory(reportSubFolder);
                 Directory.CreateDirectory(zipSubFolder);
                 Directory.CreateDirectory(pdfSubFolder);
@@ -1173,6 +1242,25 @@ namespace E_Tax
                     modal.UpdateStatus($"Bước 4: Xử lý HĐ {invoiceIdentifier} ({i + 1}/{totalInvoices})...");
                     modal.Report(new BatchProgress("Xử lý HĐ", i, totalInvoices, failedChunks.Count));
                     string tempExtractPath = Path.Combine(baseTempDirectory, $"_temp_extract_{i}");
+                    string itemZipPath = Path.Combine(zipSubFolder, $"HD_{invoiceIdentifier}.zip");
+                    string itemXmlPath = Path.Combine(xmlSubFolder, $"HD_{invoiceIdentifier}.xml");
+
+                    // Đã xong ở lượt trước và đủ file (ZIP, PDF không rỗng): dùng lại, vẫn tính vào số đếm và file gộp
+                    if (doneKeys.Contains(invoiceIdentifier) &&
+                        DownloadWorkFolder.CanSkip(DownloadItemState.Done, new[] { itemZipPath, outputPdfPath }))
+                    {
+                        successCount++;
+                        convertSuccessCount++;
+                        producedPdfs.Add((planItem, outputPdfPath));
+                        continue;
+                    }
+
+                    // Tải lại: xóa file cũ của HĐ này để bản dở không lọt vào ZIP kết quả
+                    foreach (string stale in new[] { itemZipPath, outputPdfPath, itemXmlPath })
+                    {
+                        try { if (File.Exists(stale)) File.Delete(stale); }
+                        catch (Exception exStale) { AppendLog($"⚠️ Không xóa được file cũ {Path.GetFileName(stale)}: {exStale.Message}"); }
+                    }
 
                     try
                     {
@@ -1180,6 +1268,8 @@ namespace E_Tax
                         if (zipFilePath == null)
                         {
                             failedChunks.Add($"{invoiceIdentifier} (Lỗi tải ZIP)");
+                            JobMark(invoiceIdentifier, DownloadItemState.Failed, "Lỗi tải ZIP");
+                            itemsNotDone++;
                             continue;
                         }
                         successCount++;
@@ -1215,7 +1305,17 @@ namespace E_Tax
 
                         if (xmlFile != null)
                         {
-                            File.Copy(xmlFile, Path.Combine(xmlSubFolder, $"HD_{invoiceIdentifier}.xml"), true);
+                            File.Copy(xmlFile, itemXmlPath, true);
+                        }
+
+                        if (pdfProduced)
+                        {
+                            JobMark(invoiceIdentifier, DownloadItemState.Done, null);
+                        }
+                        else
+                        {
+                            JobMark(invoiceIdentifier, DownloadItemState.Failed, "Không tìm thấy PDF/HTML");
+                            itemsNotDone++;
                         }
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -1226,6 +1326,8 @@ namespace E_Tax
                     {
                         AppendLog($"❌ (Tải gốc) Lỗi Giải nén/Convert HĐ {invoiceIdentifier}: {exConvert.Message}");
                         failedChunks.Add($"{invoiceIdentifier} (Lỗi giải nén/convert)");
+                        JobMark(invoiceIdentifier, DownloadItemState.Failed, "Lỗi giải nén/convert: " + exConvert.GetType().Name); // không lưu exConvert.Message
+                        itemsNotDone++;
                         // PDF ghi dở không được nằm trong file kết quả
                         if (!pdfProduced)
                         {
@@ -1237,6 +1339,7 @@ namespace E_Tax
                     {
                         try { if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true); }
                         catch (Exception exCleanTemp) { AppendLog($"⚠️ Lỗi dọn dẹp thư mục tạm {tempExtractPath}: {exCleanTemp.Message}"); }
+                        if (++sinceFlush >= 20) { sinceFlush = 0; JobFlush(); }
                     }
                 }
 
@@ -1290,6 +1393,7 @@ namespace E_Tax
                     lblDownloadStatus.Text = "Bước 5: Đang nén kết quả...";
                     this.Enabled = false; // khóa lại trong lúc nén
                     await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath));
+                    outputSaved = true;
                     this.Enabled = true; // bật lại trước hộp thoại kết quả để giữ kích hoạt
 
                     string duplicateNote = duplicateCount > 0 ? $" ({duplicateCount} dòng trùng ở cả Bán ra và Mua vào chỉ tải một lần)" : "";
@@ -1309,6 +1413,7 @@ namespace E_Tax
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Hủy: không hộp thoại chọn thư mục, không ZIP, không thông báo thành công; thư mục tạm dọn ở finally
+                cancelled = true;
                 AppendLog("ℹ️ (Tải gốc) Người dùng đã hủy.");
                 ShowStatusMessage("Đã hủy tải HĐ gốc.", Color.OrangeRed);
             }
@@ -1333,9 +1438,12 @@ namespace E_Tax
             finally
             {
                 CloseModal();
+                JobFlush();
                 try
                 {
-                    if (Directory.Exists(baseTempDirectory))
+                    // Thư mục làm việc chỉ xóa khi không hủy, mọi HĐ đã xong và kết quả đã lưu; còn lại giữ để tiếp tục
+                    bool keepWork = isWorkFolder && (cancelled || !outputSaved || itemsNotDone > 0);
+                    if (!keepWork && Directory.Exists(baseTempDirectory))
                     {
                         Directory.Delete(baseTempDirectory, true);
                     }
