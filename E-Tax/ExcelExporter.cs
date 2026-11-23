@@ -19,11 +19,57 @@ namespace E_Tax
             "Trạng thái hóa đơn", "Kết quả kiểm tra", "Hóa đơn liên quan", "Loại hóa đơn", "Ghi chú", "Rủi ro NCC"
         };
 
+        private const string ClassificationHeader = "Phân loại";
+
         public static void ExportSearchResults(IReadOnlyList<SearchResult> results, string filePath, Func<SearchResult, string>? getNote = null, Func<SearchResult, string>? getRisk = null)
         {
-            int colCount = SearchResultHeaders.Length;
             using var wb = new XLWorkbook();
             var ws = wb.Worksheets.Add("DanhSachHoaDon");
+            WriteInvoiceSheet(ws, results, getNote, getRisk, withClassification: false);
+            wb.SaveAs(filePath);
+        }
+
+        private const int SheetNameMaxLength = 31;
+        private static readonly char[] InvalidSheetNameChars = { '\\', '/', '?', '*', '[', ']', ':' };
+
+        /// <summary>
+        /// Mỗi doanh nghiệp (MST) một sheet cùng bố cục với ExportSearchResults, thêm cột "Phân loại".
+        /// MST trùng được thêm hậu tố " (n)"; doanh nghiệp không có hóa đơn vẫn có sheet với dòng tiêu đề.
+        /// </summary>
+        public static void ExportCompanies(IReadOnlyList<(string TaxCode, IReadOnlyList<SearchResult> Invoices)> companies, string filePath)
+        {
+            if (companies == null || companies.Count == 0)
+                throw new ArgumentException("Cần ít nhất một doanh nghiệp để xuất Excel.", nameof(companies));
+
+            using var wb = new XLWorkbook();
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (taxCode, invoices) in companies)
+            {
+                var ws = wb.Worksheets.Add(UniqueSheetName(taxCode, used));
+                WriteInvoiceSheet(ws, invoices, null, null, withClassification: true);
+            }
+            wb.SaveAs(filePath);
+        }
+
+        private static string UniqueSheetName(string? taxCode, HashSet<string> used)
+        {
+            string baseName = string.Concat((taxCode ?? "").Trim().Select(c => Array.IndexOf(InvalidSheetNameChars, c) >= 0 ? '_' : c));
+            baseName = baseName.Trim('\'');
+            if (baseName.Length == 0) baseName = "DoanhNghiep";
+            if (baseName.Length > SheetNameMaxLength) baseName = baseName.Substring(0, SheetNameMaxLength);
+
+            string name = baseName;
+            for (int n = 2; !used.Add(name); n++)
+            {
+                string suffix = $" ({n})";
+                name = baseName.Substring(0, Math.Min(baseName.Length, SheetNameMaxLength - suffix.Length)) + suffix;
+            }
+            return name;
+        }
+
+        private static void WriteInvoiceSheet(IXLWorksheet ws, IReadOnlyList<SearchResult> results, Func<SearchResult, string>? getNote, Func<SearchResult, string>? getRisk, bool withClassification)
+        {
+            int colCount = SearchResultHeaders.Length + (withClassification ? 1 : 0);
 
             var title = ws.Cell(1, 1);
             title.Value = "DANH SÁCH HÓA ĐƠN";
@@ -36,8 +82,10 @@ namespace E_Tax
             ws.Cell(2, 1).Style.Font.Italic = true;
 
             const int headerRow = 4;
-            for (int i = 0; i < colCount; i++)
+            for (int i = 0; i < SearchResultHeaders.Length; i++)
                 ws.Cell(headerRow, i + 1).Value = SearchResultHeaders[i].ToUpper();
+            if (withClassification)
+                ws.Cell(headerRow, colCount).Value = ClassificationHeader.ToUpper();
 
             var headerRange = ws.Range(headerRow, 1, headerRow, colCount);
             headerRange.Style.Font.FontName = "Calibri";
@@ -70,6 +118,8 @@ namespace E_Tax
                 ws.Cell(row, 16).Value = Text(item.Loai_hoa_don);
                 ws.Cell(row, 17).Value = getNote?.Invoke(item) ?? "";
                 ws.Cell(row, 18).Value = getRisk?.Invoke(item) ?? "";
+                if (withClassification)
+                    ws.Cell(row, colCount).Value = InvoiceClassifier.Label(InvoiceClassifier.RelationOf(item.Trang_thai_hoa_don));
 
                 ws.Range(row, 7, row, 11).Style.NumberFormat.Format = NumberFormat;
 
@@ -82,7 +132,6 @@ namespace E_Tax
             SetThinBorders(ws.Range(headerRow, 1, row - 1, colCount));
 
             AutoFit(ws, colCount);
-            wb.SaveAs(filePath);
         }
 
         /// <summary>
