@@ -59,7 +59,7 @@ namespace E_Tax
         {
             InitializeComponent();
             FormClosing += Form1_FormClosing;
-            _gate.Changed += () => { if (!IsDisposed) btnKhoHoaDon.Enabled = !_gate.IsBusy; };
+            _gate.Changed += () => { if (!IsDisposed) { btnKhoHoaDon.Enabled = !_gate.IsBusy; btnKeKhai.Enabled = !_gate.IsBusy; } };
             InitPeriodSelector();
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
@@ -1701,6 +1701,25 @@ namespace E_Tax
                 if (IsDisposed) return;
                 using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
                 form.ShowDialog(this);
+            });
+        }
+
+        /// <summary>Mở màn hình kê khai từ dữ liệu chi tiết của lần tìm kiếm gần nhất; giữ cổng bận suốt lúc form mở.</summary>
+        private async void btnKeKhai_Click(object? sender, EventArgs e)
+        {
+            await RunFlowAsync("Kê khai", () =>
+            {
+                var items = _detailGridManager.LatestItems;
+                if (items.Count == 0)
+                {
+                    MessageBox.Show(this, "Chưa có dữ liệu chi tiết hóa đơn. Hãy tìm kiếm trước khi lập tờ khai.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return Task.CompletedTask;
+                }
+                int nonVnd = TaxListing.CountNonVnd(_latestResults, InvoiceType.Bought) + TaxListing.CountNonVnd(_latestResults, InvoiceType.Sold);
+                using var form = new KeKhaiForm(items, _lastSearchPeriod, _currentTaxCode,
+                    _detailGridManager.LastFailedCount + _lastFailedSearchPages, _detailGridManager.LastNoLineCount, nonVnd);
+                form.ShowDialog(this);
+                return Task.CompletedTask;
             });
         }
 

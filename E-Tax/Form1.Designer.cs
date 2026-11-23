@@ -32,6 +32,7 @@ namespace E_Tax
         private DataGridViewTextBoxColumn colDgvPhanLoai;
         private Button btnKhoHoaDon;
         private Button btnKiemTraNCC;
+        private Button btnKeKhai;
         private DataGridViewTextBoxColumn colDgvMST;
         private DataGridViewTextBoxColumn colDgvKHMauSo;
         private DataGridViewTextBoxColumn colDgvKHHoaDon;
@@ -136,6 +137,7 @@ namespace E_Tax
             colDgvPhanLoai = new DataGridViewTextBoxColumn();
             btnKhoHoaDon = new Button();
             btnKiemTraNCC = new Button();
+            btnKeKhai = new Button();
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
@@ -430,6 +432,7 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeMua);
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeBan);
             mainSplitContainer.Panel1.Controls.Add(btnKiemTraNCC);
+            mainSplitContainer.Panel1.Controls.Add(btnKeKhai);
             mainSplitContainer.Panel1.Controls.Add(tabControlMain);
             mainSplitContainer.Panel1.Controls.Add(gbNguoiBan);
             mainSplitContainer.Panel1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -1133,6 +1136,18 @@ namespace E_Tax
             btnKiemTraNCC.Text = "Kiểm tra NCC";
             btnKiemTraNCC.UseVisualStyleBackColor = false;
             btnKiemTraNCC.Click += btnKiemTraNCC_Click;
+            //
+            // btnKeKhai
+            //
+            btnKeKhai.BackColor = SystemColors.GradientActiveCaption;
+            btnKeKhai.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKeKhai.Location = new Point(448, 220);
+            btnKeKhai.Name = "btnKeKhai";
+            btnKeKhai.Size = new Size(140, 30);
+            btnKeKhai.TabIndex = 44;
+            btnKeKhai.Text = "Lập tờ khai / Kế toán";
+            btnKeKhai.UseVisualStyleBackColor = false;
+            btnKeKhai.Click += btnKeKhai_Click;
             // 
             // lblVersion
             // 
