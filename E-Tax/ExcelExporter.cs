@@ -198,6 +198,100 @@ namespace E_Tax
             wb.SaveAs(filePath);
         }
 
+        private static readonly string[] TaxListingHeaders =
+        {
+            "STT", "Ký hiệu", "Số HĐ", "Ngày HĐ", "Tên đối tác", "MST đối tác",
+            "Doanh số chưa thuế", "Thuế suất", "Tiền thuế", "Trạng thái HĐ"
+        };
+
+        /// <summary>
+        /// Bảng kê mua vào/bán ra theo kỳ: mỗi thuế suất một nhóm có dòng cộng, cuối là dòng tổng cộng.
+        /// Không loại hóa đơn theo trạng thái: dòng trạng thái khác 1 (hoặc không rõ) tô vàng,
+        /// dòng thiếu số tiền tô đỏ (đỏ ưu tiên hơn vàng).
+        /// </summary>
+        public static void ExportTaxListing(IReadOnlyList<TaxListingGroup> groups, InvoiceType type, TaxPeriod period, string filePath)
+        {
+            int colCount = TaxListingHeaders.Length;
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("BangKe");
+
+            string kind = type == InvoiceType.Bought ? "MUA VÀO" : "BÁN RA";
+            var title = ws.Cell(1, 1);
+            title.Value = $"BẢNG KÊ HÓA ĐƠN {kind} - {period.Label}";
+            ws.Range(1, 1, 1, colCount).Merge();
+            title.Style.Font.FontSize = 16;
+            title.Style.Font.Bold = true;
+            title.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Cell(2, 1).Value = $"Ngày xuất: {DateTime.Now:dd/MM/yyyy HH:mm}";
+            ws.Range(2, 1, 2, colCount).Merge();
+            ws.Cell(2, 1).Style.Font.Italic = true;
+
+            const int headerRow = 4;
+            for (int i = 0; i < colCount; i++)
+                ws.Cell(headerRow, i + 1).Value = TaxListingHeaders[i];
+            var headerRange = ws.Range(headerRow, 1, headerRow, colCount);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            int row = headerRow + 1;
+            int stt = 1;
+            decimal totalDoanhSo = 0m, totalThue = 0m;
+            foreach (var group in groups)
+            {
+                foreach (var r in group.Rows)
+                {
+                    ws.Cell(row, 1).Value = stt++;
+                    ws.Cell(row, 2).Value = Text(r.KyHieu);
+                    ws.Cell(row, 3).Value = Number(r.SoHD);
+                    ws.Cell(row, 4).Value = Text(r.NgayHD);
+                    ws.Cell(row, 5).Value = Text(r.TenDoiTac);
+                    ws.Cell(row, 6).Value = Text(r.MstDoiTac);
+                    ws.Cell(row, 7).Value = r.DoanhSo;
+                    ws.Cell(row, 8).Value = Text(r.ThueSuat);
+                    ws.Cell(row, 9).Value = r.TienThue;
+                    ws.Cell(row, 10).Value = Number(r.TrangThai);
+                    ws.Cell(row, 7).Style.NumberFormat.Format = NumberFormat;
+                    ws.Cell(row, 9).Style.NumberFormat.Format = NumberFormat;
+
+                    if (r.ThieuSoTien)
+                        ws.Range(row, 1, row, colCount).Style.Fill.BackgroundColor = XLColor.Red;
+                    else if (r.TrangThai != 1)
+                        ws.Range(row, 1, row, colCount).Style.Fill.BackgroundColor = XLColor.Yellow;
+                    row++;
+                }
+
+                ws.Cell(row, 1).Value = $"Cộng thuế suất {group.ThueSuat}";
+                ws.Range(row, 1, row, 6).Merge();
+                ws.Cell(row, 7).Value = group.TongDoanhSo;
+                ws.Cell(row, 9).Value = group.TongThue;
+                StyleTotalRow(ws, row, colCount, XLColor.LightGray);
+                totalDoanhSo += group.TongDoanhSo;
+                totalThue += group.TongThue;
+                row++;
+            }
+
+            ws.Cell(row, 1).Value = "TỔNG CỘNG";
+            ws.Range(row, 1, row, 6).Merge();
+            ws.Cell(row, 7).Value = totalDoanhSo;
+            ws.Cell(row, 9).Value = totalThue;
+            StyleTotalRow(ws, row, colCount, XLColor.LightBlue);
+
+            SetThinBorders(ws.Range(headerRow, 1, row, colCount));
+            AutoFit(ws, colCount);
+            wb.SaveAs(filePath);
+        }
+
+        private static void StyleTotalRow(IXLWorksheet ws, int row, int colCount, XLColor fill)
+        {
+            var range = ws.Range(row, 1, row, colCount);
+            range.Style.Font.Bold = true;
+            range.Style.Fill.BackgroundColor = fill;
+            ws.Cell(row, 7).Style.NumberFormat.Format = NumberFormat;
+            ws.Cell(row, 9).Style.NumberFormat.Format = NumberFormat;
+        }
+
         /// <summary>
         /// Ghi giá trị vào ô; cột tiền/số lượng được chuyển sang số và định dạng #,##0.
         /// </summary>

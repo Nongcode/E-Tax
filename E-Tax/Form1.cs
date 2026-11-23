@@ -32,6 +32,10 @@ namespace E_Tax
         /// <summary>Danh sách đang hiện trên dgvMain (đã lọc); là nguồn cho nút xuất danh sách.</summary>
         private List<SearchResult> _visibleResults = new List<SearchResult>();
         private string? _chromiumExecutablePath;
+        /// <summary>Kỳ thuế của lần tìm kiếm gần nhất (chụp lúc bấm Tìm kiếm); bảng kê xuất theo kỳ này, không theo ô chọn hiện tại.</summary>
+        private TaxPeriod _lastSearchPeriod;
+        /// <summary>Số trang tìm kiếm bị lỗi của lần tìm kiếm gần nhất.</summary>
+        private int _lastFailedSearchPages;
 
         public Form1()
         {
@@ -401,6 +405,25 @@ namespace E_Tax
 
         private void PeriodValue_Changed(object sender, EventArgs e) => ApplyPeriod();
 
+        /// <summary>
+        /// Kỳ thuế của lần tìm kiếm: lấy từ bộ chọn khi khoảng ngày còn khớp, ngược lại (Tùy chọn,
+        /// hoặc người dùng sửa ngày sau khi chọn kỳ) dùng khoảng ngày thực tế đã tìm.
+        /// </summary>
+        private TaxPeriod CaptureSelectedPeriod(DateTime from, DateTime to)
+        {
+            int kind = cbPeriodKind.SelectedIndex;
+            if (kind > 0)
+            {
+                int year = (int)nudPeriodYear.Value;
+                TaxPeriod? selected = null;
+                if (kind == 3) selected = TaxPeriod.Year(year);
+                else if (cbPeriodNumber.SelectedItem is int number)
+                    selected = kind == 1 ? TaxPeriod.Month(year, number) : TaxPeriod.Quarter(year, number);
+                if (selected is { } p && p.From.Date == from.Date && p.To.Date == to.Date) return p;
+            }
+            return TaxPeriod.Custom(from, to);
+        }
+
         /// <summary>Gán khoảng ngày theo kỳ đã chọn. "Tùy chọn" giữ nguyên ô ngày người dùng nhập.</summary>
         private void ApplyPeriod()
         {
@@ -725,6 +748,71 @@ namespace E_Tax
 
         #endregion
 
+        #region Bảng kê mua vào, bán ra
+
+        private void btnExportBangKeMua_Click(object sender, EventArgs e) => ExportTaxListing(InvoiceType.Bought);
+
+        private void btnExportBangKeBan_Click(object sender, EventArgs e) => ExportTaxListing(InvoiceType.Sold);
+
+        /// <summary>
+        /// Xuất bảng kê toàn bộ kết quả lần tìm kiếm gần nhất (không theo bộ lọc lưới) theo kỳ đã tìm.
+        /// Dừng nếu còn HĐ/trang thiếu dữ liệu để không xuất bảng kê thiếu mà không báo.
+        /// </summary>
+        private void ExportTaxListing(InvoiceType type)
+        {
+            string kindText = type == InvoiceType.Bought ? "mua vào" : "bán ra";
+            var items = _detailGridManager.LatestItems;
+            if (items.Count == 0)
+            {
+                MessageBox.Show(this, "Chưa có dữ liệu chi tiết hóa đơn. Hãy tìm kiếm trước khi xuất bảng kê.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string? blockReason = TaxListing.ExportBlockReason(_detailGridManager.LastFailedCount + _lastFailedSearchPages);
+            if (blockReason != null)
+            {
+                MessageBox.Show(this, blockReason, "Không thể xuất bảng kê", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            int noLine = _detailGridManager.LastNoLineCount;
+            if (noLine > 0 && MessageBox.Show(this,
+                    $"Có {noLine} hóa đơn không có dòng hàng hóa/dịch vụ nên sẽ không có trong bảng kê.\nVẫn xuất bảng kê?",
+                    "Hóa đơn không có dòng hàng", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+
+            var groups = TaxListing.Build(items, type);
+            if (groups.Count == 0)
+            {
+                MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var period = _lastSearchPeriod;
+            var invalid = Path.GetInvalidFileNameChars();
+            string label = string.Concat(period.Label.Select(c => invalid.Contains(c) ? '-' : c)).Replace(' ', '_');
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                FileName = $"BangKe_{(type == InvoiceType.Bought ? "Mua" : "Ban")}_{label}.xlsx",
+                Title = $"Lưu bảng kê {kindText}"
+            };
+            if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                ExcelExporter.ExportTaxListing(groups, type, period, sfd.FileName);
+                MessageBox.Show(this, $"Đã xuất bảng kê {kindText} ({period.Label}) vào file:\n{sfd.FileName}", "Xuất thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi xuất bảng kê: {ex.Message}");
+                MessageBox.Show(this, $"Không xuất được bảng kê: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        #endregion
+
         #region Tìm kiếm & lọc
 
         private async void btnLeftSearch_Click(object sender, EventArgs e)
@@ -743,6 +831,9 @@ namespace E_Tax
             }
 
             _detailService.ClearCache();
+            _detailGridManager.ClearLatest();
+            _lastFailedSearchPages = 0;
+            _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
@@ -766,6 +857,7 @@ namespace E_Tax
                 ct.ThrowIfCancellationRequested();
                 modal.UpdateStatus("Đang tổng hợp kết quả...");
                 _latestResults = results;
+                _lastFailedSearchPages = failedChunks.Count;
 
                 if (_latestResults.Any())
                 {
@@ -786,6 +878,7 @@ namespace E_Tax
                 }
                 else
                 {
+                    _detailGridManager.ClearLatest();
                     lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                     MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     _visibleResults = new List<SearchResult>();
@@ -807,6 +900,8 @@ namespace E_Tax
             {
                 // Hủy: bỏ mọi kết quả dở dang, không hiện lỗi/"Hoàn tất"
                 AppendLog("ℹ️ Người dùng đã hủy tìm kiếm.");
+                _detailGridManager.ClearLatest();
+                _lastFailedSearchPages = 0;
                 _latestResults = new List<SearchResult>();
                 _visibleResults = new List<SearchResult>();
                 dgvMain.DataSource = null;

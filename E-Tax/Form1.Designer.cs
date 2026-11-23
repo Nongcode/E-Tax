@@ -87,6 +87,8 @@ namespace E_Tax
             btnLeftSearch = new Button();
             btnExportChiTiet = new Button();
             btnExportDS = new Button();
+            btnExportBangKeMua = new Button();
+            btnExportBangKeBan = new Button();
             tabControlMain = new TabControl();
             tabTongHop = new TabPage();
             dgvMain = new DataGridView();
@@ -417,6 +419,8 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(btnLeftSearch);
             mainSplitContainer.Panel1.Controls.Add(btnExportChiTiet);
             mainSplitContainer.Panel1.Controls.Add(btnExportDS);
+            mainSplitContainer.Panel1.Controls.Add(btnExportBangKeMua);
+            mainSplitContainer.Panel1.Controls.Add(btnExportBangKeBan);
             mainSplitContainer.Panel1.Controls.Add(tabControlMain);
             mainSplitContainer.Panel1.Controls.Add(gbNguoiBan);
             mainSplitContainer.Panel1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -642,6 +646,30 @@ namespace E_Tax
             btnExportDS.Text = "Tải danh sách HĐ";
             btnExportDS.UseVisualStyleBackColor = false;
             btnExportDS.Click += btnExportDS_Click;
+            //
+            // btnExportBangKeMua
+            //
+            btnExportBangKeMua.BackColor = SystemColors.GradientActiveCaption;
+            btnExportBangKeMua.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnExportBangKeMua.Location = new Point(10, 220);
+            btnExportBangKeMua.Name = "btnExportBangKeMua";
+            btnExportBangKeMua.Size = new Size(140, 30);
+            btnExportBangKeMua.TabIndex = 40;
+            btnExportBangKeMua.Text = "Xuất bảng kê mua";
+            btnExportBangKeMua.UseVisualStyleBackColor = false;
+            btnExportBangKeMua.Click += btnExportBangKeMua_Click;
+            //
+            // btnExportBangKeBan
+            //
+            btnExportBangKeBan.BackColor = SystemColors.GradientActiveCaption;
+            btnExportBangKeBan.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnExportBangKeBan.Location = new Point(156, 220);
+            btnExportBangKeBan.Name = "btnExportBangKeBan";
+            btnExportBangKeBan.Size = new Size(140, 30);
+            btnExportBangKeBan.TabIndex = 41;
+            btnExportBangKeBan.Text = "Xuất bảng kê bán";
+            btnExportBangKeBan.UseVisualStyleBackColor = false;
+            btnExportBangKeBan.Click += btnExportBangKeBan_Click;
             // 
             // tabControlMain
             // 
@@ -653,10 +681,10 @@ namespace E_Tax
             tabControlMain.Controls.Add(tabVATNop);
             tabControlMain.Controls.Add(tabGiamThue);
             tabControlMain.ItemSize = new Size(300, 30);
-            tabControlMain.Location = new Point(10, 231);
+            tabControlMain.Location = new Point(10, 262);
             tabControlMain.Name = "tabControlMain";
             tabControlMain.SelectedIndex = 0;
-            tabControlMain.Size = new Size(943, 412);
+            tabControlMain.Size = new Size(943, 381);
             tabControlMain.TabIndex = 38;
             // 
             // tabTongHop
@@ -1166,6 +1194,8 @@ namespace E_Tax
         private System.Windows.Forms.Button btnLeftSearch;
         private System.Windows.Forms.Button btnExportChiTiet;
         private System.Windows.Forms.Button btnExportDS;
+        private System.Windows.Forms.Button btnExportBangKeMua;
+        private System.Windows.Forms.Button btnExportBangKeBan;
         private System.Windows.Forms.GroupBox gbNguoiBan;
         private System.Windows.Forms.Button btnKtraDNMuaLe;
         private System.Windows.Forms.Label lblGhiChu;

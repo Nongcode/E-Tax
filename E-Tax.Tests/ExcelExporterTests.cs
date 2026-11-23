@@ -102,6 +102,45 @@ namespace E_Tax.Tests
             Assert.Equal("Không tìm thấy chi tiết hàng hóa/dịch vụ nào từ các hóa đơn đã tìm.", ws.Cell("A1").GetString());
         }
 
+        private static TaxListingRow ListingRow(string kyHieu, int so, string rate, decimal ds, decimal thue, int? tt = 1, bool thieu = false) =>
+            new TaxListingRow(kyHieu, so, "01/05/2026", "Đối tác", "0101234567", rate, ds, thue, tt, thieu);
+
+        [Fact]
+        public void TaxListing_GroupsSubtotalsAndGrandTotal()
+        {
+            var groups = new List<TaxListingGroup>
+            {
+                new("8%", new[] { ListingRow("A", 1, "8%", 100m, 8m) }, 100m, 8m),
+                new("10%", new[] { ListingRow("A", 2, "10%", 200m, 20m, tt: 3), ListingRow("A", 3, "10%", 300m, 30m, thieu: true) }, 500m, 50m)
+            };
+            var period = TaxPeriod.Month(2026, 5);
+            string path = NewFile("bangke.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, period, path);
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet(1);
+            Assert.Contains(period.Label, ws.Cell("A1").GetString());
+            Assert.Contains("MUA VÀO", ws.Cell("A1").GetString().ToUpperInvariant());
+            Assert.Equal("STT", ws.Cell("A4").GetString());
+            Assert.Equal("Trạng thái HĐ", ws.Cell("J4").GetString());
+            // Dòng dữ liệu: 5 (8%), cộng 6, 7-8 (10%), cộng 9, tổng 10
+            Assert.Equal(100d, ws.Cell("G5").GetDouble());
+            Assert.Equal(XLDataType.Number, ws.Cell("G5").DataType);
+            Assert.Equal("#,##0", ws.Cell("G5").Style.NumberFormat.Format);
+            Assert.Equal(100d, ws.Cell("G6").GetDouble());
+            Assert.Equal(8d, ws.Cell("I6").GetDouble());
+            Assert.Equal(500d, ws.Cell("G9").GetDouble());
+            Assert.Equal(50d, ws.Cell("I9").GetDouble());
+            Assert.Equal(600d, ws.Cell("G10").GetDouble());
+            Assert.Equal(58d, ws.Cell("I10").GetDouble());
+            Assert.Contains("TỔNG CỘNG", ws.Cell("A10").GetString().ToUpperInvariant());
+            // Tô màu: trạng thái khác 1 vàng, thiếu số tiền đỏ
+            Assert.Equal(XLColor.Yellow, ws.Cell("A7").Style.Fill.BackgroundColor);
+            Assert.Equal(XLColor.Red, ws.Cell("A8").Style.Fill.BackgroundColor);
+            Assert.NotEqual(XLColor.Yellow, ws.Cell("A5").Style.Fill.BackgroundColor);
+        }
+
         [Fact]
         public void SingleInvoiceDetail_NoRows_WritesNotFoundMessage()
         {
