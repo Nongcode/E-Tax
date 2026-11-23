@@ -415,6 +415,70 @@ namespace E_Tax
             wb.SaveAs(filePath);
         }
 
+        /// <summary>Xuất phụ lục giảm thuế dự thảo: dòng cảnh báo chưa đối chiếu, MST, kỳ, bảng theo tên hàng và dòng tổng.</summary>
+        internal static void ExportReductionAppendix(IReadOnlyList<ReductionLine> lines, TaxPeriod period, string taxCode, string filePath)
+        {
+            const int colCount = 6;
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("PhuLucGiamThue");
+
+            var banner = ws.Cell(1, 1);
+            banner.Value = "CHƯA ĐỐI CHIẾU VỚI MẪU GỐC";
+            ws.Range(1, 1, 1, colCount).Merge();
+            banner.Style.Font.Bold = true;
+            banner.Style.Font.FontSize = 14;
+            banner.Style.Font.FontColor = XLColor.Red;
+            banner.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell(2, 1).Value = $"Mã số thuế: {taxCode}";
+            ws.Range(2, 1, 2, colCount).Merge();
+            ws.Cell(3, 1).Value = $"Kỳ tính thuế: {period.Label}";
+            ws.Range(3, 1, 3, colCount).Merge();
+
+            const int headerRow = 5;
+            string[] headers = { "STT", "Tên hàng hóa, dịch vụ", "Giá trị HHDV chưa có thuế", "Thuế suất quy định (%)", "Thuế suất sau giảm (%)", "Thuế GTGT được giảm" };
+            for (int i = 0; i < headers.Length; i++) ws.Cell(headerRow, i + 1).Value = headers[i];
+            var headerRange = ws.Range(headerRow, 1, headerRow, colCount);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            static string Fmt(decimal v) => v == decimal.Truncate(v) ? "#,##0" : "#,##0.############";
+            int row = headerRow + 1;
+            int stt = 1;
+            decimal totalGiaTri = 0, totalGiam = 0;
+            foreach (var l in lines)
+            {
+                ws.Cell(row, 1).Value = stt++;
+                ws.Cell(row, 2).Value = l.TenHang;
+                ws.Cell(row, 3).Value = l.GiaTri;
+                ws.Cell(row, 3).Style.NumberFormat.Format = Fmt(l.GiaTri);
+                ws.Cell(row, 4).Value = l.ThueSuatGoc;
+                ws.Cell(row, 5).Value = l.ThueSuatGiam;
+                ws.Cell(row, 6).Value = l.ThueDuocGiam;
+                ws.Cell(row, 6).Style.NumberFormat.Format = Fmt(l.ThueDuocGiam);
+                totalGiaTri += l.GiaTri;
+                totalGiam += l.ThueDuocGiam;
+                row++;
+            }
+
+            ws.Cell(row, 1).Value = "TỔNG CỘNG";
+            ws.Range(row, 1, row, 2).Merge();
+            ws.Cell(row, 3).Value = totalGiaTri;
+            ws.Cell(row, 3).Style.NumberFormat.Format = Fmt(totalGiaTri);
+            ws.Cell(row, 6).Value = totalGiam;
+            ws.Cell(row, 6).Style.NumberFormat.Format = Fmt(totalGiam);
+            var totalRange = ws.Range(row, 1, row, colCount);
+            totalRange.Style.Font.Bold = true;
+            totalRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+
+            SetThinBorders(ws.Range(headerRow, 1, row, colCount));
+            ws.Column(1).Width = 8;
+            ws.Column(2).Width = 50;
+            for (int c = 3; c <= colCount; c++) ws.Column(c).Width = 24;
+            wb.SaveAs(filePath);
+        }
+
         private static void StyleTotalRow(IXLWorksheet ws, int row, int colCount, XLColor fill)
         {
             var range = ws.Range(row, 1, row, colCount);
