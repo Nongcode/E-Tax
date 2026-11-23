@@ -1064,6 +1064,29 @@ namespace E_Tax
                     }
                 }
 
+                // --- Gộp tất cả PDF thành một file (theo ký hiệu rồi số HĐ) ---
+                try
+                {
+                    var orderedPdfs = invoicesToDownload
+                        .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
+                        .Select(inv => Path.Combine(pdfSubFolder, $"HD_{inv.FileIdentifier}.pdf"))
+                        .Where(File.Exists)
+                        .ToList();
+                    if (orderedPdfs.Count > 0)
+                    {
+                        lblDownloadStatus.Text = "Đang gộp PDF...";
+                        var mergeResult = await Task.Run(() => PdfMerger.Merge(orderedPdfs, Path.Combine(pdfSubFolder, "_GopTatCa.pdf")));
+                        failedChunks.AddRange(mergeResult.FailedFiles.Select(f => $"{Path.GetFileName(f)} (Không gộp được vào _GopTatCa.pdf)"));
+                        if (mergeResult.PagesWritten == 0)
+                            failedChunks.Add("_GopTatCa.pdf (Không có PDF hợp lệ để gộp)");
+                    }
+                }
+                catch (Exception exMerge)
+                {
+                    AppendLog($"❌ (Tải gốc) Lỗi gộp PDF: {exMerge.Message}");
+                    failedChunks.Add($"_GopTatCa.pdf (Lỗi gộp PDF: {exMerge.Message})");
+                }
+
                 // --- Bước 5: Nén kết quả ---
                 lblDownloadStatus.Text = "Bước 5: Đang nén kết quả...";
                 downloadProgressBar.Value = downloadProgressBar.Maximum - 1;
@@ -1360,25 +1383,7 @@ namespace E_Tax
         /// </summary>
         private async void btnCnKoPdf_Click(object sender, EventArgs e)
         {
-            List<SearchResult> selectedInvoices = new List<SearchResult>();
-
-            if (dgvMain.SelectedRows.Count > 0)
-            {
-                selectedInvoices = dgvMain.SelectedRows
-                    .Cast<DataGridViewRow>()
-                    .Select(row => row.DataBoundItem as SearchResult)
-                    .Where(invoice => invoice != null)
-                    .ToList()!;
-            }
-            else if (dgvMain.CurrentRow?.DataBoundItem is SearchResult currentInvoice)
-            {
-                selectedInvoices.Add(currentInvoice);
-            }
-
-            List<SearchResult> validInvoices = selectedInvoices
-                .Where(invoice => invoice.HasLookupKeys())
-                .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
-                .ToList();
+            List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
 
             if (!validInvoices.Any())
             {
@@ -1407,70 +1412,14 @@ namespace E_Tax
                 await using var pdfConverter = new PdfConverter(EnsureChromiumAsync);
 
                 // --- Tải, giải nén và chuẩn bị file PDF cho từng hóa đơn ---
-                for (int i = 0; i < validInvoices.Count; i++)
-                {
-                    SearchResult invoice = validInvoices[i];
-                    string invoiceIdentifier = invoice.FileIdentifier;
-                    string invoiceTempDir = Path.Combine(baseTempDirectory, $"Invoice_{i}_{invoiceIdentifier}");
-                    string extractPath = Path.Combine(invoiceTempDir, "extracted");
-                    string outputPdfPath = Path.Combine(invoiceTempDir, $"HD_{invoiceIdentifier}.pdf");
-                    int currentStepBase = i * 4;
-
-                    try
+                var prepared = await PrepareInvoicePdfsAsync(validInvoices, baseTempDirectory, pdfConverter,
+                    (finished, status) =>
                     {
-                        Directory.CreateDirectory(extractPath);
-
-                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang tải HĐ {invoice.So_hoa_don}...";
-                        string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, invoiceTempDir);
-                        downloadProgressBar.Value = Math.Min(currentStepBase + 1, downloadProgressBar.Maximum);
-
-                        if (zipFilePath == null)
-                        {
-                            failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi tải file ZIP)");
-                            downloadProgressBar.Value = Math.Min(currentStepBase + 4, downloadProgressBar.Maximum);
-                            continue;
-                        }
-
-                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang giải nén HĐ {invoice.So_hoa_don}...";
-                        await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, extractPath, true));
-                        downloadProgressBar.Value = Math.Min(currentStepBase + 2, downloadProgressBar.Maximum);
-
-                        lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang tìm file HĐ {invoice.So_hoa_don}...";
-                        string? pdfFile = FindFirstFile(extractPath, "*.pdf");
-                        string? htmlFile = FindFirstFile(extractPath, "*.html");
-
-                        if (pdfFile != null)
-                        {
-                            File.Move(pdfFile, outputPdfPath);
-                            finalPdfPaths.Add(outputPdfPath);
-                        }
-                        else if (htmlFile != null)
-                        {
-                            lblDownloadStatus.Text = $"({i + 1}/{validInvoices.Count}) Đang convert HTML sang PDF...";
-                            try
-                            {
-                                await pdfConverter.ConvertAsync(htmlFile, outputPdfPath);
-                                finalPdfPaths.Add(outputPdfPath);
-                            }
-                            catch (Exception exConvert)
-                            {
-                                AppendLog($"  -> Lỗi convert HTML->PDF HĐ {invoiceIdentifier}: {exConvert}");
-                                failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi convert HTML sang PDF)");
-                            }
-                        }
-                        else
-                        {
-                            failedInvoicesInfo.Add($"{invoiceIdentifier} (Không tìm thấy file PDF/HTML)");
-                        }
-                        downloadProgressBar.Value = Math.Min(currentStepBase + 3, downloadProgressBar.Maximum);
-                    }
-                    catch (Exception exInvoice)
-                    {
-                        AppendLog($"❌ Lỗi xử lý HĐ {invoiceIdentifier}: {exInvoice}");
-                        failedInvoicesInfo.Add($"{invoiceIdentifier} (Lỗi chung: {exInvoice.Message})");
-                        downloadProgressBar.Value = Math.Min(currentStepBase + 4, downloadProgressBar.Maximum);
-                    }
-                }
+                        downloadProgressBar.Value = Math.Min(finished * 4, downloadProgressBar.Maximum);
+                        lblDownloadStatus.Text = status;
+                    });
+                finalPdfPaths = prepared.Paths;
+                failedInvoicesInfo = prepared.Failed;
 
                 if (!finalPdfPaths.Any())
                 {
@@ -1531,6 +1480,209 @@ namespace E_Tax
                                     "Lỗi dọn dẹp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
+        }
+
+        /// <summary>
+        /// Các hóa đơn đang chọn trên lưới (hoặc dòng hiện tại), chỉ lấy HĐ đủ khóa tra cứu, sắp theo ký hiệu rồi số HĐ.
+        /// </summary>
+        private List<SearchResult> GetSelectedInvoicesForPdf()
+        {
+            var selectedInvoices = new List<SearchResult>();
+
+            if (dgvMain.SelectedRows.Count > 0)
+            {
+                selectedInvoices = dgvMain.SelectedRows
+                    .Cast<DataGridViewRow>()
+                    .Select(row => row.DataBoundItem as SearchResult)
+                    .Where(invoice => invoice != null)
+                    .ToList()!;
+            }
+            else if (dgvMain.CurrentRow?.DataBoundItem is SearchResult currentInvoice)
+            {
+                selectedInvoices.Add(currentInvoice);
+            }
+
+            return selectedInvoices
+                .Where(invoice => invoice.HasLookupKeys())
+                .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gộp các hóa đơn đang chọn thành một file PDF duy nhất.
+        /// </summary>
+        private async void btnGopPdf_Click(object sender, EventArgs e)
+        {
+            List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
+            if (!validInvoices.Any())
+            {
+                MessageBox.Show("Vui lòng chọn ít nhất một hóa đơn hợp lệ từ danh sách để gộp PDF.",
+                                "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Hỏi nơi lưu trước khi tải để người dùng hủy được mà không tốn công
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "PDF (*.pdf)|*.pdf",
+                FileName = $"GopHoaDon_{DateTime.Now:yyyyMMdd_HHmmss}.pdf",
+                OverwritePrompt = true
+            };
+            if (sfd.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(sfd.FileName))
+                return;
+            string outputPath = sfd.FileName;
+
+            btnGopPdf.Enabled = false;
+            btnCnKoPdf.Enabled = false;
+            string oldText = btnGopPdf.Text;
+            btnGopPdf.Text = $"Gộp {validInvoices.Count}...";
+            downloadProgressBar.Visible = true;
+            downloadProgressBar.Minimum = 0;
+            downloadProgressBar.Maximum = validInvoices.Count * 4;
+            downloadProgressBar.Value = 0;
+            downloadProgressBar.Style = ProgressBarStyle.Blocks;
+            lblDownloadStatus.Text = "Bắt đầu xử lý...";
+            lblDownloadStatus.Visible = true;
+            this.Cursor = Cursors.WaitCursor;
+
+            string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-MergePdf_{Guid.NewGuid()}");
+
+            try
+            {
+                await using var pdfConverter = new PdfConverter(EnsureChromiumAsync);
+
+                var (paths, failedInvoices) = await PrepareInvoicePdfsAsync(validInvoices, baseTempDirectory, pdfConverter,
+                    (finished, status) =>
+                    {
+                        downloadProgressBar.Value = Math.Min(finished * 4, downloadProgressBar.Maximum);
+                        lblDownloadStatus.Text = status;
+                    });
+
+                PdfMergeResult mergeResult = new PdfMergeResult(0, Array.Empty<string>());
+                if (paths.Count > 0)
+                {
+                    lblDownloadStatus.Text = "Đang gộp PDF...";
+                    mergeResult = await Task.Run(() => PdfMerger.Merge(paths, outputPath));
+                }
+
+                var problems = new List<string>(failedInvoices);
+                problems.AddRange(mergeResult.FailedFiles.Select(f => $"{Path.GetFileName(f)} (Không gộp được)"));
+
+                if (mergeResult.PagesWritten == 0)
+                {
+                    string msg = "Không gộp được PDF nào, chưa ghi file.";
+                    if (problems.Count > 0) msg += $"\n\nCác mục gặp lỗi:\n - {string.Join("\n - ", problems)}";
+                    MessageBox.Show(msg, "Gộp PDF thất bại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                string message = $"Đã gộp {mergeResult.PagesWritten} trang từ {paths.Count - mergeResult.FailedFiles.Count}/{validInvoices.Count} hóa đơn vào:\n{outputPath}";
+                if (problems.Count > 0)
+                    message += $"\n\nCác mục gặp lỗi:\n - {string.Join("\n - ", problems)}";
+                MessageBox.Show(message,
+                                problems.Count > 0 ? "Gộp PDF (Có lỗi)" : "Gộp PDF",
+                                MessageBoxButtons.OK,
+                                problems.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Lỗi nghiêm trọng trong btnGopPdf_Click: {ex}");
+                MessageBox.Show($"Đã xảy ra lỗi không mong muốn khi gộp PDF: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnGopPdf.Enabled = true;
+                btnGopPdf.Text = oldText;
+                btnCnKoPdf.Enabled = true;
+                downloadProgressBar.Visible = false;
+                lblDownloadStatus.Visible = false;
+                lblDownloadStatus.Text = "";
+                this.Cursor = Cursors.Default;
+
+                try
+                {
+                    if (Directory.Exists(baseTempDirectory))
+                        Directory.Delete(baseTempDirectory, true);
+                }
+                catch (Exception exClean)
+                {
+                    AppendLog($"⚠️ Không thể xóa thư mục tạm {baseTempDirectory}: {exClean.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tải ZIP, giải nén và chuẩn bị đúng một file PDF cho mỗi hóa đơn (lấy PDF sẵn có hoặc convert từ HTML).
+        /// Thứ tự file trả về theo thứ tự hóa đơn đầu vào. <paramref name="report"/> nhận số hóa đơn đã xong và dòng trạng thái.
+        /// </summary>
+        private async Task<(List<string> Paths, List<string> Failed)> PrepareInvoicePdfsAsync(
+            IReadOnlyList<SearchResult> invoices, string tempDir, PdfConverter converter, Action<int, string> report)
+        {
+            var paths = new List<string>();
+            var failed = new List<string>();
+
+            for (int i = 0; i < invoices.Count; i++)
+            {
+                SearchResult invoice = invoices[i];
+                string invoiceIdentifier = invoice.FileIdentifier;
+                string invoiceTempDir = Path.Combine(tempDir, $"Invoice_{i}_{invoiceIdentifier}");
+                string extractPath = Path.Combine(invoiceTempDir, "extracted");
+                string outputPdfPath = Path.Combine(invoiceTempDir, $"HD_{invoiceIdentifier}.pdf");
+
+                try
+                {
+                    Directory.CreateDirectory(extractPath);
+
+                    report(i, $"({i + 1}/{invoices.Count}) Đang tải HĐ {invoice.So_hoa_don}...");
+                    string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, invoiceTempDir);
+
+                    if (zipFilePath == null)
+                    {
+                        failed.Add($"{invoiceIdentifier} (Lỗi tải file ZIP)");
+                        report(i + 1, $"({i + 1}/{invoices.Count}) Lỗi tải HĐ {invoice.So_hoa_don}");
+                        continue;
+                    }
+
+                    report(i, $"({i + 1}/{invoices.Count}) Đang giải nén HĐ {invoice.So_hoa_don}...");
+                    await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, extractPath, true));
+
+                    report(i, $"({i + 1}/{invoices.Count}) Đang tìm file HĐ {invoice.So_hoa_don}...");
+                    string? pdfFile = FindFirstFile(extractPath, "*.pdf");
+                    string? htmlFile = FindFirstFile(extractPath, "*.html");
+
+                    if (pdfFile != null)
+                    {
+                        File.Move(pdfFile, outputPdfPath);
+                        paths.Add(outputPdfPath);
+                    }
+                    else if (htmlFile != null)
+                    {
+                        report(i, $"({i + 1}/{invoices.Count}) Đang convert HTML sang PDF...");
+                        try
+                        {
+                            await converter.ConvertAsync(htmlFile, outputPdfPath);
+                            paths.Add(outputPdfPath);
+                        }
+                        catch (Exception exConvert)
+                        {
+                            AppendLog($"  -> Lỗi convert HTML->PDF HĐ {invoiceIdentifier}: {exConvert}");
+                            failed.Add($"{invoiceIdentifier} (Lỗi convert HTML sang PDF)");
+                        }
+                    }
+                    else
+                    {
+                        failed.Add($"{invoiceIdentifier} (Không tìm thấy file PDF/HTML)");
+                    }
+                }
+                catch (Exception exInvoice)
+                {
+                    AppendLog($"❌ Lỗi xử lý HĐ {invoiceIdentifier}: {exInvoice}");
+                    failed.Add($"{invoiceIdentifier} (Lỗi chung: {exInvoice.Message})");
+                }
+                report(i + 1, $"({i + 1}/{invoices.Count}) Xong HĐ {invoice.So_hoa_don}");
+            }
+
+            return (paths, failed);
         }
 
         private async Task PrintPdfFilesAsync(List<string> pdfPaths, List<string> failedInvoicesInfo)

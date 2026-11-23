@@ -78,6 +78,7 @@ namespace E_Tax
             nudPeriodYear = new NumericUpDown();
             btnTaiHDGoc = new Button();
             btnCnKoPdf = new Button();
+            btnGopPdf = new Button();
             btnXemHD = new Button();
             gbInvoiceType = new GroupBox();
             rbAllInvoices = new RadioButton();
@@ -410,6 +411,7 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(nudPeriodYear);
             mainSplitContainer.Panel1.Controls.Add(btnTaiHDGoc);
             mainSplitContainer.Panel1.Controls.Add(btnCnKoPdf);
+            mainSplitContainer.Panel1.Controls.Add(btnGopPdf);
             mainSplitContainer.Panel1.Controls.Add(btnXemHD);
             mainSplitContainer.Panel1.Controls.Add(gbInvoiceType);
             mainSplitContainer.Panel1.Controls.Add(btnLeftSearch);
@@ -516,7 +518,7 @@ namespace E_Tax
             // 
             btnTaiHDGoc.BackColor = SystemColors.GradientActiveCaption;
             btnTaiHDGoc.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnTaiHDGoc.Location = new Point(506, 180);
+            btnTaiHDGoc.Location = new Point(505, 180);
             btnTaiHDGoc.Name = "btnTaiHDGoc";
             btnTaiHDGoc.Size = new Size(130, 30);
             btnTaiHDGoc.TabIndex = 10;
@@ -528,13 +530,25 @@ namespace E_Tax
             // 
             btnCnKoPdf.BackColor = SystemColors.GradientActiveCaption;
             btnCnKoPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnCnKoPdf.Location = new Point(126, 181);
+            btnCnKoPdf.Location = new Point(113, 181);
             btnCnKoPdf.Name = "btnCnKoPdf";
             btnCnKoPdf.Size = new Size(76, 30);
             btnCnKoPdf.TabIndex = 8;
             btnCnKoPdf.Text = "In pdf";
             btnCnKoPdf.UseVisualStyleBackColor = false;
             btnCnKoPdf.Click += btnCnKoPdf_Click;
+            //
+            // btnGopPdf
+            //
+            btnGopPdf.BackColor = SystemColors.GradientActiveCaption;
+            btnGopPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnGopPdf.Location = new Point(195, 181);
+            btnGopPdf.Name = "btnGopPdf";
+            btnGopPdf.Size = new Size(76, 30);
+            btnGopPdf.TabIndex = 39;
+            btnGopPdf.Text = "Gộp PDF";
+            btnGopPdf.UseVisualStyleBackColor = false;
+            btnGopPdf.Click += btnGopPdf_Click;
             // 
             // btnXemHD
             // 
@@ -610,7 +624,7 @@ namespace E_Tax
             // btnExportChiTiet
             // 
             btnExportChiTiet.BackColor = SystemColors.GradientActiveCaption;
-            btnExportChiTiet.Location = new Point(231, 180);
+            btnExportChiTiet.Location = new Point(277, 180);
             btnExportChiTiet.Name = "btnExportChiTiet";
             btnExportChiTiet.Size = new Size(102, 30);
             btnExportChiTiet.TabIndex = 36;
@@ -621,7 +635,7 @@ namespace E_Tax
             // btnExportDS
             // 
             btnExportDS.BackColor = SystemColors.GradientActiveCaption;
-            btnExportDS.Location = new Point(359, 180);
+            btnExportDS.Location = new Point(385, 180);
             btnExportDS.Name = "btnExportDS";
             btnExportDS.Size = new Size(114, 30);
             btnExportDS.TabIndex = 37;
@@ -1164,6 +1178,7 @@ namespace E_Tax
         private System.Windows.Forms.Button btnRightSearch;
         private System.Windows.Forms.Button btnXemHD;
         private System.Windows.Forms.Button btnCnKoPdf;
+        private System.Windows.Forms.Button btnGopPdf;
         private System.Windows.Forms.Button btnTaiHDGoc;
         private TabControl tabControlMain;
         private TabPage tabTongHop;
