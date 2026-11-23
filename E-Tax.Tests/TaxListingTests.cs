@@ -159,6 +159,18 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void Build_TwoNoIdInvoicesWithDifferentKeys_StayTwoRowsWithOwnStatus()
+        {
+            var g = TaxListing.Build(new[]
+            {
+                Line("A", 1, "10%", 100, 10, key: InvoiceSearchResults.KeyOf(new SearchResult { Ma_so_thue = "0101234567", Ky_hieu_ma_so = 1, Ky_hieu_hoa_don = "A", So_hoa_don = 1 }), tt: 1),
+                Line("A", 1, "10%", 200, 20, key: InvoiceSearchResults.KeyOf(new SearchResult { Ma_so_thue = "0101234567", Ky_hieu_ma_so = 2, Ky_hieu_hoa_don = "A", So_hoa_don = 1 }), tt: 3)
+            }, InvoiceType.Bought);
+            Assert.Equal(2, g[0].Rows.Count);
+            Assert.Contains(g[0].Rows, r => r.TrangThai == 3);
+        }
+
+        [Fact]
         public void ExportBlocked_WhenDetailFailed()
         {
             Assert.Contains("2", TaxListing.ExportBlockReason(2));

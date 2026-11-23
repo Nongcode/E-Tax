@@ -27,6 +27,25 @@ namespace E_Tax
                 .ToList();
 
         /// <summary>
+        /// Phân loại một trang kết quả tìm kiếm. Items có giá trị khi trang có hóa đơn; IsEnd khi hết dữ liệu hợp lệ;
+        /// Failed khi thân phản hồi không đọc được hoặc sai cấu trúc (không phải trang cuối). Không ném JsonException.
+        /// </summary>
+        public static (List<SearchResult>? Items, bool IsEnd, bool Failed) ParsePage(string json)
+        {
+            try
+            {
+                var parsed = JsonSerializer.Deserialize<SearchResponse>(json, InvoiceJson.Options);
+                if (parsed?.Datas != null)
+                    return parsed.Datas.Count == 0 ? (null, true, false) : (parsed.Datas, false, false);
+            }
+            catch (JsonException)
+            {
+                // rơi xuống phần kiểm tra trang cuối bên dưới
+            }
+            return IsEndOfResults(json) ? (null, true, false) : (null, false, true);
+        }
+
+        /// <summary>
         /// Trả lời có phải trang kết quả rỗng hợp lệ (hết dữ liệu): "datas" là mảng rỗng, hoặc "datas" null/thiếu
         /// và có "total" là số bằng 0. Mọi thân phản hồi khác không có mảng "datas" là trang lỗi.
         /// </summary>

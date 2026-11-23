@@ -551,20 +551,19 @@ namespace E_Tax
                 return false;
             }
 
-            var parsed = JsonSerializer.Deserialize<SearchResponse>(response, InvoiceJson.Options);
-            if (parsed?.Datas == null)
+            // Phản hồi 200 không đọc được/sai cấu trúc là trang lỗi (không làm mất các lát khác), không phải hết dữ liệu
+            var (items, _, failed) = InvoiceSearchResults.ParsePage(response);
+            if (failed)
             {
-                // Phản hồi 200 nhưng không có mảng "datas": chỉ là hết dữ liệu khi total = 0, còn lại là trang lỗi
-                if (!InvoiceSearchResults.IsEndOfResults(response))
-                    failedChunks.Add($"{typeLabel} [{from:dd/MM} - {to:dd/MM}], Trang {page + 1} (phản hồi không hợp lệ)");
+                failedChunks.Add($"{typeLabel} [{from:dd/MM} - {to:dd/MM}], Trang {page + 1} (phản hồi không hợp lệ)");
                 return false;
             }
-            if (!parsed.Datas.Any())
+            if (items == null)
                 return false;
 
-            parsed.Datas.ForEach(item => item.Loai_hoa_don = typeLabel);
-            results.AddRange(parsed.Datas);
-            return parsed.Datas.Count >= SearchPageSize;
+            items.ForEach(item => item.Loai_hoa_don = typeLabel);
+            results.AddRange(items);
+            return items.Count >= SearchPageSize;
         }
 
         /// <summary>

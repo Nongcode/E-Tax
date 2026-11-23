@@ -331,7 +331,7 @@ namespace E_Tax
             string kyHieu = GetString(invoice, "khhdon") ?? header.Ky_hieu_hoa_don;
             int? soHd = GetInt(invoice, "shdon") ?? header.So_hoa_don;
             string mstNb = GetString(invoice, "nbmst") ?? header.Ma_so_thue;
-            string invoiceKey = !string.IsNullOrEmpty(header.Id) ? header.Id : $"{mstNb}|{kyHieu}|{soHd}";
+            string invoiceKey = InvoiceSearchResults.KeyOf(header);
             return new InvoiceDetailItem
             {
                 InvoiceKey = invoiceKey,
