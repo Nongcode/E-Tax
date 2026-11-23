@@ -197,7 +197,12 @@ namespace E_Tax
                 string temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
-                    File.Copy(sourcePath, temp, true);
+                    using (var src = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var dst = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        src.CopyTo(dst);
+                        dst.Flush(true); // đẩy xuống đĩa trước khi thay file đích
+                    }
                     File.Move(temp, target, true);
                 }
                 catch
