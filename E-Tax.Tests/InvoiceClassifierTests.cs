@@ -40,6 +40,25 @@ namespace E_Tax.Tests
             Assert.Contains(r.Issues, i => i.Contains("người bán"));
         }
 
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void Check_BoughtInvoiceWithMissingBuyerMst_SkipsPartyComparison(string? buyer)
+        {
+            var r = InvoiceClassifier.Check(Make("Mua vào", 1, buyer: buyer), ValidMst);
+            Assert.True(r.IsValid);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        public void Check_SoldInvoiceWithMissingSellerMst_AddsNoPartyIssue(string? seller)
+        {
+            var r = InvoiceClassifier.Check(Make("Bán ra", 1, seller: seller), ValidMst);
+            Assert.DoesNotContain(r.Issues, i => i.Contains("không khớp"));
+        }
+
         [Fact]
         public void Check_Cancelled_IsInvalid()
         {

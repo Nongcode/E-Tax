@@ -69,11 +69,14 @@ namespace E_Tax
             string own = (ownTaxCode ?? "").Trim();
             if (own.Length > 0)
             {
-                if (invoice.Loai_hoa_don == "Mua vào" &&
-                    !string.Equals((invoice.Ma_so_thue_nguoi_mua ?? "").Trim(), own, StringComparison.Ordinal))
+                // MST bên đối chiếu trống thì bỏ qua (HĐ không ghi MST người mua là thường gặp), chỉ cờ khi có MST khác hẳn
+                string buyer = (invoice.Ma_so_thue_nguoi_mua ?? "").Trim();
+                string seller = (invoice.Ma_so_thue ?? "").Trim();
+                if (invoice.Loai_hoa_don == "Mua vào" && buyer.Length > 0 &&
+                    !string.Equals(buyer, own, StringComparison.Ordinal))
                     issues.Add("MST người mua không khớp MST của bạn");
-                else if (invoice.Loai_hoa_don == "Bán ra" &&
-                    !string.Equals((invoice.Ma_so_thue ?? "").Trim(), own, StringComparison.Ordinal))
+                else if (invoice.Loai_hoa_don == "Bán ra" && seller.Length > 0 &&
+                    !string.Equals(seller, own, StringComparison.Ordinal))
                     issues.Add("MST người bán không khớp MST của bạn");
             }
 
