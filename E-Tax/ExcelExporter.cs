@@ -347,6 +347,73 @@ namespace E_Tax
             wb.SaveAs(filePath);
         }
 
+        /// <summary>Xuất tờ khai 01/GTGT dự thảo: dòng cảnh báo chưa đối chiếu, từng chỉ tiêu, rồi các cảnh báo.</summary>
+        public static void ExportVatReturn(VatReturn vatReturn, TaxPeriod period, string taxCode, string filePath)
+        {
+            const int colCount = 3;
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("01GTGT");
+
+            var banner = ws.Cell(1, 1);
+            banner.Value = "CHƯA ĐỐI CHIẾU VỚI MẪU GỐC";
+            ws.Range(1, 1, 1, colCount).Merge();
+            banner.Style.Font.Bold = true;
+            banner.Style.Font.FontSize = 14;
+            banner.Style.Font.FontColor = XLColor.Red;
+            banner.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell(2, 1).Value = "TỜ KHAI THUẾ GTGT 01/GTGT (DỰ THẢO)";
+            ws.Range(2, 1, 2, colCount).Merge();
+            ws.Cell(2, 1).Style.Font.Bold = true;
+            ws.Cell(3, 1).Value = $"Mã số thuế: {taxCode}";
+            ws.Range(3, 1, 3, colCount).Merge();
+            ws.Cell(4, 1).Value = $"Kỳ tính thuế: {period.Label}";
+            ws.Range(4, 1, 4, colCount).Merge();
+
+            const int headerRow = 6;
+            ws.Cell(headerRow, 1).Value = "Chỉ tiêu";
+            ws.Cell(headerRow, 2).Value = "Diễn giải";
+            ws.Cell(headerRow, 3).Value = "Giá trị";
+            var headerRange = ws.Range(headerRow, 1, headerRow, colCount);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            int row = headerRow + 1;
+            foreach (var code in VatReturnBuilder.Codes)
+            {
+                ws.Cell(row, 1).Value = $"[{code}]";
+                ws.Cell(row, 2).Value = VatReturnBuilder.Describe(code);
+                ws.Cell(row, 3).Value = vatReturn.Values.TryGetValue(code, out decimal v) ? v : 0m;
+                ws.Cell(row, 3).Style.NumberFormat.Format = NumberFormat;
+                row++;
+            }
+            SetThinBorders(ws.Range(headerRow, 1, row - 1, colCount));
+
+            if (vatReturn.Warnings.Count > 0)
+            {
+                row++;
+                ws.Cell(row, 1).Value = "CẢNH BÁO";
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Cell(row, 1).Style.Font.FontColor = XLColor.DarkRed;
+                row++;
+                foreach (var w in vatReturn.Warnings)
+                {
+                    ws.Cell(row, 1).Value = w;
+                    ws.Range(row, 1, row, colCount).Merge();
+                    ws.Cell(row, 1).Style.Alignment.WrapText = true;
+                    ws.Cell(row, 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+                    ws.Row(row).Height = 48; // ô gộp không tự giãn chiều cao
+                    row++;
+                }
+            }
+
+            ws.Column(1).Width = 12;
+            ws.Column(2).Width = 80;
+            ws.Column(3).Width = 20;
+            wb.SaveAs(filePath);
+        }
+
         private static void StyleTotalRow(IXLWorksheet ws, int row, int colCount, XLColor fill)
         {
             var range = ws.Range(row, 1, row, colCount);
