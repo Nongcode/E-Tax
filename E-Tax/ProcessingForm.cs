@@ -16,6 +16,7 @@ namespace E_Tax // Đảm bảo đây là namespace của bạn
         private readonly System.Windows.Forms.Timer _timer = new System.Windows.Forms.Timer { Interval = 500 };
         private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
         private volatile bool _closing;
+        private bool _closeFromOwner;
 
         public ProcessingForm()
         {
@@ -92,14 +93,34 @@ namespace E_Tax // Đảm bảo đây là namespace của bạn
             _timer.Start();
         }
 
+        /// <summary>
+        /// Đóng cửa sổ từ phía form chủ khi việc đã xong. Đây là đường đóng duy nhất do code chủ động.
+        /// </summary>
+        internal void CloseFromOwner()
+        {
+            if (IsDisposed) return;
+            _closeFromOwner = true;
+            Close();
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // Alt+F4 / đóng do người dùng: coi như bấm Hủy, không đóng cửa sổ (việc vẫn đang chạy).
+            // Đóng do form chủ thoát, tắt Windows hoặc CloseFromOwner thì không chặn.
+            if (!_closeFromOwner && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                RequestCancel();
+                return;
+            }
             _closing = true;
             _timer.Stop();
             base.OnFormClosing(e);
         }
 
-        private void btnCancel_Click(object? sender, EventArgs e)
+        private void btnCancel_Click(object? sender, EventArgs e) => RequestCancel();
+
+        private void RequestCancel()
         {
             if (_closing || _cts.IsCancellationRequested) return;
             _cts.Cancel();

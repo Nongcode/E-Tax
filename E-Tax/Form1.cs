@@ -831,7 +831,7 @@ namespace E_Tax
             finally
             {
                 this.Enabled = true;
-                modal.Close();
+                modal.CloseFromOwner();
 
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
@@ -981,9 +981,10 @@ namespace E_Tax
             bool modalOpen = true;
             void CloseModal()
             {
+                this.Enabled = true; // trả kích hoạt cho form chủ trước khi đóng cửa sổ tiến trình
                 if (!modalOpen) return;
                 modalOpen = false;
-                modal.Close();
+                modal.CloseFromOwner();
             }
 
             string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
@@ -1007,7 +1008,7 @@ namespace E_Tax
                 if (!invoicesToDownload.Any())
                 {
                     CloseModal();
-                    MessageBox.Show("Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, "Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
@@ -1134,7 +1135,7 @@ namespace E_Tax
 
                 using var fbd = new FolderBrowserDialog { Description = "Chọn thư mục để lưu file ZIP kết quả" };
 
-                if (fbd.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(fbd.SelectedPath))
+                if (fbd.ShowDialog(this) != DialogResult.OK || string.IsNullOrWhiteSpace(fbd.SelectedPath))
                 {
                     AppendLog("ℹ️ Người dùng đã hủy chọn thư mục lưu.");
                 }
@@ -1151,7 +1152,9 @@ namespace E_Tax
 
                     lblDownloadStatus.Visible = true;
                     lblDownloadStatus.Text = "Bước 5: Đang nén kết quả...";
+                    this.Enabled = false; // khóa lại trong lúc nén
                     await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath));
+                    this.Enabled = true; // bật lại trước hộp thoại kết quả để giữ kích hoạt
 
                     string successMessage = $"✅ Hoàn tất! \n\nĐã tải {successCount} HĐ gốc, xử lý/convert {convertSuccessCount} HĐ sang PDF.\n" +
                                             $"Đã lưu tất cả file (Excel, PDF, XML, ZIP gốc) vào một file nén duy nhất:\n\n{finalZipPath}";
@@ -1160,7 +1163,7 @@ namespace E_Tax
                         string errorList = string.Join("\n - ", failedChunks);
                         successMessage += $"\n\nLưu ý: Đã xảy ra lỗi khi xử lý các mục sau (kết quả có thể bị thiếu):\n - {errorList}";
                     }
-                    MessageBox.Show(successMessage,
+                    MessageBox.Show(this, successMessage,
                          failedChunks.Any() ? "Hoàn tất (Có lỗi)" : "Thành Công",
                          MessageBoxButtons.OK,
                          failedChunks.Any() ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
@@ -1175,17 +1178,20 @@ namespace E_Tax
             catch (JsonException jsonEx)
             {
                 AppendLog($"❌ Lỗi phân tích JSON trong SaveOriginalInvoicesAsync: {jsonEx}");
-                MessageBox.Show($"Lỗi xử lý dữ liệu trả về từ API: {jsonEx.Message}", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseModal();
+                MessageBox.Show(this, $"Lỗi xử lý dữ liệu trả về từ API: {jsonEx.Message}", "Lỗi dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (IOException ioEx)
             {
                 AppendLog($"❌ Lỗi IO trong SaveOriginalInvoicesAsync: {ioEx}");
-                MessageBox.Show($"Đã xảy ra lỗi khi xử lý file hoặc thư mục: {ioEx.Message}\n\nThường do đường dẫn quá dài, không có quyền ghi, hoặc file đang được sử dụng.", "Lỗi File/Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseModal();
+                MessageBox.Show(this, $"Đã xảy ra lỗi khi xử lý file hoặc thư mục: {ioEx.Message}\n\nThường do đường dẫn quá dài, không có quyền ghi, hoặc file đang được sử dụng.", "Lỗi File/Folder", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
                 AppendLog($"🐞 LỖI NGHIÊM TRỌNG trong SaveOriginalInvoicesAsync: {ex}");
-                MessageBox.Show($"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                CloseModal();
+                MessageBox.Show(this, $"Đã xảy ra lỗi không mong muốn: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
