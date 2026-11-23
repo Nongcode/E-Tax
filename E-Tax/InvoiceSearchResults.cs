@@ -27,6 +27,16 @@ namespace E_Tax
                 .ToList();
 
         /// <summary>
+        /// Thông báo khi không có hóa đơn nào nhưng có trang tìm kiếm lỗi: đây là lỗi tải, không phải kỳ trống.
+        /// Trả về null nếu không có trang lỗi.
+        /// </summary>
+        public static string? LoadFailureMessage(IReadOnlyCollection<string> failedChunks) =>
+            failedChunks.Count == 0
+                ? null
+                : "Không tải được danh sách hóa đơn (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối). " +
+                  $"Chưa thể kết luận kỳ này không có hóa đơn.\n\nCác khoảng thời gian/trang bị lỗi:\n - {string.Join("\n - ", failedChunks)}";
+
+        /// <summary>
         /// Phân loại một trang kết quả tìm kiếm. Items có giá trị khi trang có hóa đơn; IsEnd khi hết dữ liệu hợp lệ;
         /// Failed khi thân phản hồi không đọc được hoặc sai cấu trúc (không phải trang cuối). Không ném JsonException.
         /// </summary>

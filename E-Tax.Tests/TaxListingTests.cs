@@ -170,6 +170,60 @@ namespace E_Tax.Tests
             Assert.Contains(g[0].Rows, r => r.TrangThai == 3);
         }
 
+        private static IReadOnlyList<TaxListingGroup> GroupsOf(params (int? Status, bool Missing)[] rows)
+        {
+            var list = rows.Select((r, i) => new TaxListingRow("A", i + 1, "01/05/2026", "Đối tác", "0101234567", "10%", 100m, 10m, r.Status, r.Missing)).ToList();
+            return new[] { new TaxListingGroup("10%", list, list.Sum(x => x.DoanhSo), list.Sum(x => x.TienThue)) };
+        }
+
+        [Fact]
+        public void ExportWarnings_CleanData_IsEmpty() =>
+            Assert.Empty(TaxListing.ExportWarnings(GroupsOf((1, false), (1, false)), 0, 0));
+
+        [Fact]
+        public void ExportWarnings_StatusOtherThanOne_CountsNullStatus()
+        {
+            var w = Assert.Single(TaxListing.ExportWarnings(GroupsOf((1, false), (3, false), (null, false)), 0, 0));
+            Assert.Contains("2 dòng", w);
+            Assert.Contains("trạng thái khác 1", w);
+            Assert.Contains("đã bao gồm", w);
+        }
+
+        [Fact]
+        public void ExportWarnings_MissingAmounts_StatesRowCount()
+        {
+            var w = Assert.Single(TaxListing.ExportWarnings(GroupsOf((1, true), (1, false)), 0, 0));
+            Assert.Contains("1 dòng", w);
+            Assert.Contains("thiếu số tiền", w);
+        }
+
+        [Fact]
+        public void ExportWarnings_NoLineInvoices()
+        {
+            var w = Assert.Single(TaxListing.ExportWarnings(GroupsOf((1, false)), 3, 0));
+            Assert.Contains("3 hóa đơn", w);
+            Assert.Contains("không có dòng hàng", w);
+        }
+
+        [Fact]
+        public void ExportWarnings_NonVndInvoices()
+        {
+            var w = Assert.Single(TaxListing.ExportWarnings(GroupsOf((1, false)), 0, 4));
+            Assert.Contains("4 hóa đơn", w);
+            Assert.Contains("VND", w);
+        }
+
+        [Fact]
+        public void ExportWarnings_AllTogether_ListsFour() =>
+            Assert.Equal(4, TaxListing.ExportWarnings(GroupsOf((2, true)), 1, 1).Count);
+
+        [Fact]
+        public void ExportNotes_OnlyCoverStatusAndMissingAmounts()
+        {
+            Assert.Empty(TaxListing.ExportNotes(GroupsOf((1, false))));
+            Assert.Equal(2, TaxListing.ExportNotes(GroupsOf((2, true))).Count);
+        }
+
         [Fact]
         public void ExportBlocked_WhenDetailFailed()
         {

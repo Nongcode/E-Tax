@@ -265,7 +265,9 @@ namespace E_Tax
 
                         foreach (var product in productArray.Value.EnumerateArray())
                         {
-                            if (product.ValueKind != JsonValueKind.Object) continue;
+                            // Dòng hàng sai kiểu: cả HĐ bị tính là lỗi, không ghi một phần
+                            if (product.ValueKind != JsonValueKind.Object)
+                                throw new JsonException("Phần tử hdhhdvu không phải object.");
                             invoiceItems.Add(CreateDetailItem(root, product, invoiceHeader));
                         }
                     }
@@ -332,6 +334,7 @@ namespace E_Tax
             int? soHd = GetInt(invoice, "shdon") ?? header.So_hoa_don;
             string mstNb = GetString(invoice, "nbmst") ?? header.Ma_so_thue;
             string invoiceKey = InvoiceSearchResults.KeyOf(header);
+            string ngayLap = GetString(invoice, "tdlap");
             return new InvoiceDetailItem
             {
                 InvoiceKey = invoiceKey,
@@ -341,7 +344,7 @@ namespace E_Tax
                 TrangThaiHD = header.Trang_thai_hoa_don,
                 KyHieuHD = kyHieu,
                 SoHD = soHd,
-                NgayHD = FormatNgayLap(GetString(invoice, "tdlap")) ?? header.Ngay_lap,
+                NgayHD = InvoiceDate.ToDisplay(string.IsNullOrWhiteSpace(ngayLap) ? header.Ngay_lap : ngayLap)!,
                 TenNguoiBan = GetString(invoice, "nbten") ?? header.Thong_tin_hoa_don,
                 MSTNguoiBan = mstNb,
                 TongTienThanhToan_HD = GetDecimal(invoice, "tgtttbso") ?? header.Tong_tien_thanh_toan,
@@ -387,12 +390,6 @@ namespace E_Tax
                 if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out int intValFromString)) return intValFromString;
             }
             return null;
-        }
-
-        private static string FormatNgayLap(string ngayLapJson)
-        {
-            DateTime? dt = InvoiceDate.ToVietnamDate(ngayLapJson);
-            return dt.HasValue ? dt.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : ngayLapJson;
         }
     }
 }

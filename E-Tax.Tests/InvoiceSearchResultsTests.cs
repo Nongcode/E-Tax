@@ -10,6 +10,20 @@ namespace E_Tax.Tests
             new SearchResult { Id = id!, Loai_hoa_don = loai, So_hoa_don = so, Ma_so_thue = mst, Ky_hieu_hoa_don = kh, Ky_hieu_ma_so = 1, Ngay_lap = "2026-05-01" };
 
         [Fact]
+        public void LoadFailureMessage_ListsFailedPages_AndNeverSaysNotFound()
+        {
+            string? msg = InvoiceSearchResults.LoadFailureMessage(new[] { "Mua vào [01/05 - 30/05], Trang 1", "Bán ra [01/05 - 30/05], Trang 1" });
+            Assert.NotNull(msg);
+            Assert.Contains("Mua vào [01/05 - 30/05], Trang 1", msg);
+            Assert.Contains("Bán ra [01/05 - 30/05], Trang 1", msg);
+            Assert.DoesNotContain("không tìm thấy", msg!, System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void LoadFailureMessage_NoFailure_IsNull() =>
+            Assert.Null(InvoiceSearchResults.LoadFailureMessage(System.Array.Empty<string>()));
+
+        [Fact]
         public void Deduplicate_TwoInvoicesWithoutId_StaySeparate()
         {
             var r = InvoiceSearchResults.Deduplicate(new[] { Inv(null, "Mua vào", 1), Inv("", "Mua vào", 2) });

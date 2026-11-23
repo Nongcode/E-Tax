@@ -580,7 +580,7 @@ namespace E_Tax
         /// Tải file ZIP gốc (XML + bản thể hiện) của một hóa đơn vào thư mục saveDirectory.
         /// Trả về đường dẫn file ZIP, hoặc null nếu lỗi.
         /// </summary>
-        private async Task<string?> DownloadSingleInvoiceZipAsync(SearchResult invoice, string saveDirectory, CancellationToken ct = default)
+        private async Task<string?> DownloadSingleInvoiceZipAsync(SearchResult invoice, string saveDirectory, CancellationToken ct = default, string? fileIdentifier = null)
         {
             if (invoice == null || !invoice.HasLookupKeys())
             {
@@ -608,7 +608,7 @@ namespace E_Tax
                     return null;
                 }
 
-                string fullPath = Path.Combine(saveDirectory, $"HD_{invoice.FileIdentifier}.zip");
+                string fullPath = Path.Combine(saveDirectory, $"HD_{fileIdentifier ?? invoice.FileIdentifier}.zip");
                 using (var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     await response.Content.CopyToAsync(fileStream, ct);
@@ -810,12 +810,6 @@ namespace E_Tax
                 return;
             }
 
-            int noLine = _detailGridManager.LastNoLineCount;
-            if (noLine > 0 && MessageBox.Show(this,
-                    $"Có {noLine} hóa đơn không có dòng hàng hóa/dịch vụ nên sẽ không có trong bảng kê.\nVẫn xuất bảng kê?",
-                    "Hóa đơn không có dòng hàng", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-                return;
-
             var groups = TaxListing.Build(items, type);
             if (groups.Count == 0)
             {
@@ -823,10 +817,11 @@ namespace E_Tax
                 return;
             }
 
-            int nonVnd = TaxListing.CountNonVnd(_latestResults, type);
-            if (nonVnd > 0 && MessageBox.Show(this,
-                    $"Có {nonVnd} hóa đơn không tính bằng VND. Bảng kê cộng nguyên số tiền của các hóa đơn này vào tổng, không quy đổi.\nVẫn xuất bảng kê?",
-                    "Hóa đơn ngoại tệ", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất
+            var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount, TaxListing.CountNonVnd(_latestResults, type));
+            if (warnings.Count > 0 && MessageBox.Show(this,
+                    $"Bảng kê {kindText} có các điểm cần lưu ý:\n\n - {string.Join("\n - ", warnings)}\n\nVẫn xuất bảng kê?",
+                    "Cảnh báo trước khi xuất", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
 
             var period = _lastSearchPeriod;
@@ -915,11 +910,21 @@ namespace E_Tax
                 else
                 {
                     ClearSearchData();
-                    lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
-                    MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // Có trang lỗi thì chưa thể nói là không có hóa đơn
+                    string? loadError = InvoiceSearchResults.LoadFailureMessage(failedChunks);
+                    if (loadError != null)
+                    {
+                        lblDownloadStatus.Text = "Không tải được danh sách hóa đơn.";
+                        MessageBox.Show(loadError, "Lỗi tải danh sách", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    else
+                    {
+                        lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
+                        MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                 }
 
-                if (failedChunks.Any())
+                if (_latestResults.Any() && failedChunks.Any())
                 {
                     string errorList = string.Join("\n - ", failedChunks);
                     MessageBox.Show($"Đã hoàn tất tìm kiếm, tuy nhiên đã xảy ra lỗi ở các khoảng thời gian/trang sau:\n - {errorList}\n\nKết quả có thể bị thiếu.", "Lỗi trong quá trình tìm kiếm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -961,7 +966,8 @@ namespace E_Tax
         }
 
         /// <summary>
-        /// Bind danh sách (đã lọc) vào lưới tổng hợp, điền cột loại HĐ, đổi ngày lập sang dd/MM/yyyy và đánh lại STT.
+        /// Bind danh sách (đã lọc) vào lưới tổng hợp, điền cột loại HĐ và đánh lại STT.
+        /// Ngày lập hiển thị qua CellFormatting, Ngay_lap trong model giữ nguyên giá trị gốc.
         /// </summary>
         private void BindMainGrid(List<SearchResult> items)
         {
@@ -977,11 +983,6 @@ namespace E_Tax
                     if (row.DataBoundItem is SearchResult item && dgvMain.Columns.Contains("colDgvLoaiHD"))
                     {
                         row.Cells["colDgvLoaiHD"].Value = item.Loai_hoa_don;
-                    }
-                    var cellNgayLap = row.Cells["colDgvNgayLap"];
-                    if (cellNgayLap.Value is string ngayLapStr && InvoiceDate.ToVietnamDate(ngayLapStr) is DateTime ngayLap)
-                    {
-                        cellNgayLap.Value = ngayLap.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
                     }
                 }
             }
@@ -1123,13 +1124,23 @@ namespace E_Tax
                 if (!invoicesToDownload.Any())
                 {
                     CloseModal();
-                    MessageBox.Show(this, "Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // Có trang lỗi thì chưa thể nói là không có hóa đơn
+                    string? loadError = InvoiceSearchResults.LoadFailureMessage(failedChunks);
+                    if (loadError != null)
+                        MessageBox.Show(this, loadError, "Lỗi tải danh sách", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    else
+                        MessageBox.Show(this, "Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
 
-                int totalInvoices = invoicesToDownload.Count;
+                // Excel giữ đủ theo loại; phần tải chỉ lấy mỗi hóa đơn thật một lần
+                var downloadPlan = InvoiceDownloadPlan.Build(invoicesToDownload);
+                int duplicateCount = invoicesToDownload.Count - downloadPlan.Count;
+                if (duplicateCount > 0)
+                    AppendLog($"ℹ️ (Tải gốc) {duplicateCount} dòng là cùng hóa đơn ở cả Bán ra và Mua vào, chỉ tải một lần.");
+                int totalInvoices = downloadPlan.Count;
 
                 Directory.CreateDirectory(reportSubFolder);
                 Directory.CreateDirectory(zipSubFolder);
@@ -1149,11 +1160,15 @@ namespace E_Tax
                 await using var pdfConverter = new PdfConverter(EnsureChromiumAsync);
                 int successCount = 0;
                 int convertSuccessCount = 0;
+                var producedPdfs = new List<(InvoiceDownloadItem Item, string PdfPath)>();
 
-                for (int i = 0; i < invoicesToDownload.Count; i++)
+                for (int i = 0; i < downloadPlan.Count; i++)
                 {
-                    var invoice = invoicesToDownload[i];
-                    string invoiceIdentifier = invoice.FileIdentifier;
+                    var planItem = downloadPlan[i];
+                    var invoice = planItem.Invoice;
+                    string invoiceIdentifier = planItem.FileId;
+                    string outputPdfPath = Path.Combine(pdfSubFolder, $"HD_{invoiceIdentifier}.pdf");
+                    bool pdfProduced = false;
                     ct.ThrowIfCancellationRequested();
                     modal.UpdateStatus($"Bước 4: Xử lý HĐ {invoiceIdentifier} ({i + 1}/{totalInvoices})...");
                     modal.Report(new BatchProgress("Xử lý HĐ", i, totalInvoices, failedChunks.Count));
@@ -1161,7 +1176,7 @@ namespace E_Tax
 
                     try
                     {
-                        string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, zipSubFolder, ct);
+                        string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, zipSubFolder, ct, invoiceIdentifier);
                         if (zipFilePath == null)
                         {
                             failedChunks.Add($"{invoiceIdentifier} (Lỗi tải ZIP)");
@@ -1176,17 +1191,20 @@ namespace E_Tax
                         string? pdfFile = FindFirstFile(tempExtractPath, "*.pdf");
                         string? htmlFile = FindFirstFile(tempExtractPath, "*.html");
                         string? xmlFile = FindFirstFile(tempExtractPath, "*.xml");
-                        string outputPdfPath = Path.Combine(pdfSubFolder, $"HD_{invoiceIdentifier}.pdf");
 
                         if (pdfFile != null)
                         {
                             File.Copy(pdfFile, outputPdfPath, true);
+                            pdfProduced = true;
+                            producedPdfs.Add((planItem, outputPdfPath));
                             convertSuccessCount++;
                         }
                         else if (htmlFile != null)
                         {
                             modal.UpdateStatus($"Convert HTML... ({i + 1}/{totalInvoices})");
                             await pdfConverter.ConvertAsync(htmlFile, outputPdfPath);
+                            pdfProduced = true;
+                            producedPdfs.Add((planItem, outputPdfPath));
                             convertSuccessCount++;
                         }
                         else
@@ -1208,6 +1226,12 @@ namespace E_Tax
                     {
                         AppendLog($"❌ (Tải gốc) Lỗi Giải nén/Convert HĐ {invoiceIdentifier}: {exConvert.Message}");
                         failedChunks.Add($"{invoiceIdentifier} (Lỗi giải nén/convert)");
+                        // PDF ghi dở không được nằm trong file kết quả
+                        if (!pdfProduced)
+                        {
+                            try { if (File.Exists(outputPdfPath)) File.Delete(outputPdfPath); }
+                            catch (Exception exDelete) { AppendLog($"⚠️ Không xóa được PDF lỗi {Path.GetFileName(outputPdfPath)}: {exDelete.Message}"); }
+                        }
                     }
                     finally
                     {
@@ -1222,11 +1246,8 @@ namespace E_Tax
                 // --- Gộp tất cả PDF thành một file (theo ký hiệu rồi số HĐ) ---
                 try
                 {
-                    var orderedPdfs = invoicesToDownload
-                        .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
-                        .Select(inv => Path.Combine(pdfSubFolder, $"HD_{inv.FileIdentifier}.pdf"))
-                        .Where(File.Exists)
-                        .ToList();
+                    // Chỉ gộp PDF thực sự tạo được cho từng HĐ trong lượt này
+                    var orderedPdfs = InvoiceDownloadPlan.OrderForMerge(producedPdfs);
                     if (orderedPdfs.Count > 0)
                     {
                         modal.UpdateStatus("Đang gộp PDF...");
@@ -1271,7 +1292,8 @@ namespace E_Tax
                     await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath));
                     this.Enabled = true; // bật lại trước hộp thoại kết quả để giữ kích hoạt
 
-                    string successMessage = $"✅ Hoàn tất! \n\nĐã tải {successCount} HĐ gốc, xử lý/convert {convertSuccessCount} HĐ sang PDF.\n" +
+                    string duplicateNote = duplicateCount > 0 ? $" ({duplicateCount} dòng trùng ở cả Bán ra và Mua vào chỉ tải một lần)" : "";
+                    string successMessage = $"✅ Hoàn tất! \n\nĐã tải {successCount} HĐ gốc{duplicateNote}, xử lý/convert {convertSuccessCount} HĐ sang PDF.\n" +
                                             $"Đã lưu tất cả file (Excel, PDF, XML, ZIP gốc) vào một file nén duy nhất:\n\n{finalZipPath}";
                     if (failedChunks.Any())
                     {
@@ -1674,10 +1696,11 @@ namespace E_Tax
                 selectedInvoices.Add(currentInvoice);
             }
 
-            return selectedInvoices
+            // Cùng một hóa đơn được chọn ở cả Bán ra và Mua vào chỉ xử lý một lần
+            var sorted = selectedInvoices
                 .Where(invoice => invoice.HasLookupKeys())
-                .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don)
-                .ToList();
+                .OrderBy(inv => inv.Ky_hieu_hoa_don).ThenBy(inv => inv.So_hoa_don);
+            return InvoiceDownloadPlan.Build(sorted).Select(item => item.Invoice).ToList();
         }
 
         /// <summary>
@@ -1788,15 +1811,17 @@ namespace E_Tax
         /// Thứ tự file trả về theo thứ tự hóa đơn đầu vào. <paramref name="report"/> nhận số hóa đơn đã xong và dòng trạng thái.
         /// </summary>
         private async Task<(List<string> Paths, List<string> Failed)> PrepareInvoicePdfsAsync(
-            IReadOnlyList<SearchResult> invoices, string tempDir, PdfConverter converter, Action<int, string> report)
+            IReadOnlyList<SearchResult> selectedInvoices, string tempDir, PdfConverter converter, Action<int, string> report)
         {
+            var plan = InvoiceDownloadPlan.Build(selectedInvoices);
+            var invoices = plan.Select(item => item.Invoice).ToList();
             var paths = new List<string>();
             var failed = new List<string>();
 
             for (int i = 0; i < invoices.Count; i++)
             {
                 SearchResult invoice = invoices[i];
-                string invoiceIdentifier = invoice.FileIdentifier;
+                string invoiceIdentifier = plan[i].FileId;
                 string invoiceTempDir = Path.Combine(tempDir, $"Invoice_{i}_{invoiceIdentifier}");
                 string extractPath = Path.Combine(invoiceTempDir, "extracted");
                 string outputPdfPath = Path.Combine(invoiceTempDir, $"HD_{invoiceIdentifier}.pdf");
@@ -1806,7 +1831,7 @@ namespace E_Tax
                     Directory.CreateDirectory(extractPath);
 
                     report(i, $"({i + 1}/{invoices.Count}) Đang tải HĐ {invoice.So_hoa_don}...");
-                    string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, invoiceTempDir);
+                    string? zipFilePath = await DownloadSingleInvoiceZipAsync(invoice, invoiceTempDir, default, invoiceIdentifier);
 
                     if (zipFilePath == null)
                     {
@@ -2206,6 +2231,11 @@ namespace E_Tax
         private void DgvMain_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
             if (e.RowIndex < 0 || e.RowIndex >= dgvMain.Rows.Count) return;
+            if (e.ColumnIndex == dgvMain.Columns["colDgvNgayLap"]?.Index && e.Value is string ngayLap)
+            {
+                e.Value = InvoiceDate.ToDisplay(ngayLap);
+                e.FormattingApplied = true;
+            }
             var risk = RiskFor(dgvMain.Rows[e.RowIndex].DataBoundItem as SearchResult, _riskResults);
             if (risk == null) return;
 

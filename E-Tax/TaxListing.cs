@@ -108,6 +108,31 @@ namespace E_Tax
             return (row, InvoiceDate.ToVietnamDate(first.NgayHD));
         }
 
+        /// <summary>Ghi chú ghi vào file bảng kê: dòng có trạng thái khác 1 (null tính là khác 1) và dòng thiếu số tiền.</summary>
+        public static IReadOnlyList<string> ExportNotes(IReadOnlyList<TaxListingGroup> groups)
+        {
+            var rows = groups.SelectMany(g => g.Rows).ToList();
+            var notes = new List<string>();
+            int otherStatus = rows.Count(r => r.TrangThai != 1);
+            if (otherStatus > 0)
+                notes.Add($"Có {otherStatus} dòng thuộc hóa đơn có trạng thái khác 1 hoặc không rõ (tô vàng; nếu đồng thời thiếu số tiền thì tô đỏ). Các tổng trong bảng kê đã bao gồm những dòng này.");
+            int missing = rows.Count(r => r.ThieuSoTien);
+            if (missing > 0)
+                notes.Add($"Có {missing} dòng thiếu số tiền (tô đỏ). Số tiền thiếu được tính là 0 trong các tổng nên tổng có thể sai lệch.");
+            return notes;
+        }
+
+        /// <summary>Các cảnh báo cần người dùng xác nhận trước khi xuất; rỗng thì không cần hỏi.</summary>
+        public static IReadOnlyList<string> ExportWarnings(IReadOnlyList<TaxListingGroup> groups, int noLineCount, int nonVndCount)
+        {
+            var warnings = new List<string>(ExportNotes(groups));
+            if (noLineCount > 0)
+                warnings.Add($"Có {noLineCount} hóa đơn không có dòng hàng hóa/dịch vụ nên sẽ không có trong bảng kê.");
+            if (nonVndCount > 0)
+                warnings.Add($"Có {nonVndCount} hóa đơn không tính bằng VND. Bảng kê cộng nguyên số tiền của các hóa đơn này vào tổng, không quy đổi.");
+            return warnings;
+        }
+
         /// <summary>Lý do không được xuất bảng kê (có hóa đơn thiếu chi tiết); null nếu được phép.</summary>
         public static string? ExportBlockReason(int failedInvoices) =>
             failedInvoices > 0

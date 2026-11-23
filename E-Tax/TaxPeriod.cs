@@ -35,13 +35,17 @@ namespace E_Tax
         private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
         private static readonly Regex HasOffset = new(@"[T ]\S*(Z|[+-]\d{2}:?\d{2})$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        /// <summary>Ngày hiển thị dd/MM/yyyy theo giờ Việt Nam; không đọc được thì giữ nguyên chuỗi gốc.</summary>
+        public static string? ToDisplay(string? raw) =>
+            ToVietnamDate(raw) is DateTime date ? date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : raw;
+
         public static DateTime? ToVietnamDate(string? raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
             raw = raw.Trim();
             var ci = CultureInfo.InvariantCulture;
 
-            if (DateTime.TryParseExact(raw, new[] { "yyyyMMddHHmmss", "dd/MM/yyyy" }, ci, DateTimeStyles.None, out var exact))
+            if (DateTime.TryParseExact(raw, new[] { "yyyyMMddHHmmss", "dd/MM/yyyy", "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy HH:mm" }, ci, DateTimeStyles.None, out var exact))
                 return exact.Date;
 
             if (HasOffset.IsMatch(raw))

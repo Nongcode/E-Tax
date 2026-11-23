@@ -162,6 +162,53 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void TaxListing_WritesNoteForStatusAndMissingAmounts()
+        {
+            var groups = new List<TaxListingGroup>
+            {
+                new("10%", new[] { ListingRow("A", 1, "10%", 100m, 10m, tt: 3), ListingRow("A", 2, "10%", 100m, 0m, thieu: true) }, 200m, 10m)
+            };
+            string path = NewFile("bangke-note.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, TaxPeriod.Month(2026, 5), path);
+
+            using var wb = new XLWorkbook(path);
+            string note = wb.Worksheet(1).Cell("A3").GetString();
+            Assert.Contains("trạng thái khác 1", note);
+            Assert.Contains("đã bao gồm", note);
+            Assert.Contains("thiếu số tiền", note);
+            Assert.True(wb.Worksheet(1).Cell("A3").IsMerged());
+            Assert.True(wb.Worksheet(1).Column(1).Width < 60, "Ghi chú không được làm giãn cột A");
+        }
+
+        [Fact]
+        public void TaxListing_CleanData_HasNoNote()
+        {
+            var groups = new List<TaxListingGroup> { new("10%", new[] { ListingRow("A", 1, "10%", 100m, 10m) }, 100m, 10m) };
+            string path = NewFile("bangke-clean.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, TaxPeriod.Month(2026, 5), path);
+
+            using var wb = new XLWorkbook(path);
+            Assert.Equal("", wb.Worksheet(1).Cell("A3").GetString());
+        }
+
+        [Theory]
+        [InlineData("2026-01-31T17:30:00Z", "01/02/2026")]
+        [InlineData("khong-phai-ngay", "khong-phai-ngay")]
+        public void SearchResults_DateColumn_UsesVietnamDate(string raw, string expected)
+        {
+            var invoice = new SearchResult { Ma_so_thue = "0101234567", Ngay_lap = raw };
+            string path = NewFile("ds-date.xlsx");
+
+            ExcelExporter.ExportSearchResults(new List<SearchResult> { invoice }, path);
+
+            using var wb = new XLWorkbook(path);
+            Assert.Equal(expected, wb.Worksheet("DanhSachHoaDon").Cell("E5").GetString());
+            Assert.Equal(raw, invoice.Ngay_lap); // không đổi model
+        }
+
+        [Fact]
         public void SingleInvoiceDetail_NoRows_WritesNotFoundMessage()
         {
             string path = NewFile("single.xlsx");

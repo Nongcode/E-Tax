@@ -170,6 +170,99 @@ namespace E_Tax.Tests
             Assert.Null(pages);
         }
 
+        [Fact]
+        public async Task ErrorBodyOnFirstPage_ReturnsNullAndIsNotCached()
+        {
+            var handler = new FakeHttpHandler((_, n) => FakeHttpHandler.Json(n == 1 ? "{\"message\":\"loi tam thoi\"}" : FakeHttpHandler.DetailJson(2)));
+            var service = CreateService(handler);
+
+            Assert.Null(await service.GetDetailPagesAsync(Invoice("a")));
+
+            var retry = await service.GetDetailPagesAsync(Invoice("a"));
+            Assert.NotNull(retry);
+            Assert.Equal(2, handler.RequestCount);
+        }
+
+        [Fact]
+        public async Task ErrorBodyOnSecondPage_ReturnsNullAndIsNotCached()
+        {
+            var handler = new FakeHttpHandler((req, n) => n == 2
+                ? FakeHttpHandler.Json("{\"message\":\"loi tam thoi\"}")
+                : FakeHttpHandler.Json(FakeHttpHandler.DetailJson(req.RequestUri!.Query.Contains("page=0") ? 50 : 3)));
+            var service = CreateService(handler);
+
+            Assert.Null(await service.GetDetailPagesAsync(Invoice("a")));
+
+            var retry = await service.GetDetailPagesAsync(Invoice("a"));
+            Assert.NotNull(retry);
+            Assert.Equal(2, retry!.Count);
+        }
+
+        [Theory]
+        [InlineData("{\"shdon\":7}")]
+        [InlineData("{\"shdon\":\"7\"}")]
+        [InlineData("{\"shdon\":\"00000007\"}")]
+        [InlineData("{\"data\":{\"shdon\":7}}")]
+        [InlineData("{\"shdon\":7,\"hdhhdvu\":null}")]
+        public async Task MatchingShdonWithoutArray_IsValidNoLineInvoice(string body)
+        {
+            var service = CreateService(new FakeHttpHandler((_, _) => FakeHttpHandler.Json(body)));
+
+            var pages = await service.GetDetailPagesAsync(Invoice("a", 7));
+
+            Assert.NotNull(pages);
+            Assert.Single(pages!);
+        }
+
+        [Theory]
+        [InlineData("{\"shdon\":8,\"hdhhdvu\":[{\"ten\":\"SP\"}]}")]
+        [InlineData("{\"shdon\":\"8\",\"hdhhdvu\":[]}")]
+        [InlineData("{\"shdon\":8}")]
+        [InlineData("{\"shdon\":\"abc\"}")]
+        [InlineData("{\"data\":{\"hoadon\":{\"shdon\":8,\"hdhhdvu\":[{\"ten\":\"SP\"}]}}}")]
+        public async Task MismatchedShdon_IsFailedPage(string body)
+        {
+            var service = CreateService(new FakeHttpHandler((_, _) => FakeHttpHandler.Json(body)));
+
+            Assert.Null(await service.GetDetailPagesAsync(Invoice("a", 7)));
+        }
+
+        [Theory]
+        [InlineData("{}")]
+        [InlineData("[]")]
+        [InlineData("null")]
+        [InlineData("\"loi\"")]
+        [InlineData("{\"data\":null,\"message\":\"loi\"}")]
+        [InlineData("{\"shdon\":7,\"hdhhdvu\":\"loi\"}")]
+        public async Task BodyWithoutValidInvoiceShape_IsFailedPage(string body)
+        {
+            var service = CreateService(new FakeHttpHandler((_, _) => FakeHttpHandler.Json(body)));
+
+            Assert.Null(await service.GetDetailPagesAsync(Invoice("a", 7)));
+        }
+
+        [Theory]
+        [InlineData("{\"hdhhdvu\":[{\"ten\":\"SP\"},\"loi\"]}")]
+        [InlineData("{\"hdhhdvu\":[null]}")]
+        [InlineData("{\"shdon\":7,\"hdhhdvu\":[1,{\"ten\":\"SP\"}]}")]
+        public async Task NonObjectProductLine_FailsWholeInvoice(string body)
+        {
+            var service = CreateService(new FakeHttpHandler((_, _) => FakeHttpHandler.Json(body)));
+
+            Assert.Null(await service.GetDetailPagesAsync(Invoice("a", 7)));
+        }
+
+        [Fact]
+        public async Task EmptyArrayWithoutShdon_StaysValid()
+        {
+            var service = CreateService(new FakeHttpHandler((_, _) => FakeHttpHandler.Json(FakeHttpHandler.DetailJson(0))));
+
+            var pages = await service.GetDetailPagesAsync(Invoice("a", 7));
+
+            Assert.NotNull(pages);
+            Assert.Single(pages!);
+        }
+
         private static void InterlockedMax(ref int target, int value)
         {
             int seen;

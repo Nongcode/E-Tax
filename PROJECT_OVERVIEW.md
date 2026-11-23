@@ -44,7 +44,8 @@ E-Tax/
 ├── BatchProgress.cs           # record (Step, Done, Total, Failed) cho ProcessingForm
 ├── TaxListing.cs              # Dựng bảng kê mua/bán theo thuế suất (NormalizeRate, Build, CountNonVnd, ExportBlockReason)
 ├── RiskCheckService.cs        # Kiểm tra NCC rủi ro hàng loạt (song song 3); chỉ Safe khi phản hồi khẳng định rõ, còn lại Unknown
-├── SearchResult.cs            # enum InvoiceType, SearchResult (+ HasLookupKeys(), FileIdentifier), SearchResponse
+├── SearchResult.cs            # enum InvoiceType, SearchResult (+ HasLookupKeys(), FileIdentifier = MST_KHMS_KHHĐ_Số), SearchResponse
+├── InvoiceDownloadPlan.cs     # Danh sách tải gốc/in/gộp: mỗi HĐ thật một lần, tên file không trùng, thứ tự gộp PDF
 ├── GdtApi.cs                  # Hằng URL/User-Agent; CreateRequest(...) set header chung; BuildDetailUrl(...)
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
 ├── ExcelExporter.cs            # ClosedXML: ExportSearchResults (DS 18 cột), ExportDetailSummary (chi tiết tổng hợp), ExportSingleInvoiceDetail (1 HĐ) — chỉ ghi file
@@ -139,15 +140,16 @@ Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `c
 1. `SearchInvoicesAsync(from, to, includeSold, includeBought, reportStatus)` — **dùng chung** với `SaveOriginalInvoicesAsync`:
    chia lát 30 ngày; mỗi lát lặp trang (size 50) cho Bán ra / Mua vào độc lập (`FetchSearchPageAsync` trả false khi hết trang hoặc lỗi).
 2. Gắn `Loai_hoa_don = "Bán ra"/"Mua vào"`, `InvoiceSearchResults.Deduplicate` (theo loại + khóa), sort `Ngay_lap` desc, `So_hoa_don` asc → `_latestResults`. Trang lỗi gom vào `FailedChunks`; số trang lỗi lưu `_lastFailedSearchPages`.
-3. `BindMainGrid()` bind `dgvMain` (tab **Tổng hợp**); bind `dgvGiamThue` (tab có text **"VAT nộp"**).
+3. `BindMainGrid()` bind `dgvMain` (tab **Tổng hợp**; ngày hiển thị `dd/MM/yyyy` qua `CellFormatting`, `Ngay_lap` trong model giữ giá trị gốc); bind `dgvGiamThue` (tab có text **"VAT nộp"**).
 4. `DetailGridManager.PopulateDetailGridAsync` → `InvoiceDetailService.PrefetchAsync` (song song tối đa `MaxConcurrency = 3`, không delay cố định; progress qua `onCompleted`) → dựng dòng **theo thứ tự danh sách** (STT ổn định) từ mọi trang → bind:
    - `dgvDetails` (tab **Chi tiết**) — tất cả dòng hàng
    - `dgvMua` (tab **Bk mua**) — dòng của HĐ "Mua vào"
    - `dgvBan` (tab **BK bán**) — còn lại
    - `dgvVatNop` (tab có text **"Bảng kê Thuế"**) — tất cả, ít cột
    Đầu `btnLeftSearch_Click` gọi `_detailService.ClearCache()`; trong phiên tìm kiếm, chi tiết đã tải được dùng lại (cache theo `Id`, chỉ cache kết quả thành công đủ trang).
-   HĐ lỗi hoặc thiếu trang → `GetDetailPagesAsync` trả null (không trả dữ liệu thiếu); `PopulateDetailGridAsync` trả số HĐ lỗi → cảnh báo "Thiếu dữ liệu chi tiết", không báo "Hoàn tất". Lưu hàng loạt: HĐ lỗi chi tiết trong Excel được thêm vào danh sách lỗi cuối.
-5. Hiển thị `ProcessingForm` (nút **Hủy**, tiến trình theo `BatchProgress`) trong lúc chạy; `this.Enabled = false`. **Hủy** chỉ có ở ba luồng dùng `ProcessingForm.ShowFor`: Tìm kiếm, "Tải tất cả HĐ Gốc" và "Kiểm tra NCC" ("In pdf" và "Gộp PDF" không có Hủy). Với tìm kiếm, Hủy truyền `CancellationToken` xuống search/chi tiết (không đổi thành chuỗi `"❌"`): bỏ mọi kết quả dở dang, xóa `DetailGridManager.LatestItems`/`LastFailedCount` để bảng kê không xuất dữ liệu cũ, không báo lỗi hay "Hoàn tất".
+   Trang chi tiết chỉ hợp lệ khi có mảng `hdhhdvu` toàn object, hoặc có `shdon` khớp số HĐ (HĐ không có dòng hàng); `shdon` không khớp, phần tử không phải object, hoặc thân lỗi kèm HTTP 200 đều là trang lỗi (`InvoiceJson.IsValidDetailPage`).
+   HĐ lỗi hoặc thiếu trang → `GetDetailPagesAsync` trả null, không cache (không trả dữ liệu thiếu); `PopulateDetailGridAsync` trả số HĐ lỗi → cảnh báo "Thiếu dữ liệu chi tiết", không báo "Hoàn tất". Lưu hàng loạt: HĐ lỗi chi tiết trong Excel được thêm vào danh sách lỗi cuối.
+5. Hiển thị `ProcessingForm` (nút **Hủy**, tiến trình theo `BatchProgress`) trong lúc chạy; `this.Enabled = false`. **Hủy** chỉ có ở ba luồng: Tìm kiếm và "Kiểm tra NCC" (dùng `ProcessingForm.ShowFor`), "Tải tất cả HĐ Gốc" (dùng `new ProcessingForm()`); "In pdf" và "Gộp PDF" không có Hủy. Không có hóa đơn nhưng có trang lỗi thì báo lỗi tải kèm danh sách trang, không báo "không tìm thấy" (cả Tìm kiếm và Tải gốc). Với tìm kiếm, Hủy truyền `CancellationToken` xuống search/chi tiết (không đổi thành chuỗi `"❌"`): bỏ mọi kết quả dở dang, xóa `DetailGridManager.LatestItems`/`LastFailedCount` để bảng kê không xuất dữ liệu cũ, không báo lỗi hay "Hoàn tất".
 
 > Lưu ý tên: `tabVATNop` hiển thị "Bảng kê Thuế" (chứa `dgvVatNop`), còn `tabGiamThue` hiển thị "VAT nộp" (chứa `dgvGiamThue`). Tên biến và text bị lệch nhau.
 
@@ -160,7 +162,7 @@ Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `c
 | Tải chi tiết HĐ (`btnExportChiTiet`) | `GetDetailPagesAsync` → `BuildDetailRows(pages)` (gộp mọi trang) → `ExcelExporter.ExportSingleInvoiceDetail` | Excel hàng hóa của **1** HĐ đang chọn |
 | Xem HĐ (`btnXemHD`) | `DownloadSingleInvoiceZipAsync` → giải nén temp → mở HTML/PDF bằng app mặc định | |
 | In pdf (`btnCnKoPdf`) | handler + `PrintPdfFilesAsync` / `SavePdfFilesToFolder` | Với các dòng đang chọn: tải ZIP → lấy PDF hoặc `PdfConverter.ConvertAsync` → có máy in thì `Verb="print"`, không thì chọn thư mục lưu PDF |
-| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết (`ExportInvoiceDetailsToExcelAsync`: `PrefetchAsync` dùng lại cache, gộp mọi trang, đánh STT → `ExcelExporter.ExportDetailSummary`) + tải ZIP từng HĐ + PDF + XML → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
+| Tải tất cả HĐ Gốc (`btnTaiHDGoc`) | `SaveOriginalInvoicesAsync` | **Tự search lại** theo ngày (`SearchInvoicesAsync`) → Excel DS + Excel chi tiết (`ExportInvoiceDetailsToExcelAsync`: `PrefetchAsync` dùng lại cache, gộp mọi trang, đánh STT → `ExcelExporter.ExportDetailSummary`) + tải ZIP từng HĐ (mỗi HĐ thật một lần qua `InvoiceDownloadPlan`; Excel vẫn đủ theo loại) + PDF + XML, `_GopTatCa.pdf` chỉ gồm PDF tạo được trong lượt này → nén 1 file `E-Tax_Export_{from}_den_{to}.zip` (thư mục con `0_BaoCaoExcel`, `1_HoaDonGoc_ZIP`, `2_HoaDonPDF`, `3_HoaDonXML`) |
 | Cột "Tải" trong `dgvMain` (`colDgvTraCuu`) | `dgvMain_CellContentClick` → `GetDetailPagesAsync` (trang đầu) → `BuildTraCuuLink` → `TraCuuForm` | Lấy `mhdon` (mã tra cứu) + `ngcnhat` (NCC: tvan_misa/bkav/vnpt/viettel/thaison) → link tra cứu |
 | Gộp PDF (`btnGopPdf`) | `btnGopPdf_Click`: hỏi nơi lưu trước → tải ZIP từng HĐ đã chọn → lấy PDF hoặc `PdfConverter.ConvertAsync` (HĐ HTML) → `PdfMerger.Merge` theo thứ tự chọn | **Không có Hủy** (không dùng `ProcessingForm`/`CancellationToken`); chặn chạy đồng thời với In pdf; HĐ lỗi không để lại trang nào và được liệt kê cuối; thư mục tạm dọn ở `finally` |
 | Xuất bảng kê mua / bán (`btnExportBangKeMua` / `btnExportBangKeBan`) | `ExportTaxListing(type)` → `TaxListing.Build(LatestItems)` → `ExcelExporter.ExportTaxListing` | Nhóm theo thuế suất, gộp theo (HĐ, thuế suất). File `BangKe_{Mua/Ban}_{kỳ}.xlsx` theo `_lastSearchPeriod`. Xem mục Bảng kê dưới |
@@ -171,13 +173,13 @@ Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `c
 #### Bảng kê (mua vào / bán ra)
 - Dữ liệu từ `LatestItems` (dòng hàng của lần tìm gần nhất); thuế suất chuẩn hóa bởi `TaxListing.NormalizeRate` (có `%` là phần trăm; số trần 0<x<1 là tỷ lệ; KCT/KKKNT giữ nguyên; rỗng = "Không rõ"). Đối tác: Mua vào = người bán, Bán ra = người mua (thiếu thì để trống).
 - **Chặn xuất** (`ExportBlockReason`) khi `LastFailedCount + _lastFailedSearchPages > 0` (HĐ lỗi/thiếu chi tiết hoặc trang tìm kiếm lỗi): không bao giờ xuất bảng kê thiếu số liệu. Chưa tìm kiếm thì báo chưa có dữ liệu.
-- Cảnh báo Yes/No: có HĐ không có dòng hàng (`LastNoLineCount`, sẽ vắng trong bảng kê); có HĐ ngoại tệ (`CountNonVnd`, cộng nguyên số tiền, không quy đổi).
+- **Một** xác nhận Yes/No trước khi xuất (`TaxListing.ExportWarnings`, rỗng thì không hỏi, No thì dừng): dòng có trạng thái khác 1 hoặc null (vẫn tính vào tổng); dòng thiếu số tiền (tính là 0); HĐ không có dòng hàng (`LastNoLineCount`, sẽ vắng trong bảng kê); HĐ ngoại tệ (`CountNonVnd`, cộng nguyên số tiền, không quy đổi). Hai cảnh báo đầu được ghi thêm ở dòng 3 của file (`TaxListing.ExportNotes`).
 - Dòng có `DoanhSo` null, hoặc `TienThue` null trên thuế suất phần trăm, bị đánh dấu `ThieuSoTien` (KCT/KKKNT thuế null không tính là thiếu). Dòng có `tthai` null hoặc khác 1 được tô vàng trong Excel.
 
 ### 5.5 Tiện ích
 - `AppendLog(string)` → `Logger.Write` ghi file `%LocalAppData%/E-Tax/logs/etax_yyyyMMdd.log` (giữ 30 ngày, không ném lỗi). DetailGridManager cũng log qua delegate này. **Không log token/mật khẩu.**
 - `EnsureChromiumAsync()` tải Chromium lần đầu và **cache đường dẫn** (`_chromiumExecutablePath`); `PdfConverter` (PdfConverter.cs) mở **1 trình duyệt cho cả lô**, mỗi HĐ 1 tab (A4, Networkidle0, timeout 60s), đóng khi `DisposeAsync`.
-- `DownloadSingleInvoiceZipAsync(invoice, dir)` trả đường dẫn `HD_{FileIdentifier}.zip` hoặc `null` khi lỗi.
+- `DownloadSingleInvoiceZipAsync(invoice, dir, ct, fileIdentifier)` trả đường dẫn `HD_{fileIdentifier ?? FileIdentifier}.zip` hoặc `null` khi lỗi. Tên file gồm MST người bán + KH mẫu số + ký hiệu + số, ký tự không hợp lệ thành `_`.
 - `GetSelectedInvoiceWithKeys(row, msg)` — lấy HĐ từ dòng lưới và kiểm tra đủ khóa, tự hiện thông báo nếu không hợp lệ.
 - `ShowStatusMessage` + `statusTimer` (2s) — thông báo tạm trên `lblStatusMessage`.
 - `DataGridView_DataError` — nuốt lỗi binding của mọi lưới.

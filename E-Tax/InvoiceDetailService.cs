@@ -67,6 +67,11 @@ namespace E_Tax
                 try
                 {
                     using var doc = JsonDocument.Parse(json);
+                    if (!InvoiceJson.IsValidDetailPage(doc.RootElement, invoice.So_hoa_don))
+                    {
+                        _log($"❌ (Chi tiết HĐ) Phản hồi không hợp lệ cho HĐ {invoice.So_hoa_don} (trang {page + 1}): không có dữ liệu đúng hóa đơn.");
+                        break;
+                    }
                     var products = InvoiceJson.FindProductArray(InvoiceJson.GetDataElement(doc.RootElement));
                     productCount = products?.GetArrayLength() ?? 0;
                 }
