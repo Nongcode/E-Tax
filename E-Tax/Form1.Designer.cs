@@ -28,6 +28,8 @@ namespace E_Tax
 
         private DataGridViewTextBoxColumn colDgvSTT;
         private DataGridViewTextBoxColumn colDgvLoaiHD;
+        private DataGridViewTextBoxColumn colDgvRuiRo;
+        private Button btnKiemTraNCC;
         private DataGridViewTextBoxColumn colDgvMST;
         private DataGridViewTextBoxColumn colDgvKHMauSo;
         private DataGridViewTextBoxColumn colDgvKHHoaDon;
@@ -128,6 +130,8 @@ namespace E_Tax
             lblDownloadStatus = new Label();
             pictureBox2 = new PictureBox();
             colDgvLoaiHD = new DataGridViewTextBoxColumn();
+            colDgvRuiRo = new DataGridViewTextBoxColumn();
+            btnKiemTraNCC = new Button();
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
@@ -421,6 +425,7 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(btnExportDS);
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeMua);
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeBan);
+            mainSplitContainer.Panel1.Controls.Add(btnKiemTraNCC);
             mainSplitContainer.Panel1.Controls.Add(tabControlMain);
             mainSplitContainer.Panel1.Controls.Add(gbNguoiBan);
             mainSplitContainer.Panel1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -704,7 +709,7 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien, colDgvRuiRo });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
@@ -1084,6 +1089,26 @@ namespace E_Tax
             // colDgvLoaiHD
             // 
             colDgvLoaiHD.Name = "colDgvLoaiHD";
+            //
+            // colDgvRuiRo (cột không bind: nhãn và màu tính trong CellFormatting)
+            //
+            colDgvRuiRo.HeaderText = "Rủi ro NCC";
+            colDgvRuiRo.Name = "colDgvRuiRo";
+            colDgvRuiRo.ReadOnly = true;
+            colDgvRuiRo.SortMode = DataGridViewColumnSortMode.NotSortable;
+            colDgvRuiRo.Width = 130;
+            //
+            // btnKiemTraNCC
+            //
+            btnKiemTraNCC.BackColor = SystemColors.GradientActiveCaption;
+            btnKiemTraNCC.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKiemTraNCC.Location = new Point(302, 220);
+            btnKiemTraNCC.Name = "btnKiemTraNCC";
+            btnKiemTraNCC.Size = new Size(140, 30);
+            btnKiemTraNCC.TabIndex = 42;
+            btnKiemTraNCC.Text = "Kiểm tra NCC";
+            btnKiemTraNCC.UseVisualStyleBackColor = false;
+            btnKiemTraNCC.Click += btnKiemTraNCC_Click;
             // 
             // lblVersion
             // 

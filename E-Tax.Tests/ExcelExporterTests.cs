@@ -64,6 +64,26 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void SearchResults_RiskColumn_R()
+        {
+            var results = new List<SearchResult>
+            {
+                new SearchResult { Id = "1", Ma_so_thue = "A" },
+                new SearchResult { Id = "2", Ma_so_thue = "B" }
+            };
+            string path = NewFile("ds-risk.xlsx");
+
+            ExcelExporter.ExportSearchResults(results, path, getNote: _ => "n", getRisk: r => r.Id == "1" ? "Rủi ro" : "");
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("DanhSachHoaDon");
+            Assert.Equal("GHI CHÚ", ws.Cell("Q4").GetString());
+            Assert.Equal("RỦI RO NCC", ws.Cell("R4").GetString());
+            Assert.Equal("Rủi ro", ws.Cell("R5").GetString());
+            Assert.Equal("", ws.Cell("R6").GetString());
+        }
+
+        [Fact]
         public void DetailSummary_NumericCells()
         {
             var rows = new List<Dictionary<string, string>>

@@ -17,11 +17,15 @@ namespace E_Tax
         private const int SearchChunkDays = 30;
         private const int SearchPageSize = 50;
 
-        private const string BlacklistApiUrl = "https://license.metaecom.net/api/blacklist/check";
-
         private readonly AppSettings _settings = AppSettings.Load(AppSettings.DefaultPath);
         private readonly CookieContainer cookieContainer = new CookieContainer();
         private readonly HttpClient client;
+        /// <summary>HttpClient riêng cho kiểm tra rủi ro NCC (timeout 30 giây), hủy cùng form.</summary>
+        private readonly HttpClient _riskHttp = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        /// <summary>Null khi chưa cấu hình token.</summary>
+        private readonly RiskCheckService? _riskService;
+        /// <summary>Kết quả kiểm tra rủi ro theo MST người bán của lần kiểm tra hàng loạt; xóa khi tìm kiếm mới. Luôn thay cả đối tượng, không sửa tại chỗ.</summary>
+        private Dictionary<string, RiskResult> _riskResults = new Dictionary<string, RiskResult>();
         private readonly InvoiceDetailService _detailService;
         private readonly DetailGridManager _detailGridManager;
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
@@ -44,6 +48,7 @@ namespace E_Tax
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
             dgvMain.DataError += DataGridView_DataError;
+            dgvMain.CellFormatting += DgvMain_CellFormatting;
             dgvDetails.DataError += DataGridView_DataError;
             dgvMua.DataError += DataGridView_DataError;
             dgvBan.DataError += DataGridView_DataError;
@@ -71,6 +76,10 @@ namespace E_Tax
                 lblDownloadStatus,
                 AppendLog);
 
+            _riskService = string.IsNullOrEmpty(_settings.BlacklistApiToken)
+                ? null
+                : new RiskCheckService(_riskHttp, _settings.BlacklistApiToken, AppendLog);
+
             panelLogin.Visible = true;
             panelSearch.Visible = false;
         }
@@ -81,6 +90,7 @@ namespace E_Tax
             {
                 components?.Dispose();
                 client?.Dispose();
+                _riskHttp.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -630,7 +640,8 @@ namespace E_Tax
                 return;
             }
 
-            await Task.Run(() => ExcelExporter.ExportSearchResults(results, filePath, r => _notes.Get(r.Id ?? "")));
+            var risks = _riskResults; // chụp lại: dictionary chỉ được thay cả đối tượng nên an toàn khi đọc trong Task.Run
+            await Task.Run(() => ExcelExporter.ExportSearchResults(results, filePath, r => _notes.Get(r.Id ?? ""), r => RiskLabelFor(r, risks)));
             AppendLog($"✅ Đã tạo file Excel danh sách tại: {filePath}");
         }
 
@@ -763,6 +774,7 @@ namespace E_Tax
             _detailGridManager.ClearLatest();
             _latestResults = new List<SearchResult>();
             _visibleResults = new List<SearchResult>();
+            _riskResults = new Dictionary<string, RiskResult>();
             _lastSearchPeriod = default;
             _lastFailedSearchPages = 0;
             dgvMain.DataSource = null;
@@ -2176,6 +2188,117 @@ namespace E_Tax
 
         #region Kiểm tra doanh nghiệp rủi ro
 
+        private const string RiskNotConfiguredText = "Chức năng kiểm tra doanh nghiệp chưa được cấu hình.";
+        private const string BoughtLabel = "Mua vào";
+        private static readonly Color RiskyRowColor = Color.FromArgb(255, 199, 206);
+        private static readonly Color UnknownRowColor = Color.FromArgb(217, 217, 217);
+
+        /// <summary>
+        /// Kết quả rủi ro của hóa đơn. Chỉ HĐ "Mua vào" mới có (người bán là NCC); HĐ "Bán ra" có người bán là chính công ty.
+        /// </summary>
+        private static RiskResult? RiskFor(SearchResult? item, IReadOnlyDictionary<string, RiskResult> risks) =>
+            item != null && item.Loai_hoa_don == BoughtLabel && risks.TryGetValue((item.Ma_so_thue ?? "").Trim(), out var r) ? r : null;
+
+        /// <summary>Nhãn dùng chung cho lưới và Excel; rỗng khi chưa kiểm tra.</summary>
+        private static string RiskLabelFor(SearchResult item, IReadOnlyDictionary<string, RiskResult> risks) =>
+            RiskFor(item, risks) is RiskResult r ? RiskCheckService.Label(r.Status) : "";
+
+        private void DgvMain_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.RowIndex >= dgvMain.Rows.Count) return;
+            var risk = RiskFor(dgvMain.Rows[e.RowIndex].DataBoundItem as SearchResult, _riskResults);
+            if (risk == null) return;
+
+            if (e.ColumnIndex == dgvMain.Columns["colDgvRuiRo"]?.Index)
+            {
+                e.Value = RiskCheckService.Label(risk.Status);
+                e.FormattingApplied = true;
+            }
+            if (risk.Status == RiskStatus.Risky) e.CellStyle.BackColor = RiskyRowColor;
+            else if (risk.Status == RiskStatus.Unknown) e.CellStyle.BackColor = UnknownRowColor;
+        }
+
+        /// <summary>
+        /// Kiểm tra hàng loạt MST người bán của các HĐ "Mua vào" đang hiển thị. Hủy thì bỏ toàn bộ kết quả lần này.
+        /// </summary>
+        private async void btnKiemTraNCC_Click(object? sender, EventArgs e)
+        {
+            if (_riskService == null)
+            {
+                MessageBox.Show(this, RiskNotConfiguredText, "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var codes = _visibleResults
+                .Where(r => r.Loai_hoa_don == BoughtLabel)
+                .Select(r => (r.Ma_so_thue ?? "").Trim())
+                .Where(c => c.Length > 0)
+                .Distinct()
+                .ToList();
+            if (codes.Count == 0)
+            {
+                MessageBox.Show(this, "Không có hóa đơn mua vào nào đang hiển thị để kiểm tra nhà cung cấp.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            btnKiemTraNCC.Enabled = false;
+            this.Cursor = Cursors.WaitCursor;
+            var modal = ProcessingForm.ShowFor(this);
+            var ct = modal.CancellationToken;
+            IReadOnlyDictionary<string, RiskResult>? results = null;
+            bool cancelled = false;
+            bool failed = false;
+
+            try
+            {
+                modal.UpdateStatus($"Đang kiểm tra {codes.Count} nhà cung cấp...");
+                modal.Report(new BatchProgress("Kiểm tra NCC", 0, codes.Count, 0));
+                results = await _riskService.CheckManyAsync(codes,
+                    done => modal.Report(new BatchProgress("Kiểm tra NCC", done, codes.Count, 0)), ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                cancelled = true;
+                AppendLog("ℹ️ Người dùng đã hủy kiểm tra NCC.");
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                AppendLog($"❌ Lỗi kiểm tra NCC hàng loạt: {ex.GetType().Name}");
+            }
+            finally
+            {
+                this.Enabled = true;
+                modal.CloseFromOwner();
+                btnKiemTraNCC.Enabled = true;
+                this.Cursor = Cursors.Default;
+            }
+
+            if (cancelled)
+            {
+                ShowStatusMessage("Đã hủy kiểm tra NCC.", Color.OrangeRed);
+                return;
+            }
+            if (failed || results == null)
+            {
+                MessageBox.Show(this, "Không kiểm tra được nhà cung cấp do lỗi không mong muốn. Chưa có kết quả nào được ghi nhận. Xem log để biết thêm.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var merged = new Dictionary<string, RiskResult>(_riskResults);
+            foreach (var kv in results) merged[kv.Key] = kv.Value;
+            _riskResults = merged;
+            dgvMain.Invalidate();
+
+            int risky = results.Values.Count(r => r.Status == RiskStatus.Risky);
+            int safe = results.Values.Count(r => r.Status == RiskStatus.Safe);
+            int unknown = results.Values.Count(r => r.Status == RiskStatus.Unknown);
+            string summary = $"Đã xử lý {results.Count} nhà cung cấp:\n - {RiskCheckService.Label(RiskStatus.Risky)}: {risky}\n - {RiskCheckService.Label(RiskStatus.Safe)}: {safe}\n - {RiskCheckService.Label(RiskStatus.Unknown)}: {unknown}";
+            if (unknown > 0)
+                summary += $"\n\nCó {unknown} nhà cung cấp CHƯA được kiểm tra (lỗi mạng hoặc máy chủ), không có nghĩa là an toàn. Hãy kiểm tra lại các dòng tô xám.";
+            MessageBox.Show(this, summary, "Kết quả kiểm tra NCC", MessageBoxButtons.OK, unknown > 0 || risky > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
         private async void btnKtraDNMuaLe_Click(object sender, EventArgs e)
         {
             string taxCode = txtKtraMaDoanhNghiep.Text.Trim();
@@ -2187,100 +2310,43 @@ namespace E_Tax
                 return;
             }
 
-            if (string.IsNullOrEmpty(_settings.BlacklistApiToken))
+            if (_riskService == null)
             {
-                MessageBox.Show("Chức năng kiểm tra doanh nghiệp chưa được cấu hình.", "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, RiskNotConfiguredText, "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
-            string apiUrl = $"{BlacklistApiUrl}?tax_code={Uri.EscapeDataString(taxCode)}&token={Uri.EscapeDataString(_settings.BlacklistApiToken)}";
 
             btnKtraDNMuaLe.Enabled = false;
             btnKtraDNMuaLe.Text = "Đang KT...";
             this.Cursor = Cursors.WaitCursor;
 
-            string jsonResponse = "";
             try
             {
-                using var httpClient = new HttpClient();
-                httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(GdtApi.BrowserUserAgent);
-
-                var response = await httpClient.GetAsync(apiUrl);
-                jsonResponse = await response.Content.ReadAsStringAsync();
-
-                using JsonDocument doc = JsonDocument.Parse(jsonResponse);
-                JsonElement root = doc.RootElement;
-
-                if (root.TryGetProperty("success", out JsonElement successEl) && successEl.ValueKind == JsonValueKind.False)
-                {
-                    string errorMessage = root.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : "Lỗi không xác định.";
-                    throw new Exception($"API báo lỗi: {errorMessage}");
-                }
-
-                if (root.TryGetProperty("error", out JsonElement errorEl) && errorEl.ValueKind == JsonValueKind.String)
-                {
-                    throw new Exception($"API báo lỗi: {errorEl.GetString()}");
-                }
-
-                // "blacklisted" có thể nằm trong "data" hoặc ở gốc
-                string tenDoanhNghiep = "";
-                JsonElement blacklistedElement = default;
-                bool foundBlacklistProp = false;
-
-                if (root.TryGetProperty("data", out JsonElement dataEl) && dataEl.ValueKind == JsonValueKind.Object)
-                {
-                    if (dataEl.TryGetProperty("name", out JsonElement nameEl) && nameEl.ValueKind == JsonValueKind.String)
-                    {
-                        tenDoanhNghiep = nameEl.GetString();
-                    }
-                    foundBlacklistProp = dataEl.TryGetProperty("blacklisted", out blacklistedElement);
-                }
-
-                if (!foundBlacklistProp)
-                {
-                    foundBlacklistProp = root.TryGetProperty("blacklisted", out blacklistedElement);
-                }
-
-                if (!foundBlacklistProp)
-                {
-                    throw new Exception($"Phản hồi JSON không hợp lệ. Không tìm thấy 'blacklisted'.\nPhản hồi nhận được: {jsonResponse}");
-                }
-
-                // Giá trị có thể là bool, chuỗi "true"/"1" hoặc số 1
-                bool isBlacklisted = blacklistedElement.ValueKind switch
-                {
-                    JsonValueKind.True => true,
-                    JsonValueKind.String => blacklistedElement.GetString() is string s &&
-                                            (s.Equals("true", StringComparison.OrdinalIgnoreCase) || s == "1"),
-                    JsonValueKind.Number => blacklistedElement.TryGetInt32(out int intValue) && intValue == 1,
-                    _ => false
-                };
+                var result = await _riskService.CheckAsync(taxCode);
 
                 string message = $"Mã số thuế: {taxCode}\n" +
-                                 (!string.IsNullOrEmpty(tenDoanhNghiep) ? $"(Tên: {tenDoanhNghiep})\n\n" : "\n");
+                                 (!string.IsNullOrEmpty(result.CompanyName) ? $"(Tên: {result.CompanyName})\n\n" : "\n");
 
-                if (isBlacklisted)
+                switch (result.Status)
                 {
-                    MessageBox.Show(message + "Trạng thái: 🔴 Công ty nằm trong danh sách cảnh báo rủi ro!",
-                            "Nguy Hiểm", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    case RiskStatus.Risky:
+                        MessageBox.Show(this, message + "Trạng thái: 🔴 Công ty nằm trong danh sách cảnh báo rủi ro!",
+                                "Nguy Hiểm", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        break;
+                    case RiskStatus.Safe:
+                        MessageBox.Show(this, message + "Trạng thái: ✅ An toàn (Công ty không nằm trong danh sách cảnh báo rủi ro).",
+                                "An Toàn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        break;
+                    default:
+                        MessageBox.Show(this, message + "Trạng thái: Không kiểm tra được. Chưa xác định được công ty có nằm trong danh sách cảnh báo hay không (không có nghĩa là an toàn). Xem log để biết thêm.",
+                                "Không kiểm tra được", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        break;
                 }
-                else
-                {
-                    MessageBox.Show(message + "Trạng thái: ✅ An toàn (Công ty không nằm trong danh sách cảnh báo rủi ro).",
-                            "An Toàn", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-            }
-            catch (JsonException jsonEx)
-            {
-                MessageBox.Show($"Lỗi đọc phản hồi từ máy chủ: {jsonEx.Message}\nPhản hồi gốc: {jsonResponse}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            catch (HttpRequestException httpEx)
-            {
-                MessageBox.Show($"Lỗi kết nối đến máy chủ kiểm tra: {httpEx.Message}", "Lỗi mạng", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Đã xảy ra lỗi: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"❌ Lỗi kiểm tra doanh nghiệp: {ex.GetType().Name}");
+                MessageBox.Show(this, "Không kiểm tra được do lỗi không mong muốn. Xem log để biết thêm.", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
