@@ -35,6 +35,10 @@ namespace E_Tax
         private readonly DownloadJobStore _jobStore = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
         /// <summary>MST doanh nghiệp = tên đăng nhập của phiên hiện tại nếu là MST hợp lệ; null thì không đối chiếu bên mua/bán và không ghi kho.</summary>
         private string? _currentTaxCode;
+        /// <summary>Các tác vụ ghi kho đang chạy nền (chỉ truy cập từ luồng UI); kho chỉ được mở sau khi chúng xong.</summary>
+        private readonly List<Task> _storeTasks = new List<Task>();
+        /// <summary>Đang gắn file vào kho: không cho người dùng đóng form.</summary>
+        private bool _attaching;
         /// <summary>Liên kết HĐ thay thế/điều chỉnh với HĐ gốc của lần tìm kiếm gần nhất (theo Id HĐ).</summary>
         private IReadOnlyDictionary<string, InvoiceLink> _invoiceLinks = new Dictionary<string, InvoiceLink>();
 
@@ -52,6 +56,7 @@ namespace E_Tax
         public Form1()
         {
             InitializeComponent();
+            FormClosing += Form1_FormClosing;
             InitPeriodSelector();
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
@@ -260,7 +265,7 @@ namespace E_Tax
                     if (_currentTaxCode == null)
                     {
                         AppendLog("ℹ️ Tên đăng nhập không phải MST hợp lệ: không đối chiếu bên mua/bán và không ghi kho hóa đơn.");
-                        ShowStatusMessage("Tên đăng nhập không phải MST hợp lệ: kết quả tìm kiếm sẽ không được lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
+                        ShowStatusMessage("Tên đăng nhập không phải MST: sẽ không lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
                     }
 
                     txtUser.Clear();
@@ -962,7 +967,7 @@ namespace E_Tax
                 if (_latestResults.Any())
                 {
                     // Chỉ lưu những gì đã lấy được; trang lỗi không xóa gì khỏi kho (Upsert không bao giờ xóa)
-                    _ = StoreInvoicesAsync(_latestResults);
+                    TrackStoreTask(StoreInvoicesAsync(_latestResults));
                     modal.UpdateStatus($"Đang hiển thị {_latestResults.Count} hóa đơn...");
                     BindMainGrid(_latestResults);
 
@@ -1159,6 +1164,7 @@ namespace E_Tax
             }
 
             btnTaiHDGoc.Enabled = false;
+            btnKhoHoaDon.Enabled = false; // kho không mở trong lúc tải, đến hết bước gắn file
             this.Cursor = Cursors.WaitCursor;
 
             // Cửa sổ tiến trình có nút Hủy thay cho thanh tiến trình của form chính
@@ -1230,7 +1236,7 @@ namespace E_Tax
                 }
 
                 ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
-                _ = StoreInvoicesAsync(invoicesToDownload);
+                TrackStoreTask(StoreInvoicesAsync(invoicesToDownload));
 
                 // Excel giữ đủ theo loại; phần tải chỉ lấy mỗi hóa đơn thật một lần
                 var downloadPlan = InvoiceDownloadPlan.Build(invoicesToDownload);
@@ -1266,7 +1272,7 @@ namespace E_Tax
 
                     try
                     {
-                        var store = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
+                        var store = _jobStore; // dùng chung một instance với màn hình kho để không bị cache cũ
                         store.DeleteOrphans(DownloadWorkFolder.DefaultRoot); // job của thư mục làm việc đã bị xóa
                         string? found = store.FindLatest(workFolder!, planKeys);
                         if (found != null)
@@ -1542,7 +1548,9 @@ namespace E_Tax
                 CloseModal();
                 JobFlush();
                 // Gắn file vào kho trước khi thư mục làm việc bị xóa; lỗi chỉ cảnh báo
-                await AttachDownloadedFilesAsync(storeOwner, finishedForStore);
+                var attachTask = AttachDownloadedFilesAsync(storeOwner, finishedForStore);
+                TrackStoreTask(attachTask);
+                await attachTask;
                 try
                 {
                     // Thư mục làm việc chỉ xóa khi không hủy, mọi HĐ đã xong và kết quả đã lưu; còn lại giữ để tiếp tục
@@ -1563,6 +1571,7 @@ namespace E_Tax
                 }
 
                 btnTaiHDGoc.Enabled = true;
+                btnKhoHoaDon.Enabled = true;
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
@@ -1603,6 +1612,7 @@ namespace E_Tax
         private async Task AttachDownloadedFilesAsync(string? own, IReadOnlyList<(SearchResult Invoice, string PdfPath, string XmlPath)> items)
         {
             if (own == null || items.Count == 0) return;
+            _attaching = true;
             try
             {
                 var (attached, failed) = await Task.Run(() =>
@@ -1629,11 +1639,45 @@ namespace E_Tax
                 AppendLog($"⚠️ Không gắn được file vào kho hóa đơn: {ex.GetType().Name}");
                 ShowStatusMessage("Cảnh báo: không gắn được file vào kho hóa đơn (xem log).", Color.OrangeRed, 6000);
             }
+            finally
+            {
+                _attaching = false;
+            }
         }
 
-        private void btnKhoHoaDon_Click(object? sender, EventArgs e)
+        private void TrackStoreTask(Task task)
+        {
+            _storeTasks.RemoveAll(t => t.IsCompleted);
+            _storeTasks.Add(task);
+        }
+
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            // Chỉ chặn người dùng tự đóng; tắt máy/Windows không bị chặn
+            if (_attaching && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                ShowStatusMessage("Đang lưu file vào kho hóa đơn, vui lòng đợi rồi đóng lại.", Color.OrangeRed, 5000);
+            }
+        }
+
+        private async void btnKhoHoaDon_Click(object? sender, EventArgs e)
         {
             // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null
+            var pending = _storeTasks.Where(t => !t.IsCompleted).ToList();
+            if (pending.Count > 0)
+            {
+                btnKhoHoaDon.Enabled = false;
+                ShowStatusMessage("Đang ghi dữ liệu vào kho, vui lòng đợi...", Color.OrangeRed, 60000);
+                try { await Task.WhenAll(pending); }
+                catch (Exception ex) { AppendLog($"⚠️ Tác vụ ghi kho lỗi, vẫn mở kho: {ex.GetType().Name}"); }
+                finally
+                {
+                    btnKhoHoaDon.Enabled = true;
+                    lblStatusMessage.Visible = false;
+                    statusTimer.Stop();
+                }
+            }
             using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
             form.ShowDialog(this);
         }

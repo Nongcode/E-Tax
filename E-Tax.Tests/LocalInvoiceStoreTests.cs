@@ -236,6 +236,46 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void AttachFile_CopyFailure_KeepsExistingTarget_AndLeavesNoTmp()
+        {
+            string source = Path.Combine(_dir, "src.pdf");
+            File.WriteAllText(source, "bản cũ");
+            var inv = Inv();
+            string target = _store.AttachFile(Own, inv, source);
+
+            Assert.ThrowsAny<IOException>(() => _store.AttachFile(Own, inv, Path.Combine(_dir, "missing.pdf")));
+
+            Assert.Equal("bản cũ", File.ReadAllText(target));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(target)!, "*.tmp"));
+        }
+
+        [Fact]
+        public void AttachFile_Success_LeavesNoTmp_AndReplacesExisting()
+        {
+            string source = Path.Combine(_dir, "src.pdf");
+            var inv = Inv();
+            File.WriteAllText(source, "v1");
+            string target = _store.AttachFile(Own, inv, source);
+            File.WriteAllText(source, "v2");
+            _store.AttachFile(Own, inv, source);
+
+            Assert.Equal("v2", File.ReadAllText(target));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(target)!, "*.tmp"));
+        }
+
+        [Fact]
+        public void FilesFor_IgnoresTmpFiles()
+        {
+            string source = Path.Combine(_dir, "src.pdf");
+            File.WriteAllText(source, "pdf");
+            var inv = Inv();
+            string target = _store.AttachFile(Own, inv, source);
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(target)!, inv.FileIdentifier + ".tmp"), "dở");
+
+            Assert.Equal(new[] { target }, _store.FilesFor(Own, inv));
+        }
+
+        [Fact]
         public void Load_SameKeyInTwoMonthFiles_KeepsOneRecord()
         {
             _store.Upsert(Own, new[] { Inv(date: "") });

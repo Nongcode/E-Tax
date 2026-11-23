@@ -34,6 +34,36 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void SingleInstance_ConcurrentMarkListFlush_DoNotThrow()
+        {
+            var store = NewStore();
+            string id = store.Create("T", Keys(2000));
+            var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+            var writer = Task.Run(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 2000; i++)
+                    {
+                        store.Mark(id, "k" + i, i % 2 == 0 ? DownloadItemState.Done : DownloadItemState.Failed, "e");
+                        if (i % 200 == 0) store.Flush(id);
+                    }
+                }
+                catch (Exception ex) { errors.Add(ex); }
+            });
+            var reader = Task.Run(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 300; i++) { store.List(); store.PendingKeys(id); store.RetryFailed(id); }
+                }
+                catch (Exception ex) { errors.Add(ex); }
+            });
+            Task.WaitAll(writer, reader);
+            Assert.Empty(errors);
+        }
+
+        [Fact]
         public void RetryFailed_MovesFailedToPending()
         {
             var store = NewStore();

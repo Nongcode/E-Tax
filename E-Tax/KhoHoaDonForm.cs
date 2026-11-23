@@ -18,7 +18,12 @@ namespace E_Tax
         private readonly string? _currentTaxCode;
 
         private readonly Control _root;
-        private readonly CheckedListBox _clbCompanies = new() { CheckOnClick = true, Dock = DockStyle.Fill, IntegralHeight = false };
+        // ListView có checkbox: chọn dòng chỉ để xem, chỉ ô tick mới chọn doanh nghiệp để xuất (CheckedListBox cần bấm đôi nên không dùng)
+        private readonly CompanyList _lvCompanies = new()
+        {
+            View = View.Details, CheckBoxes = true, FullRowSelect = true, MultiSelect = false, HeaderStyle = ColumnHeaderStyle.None,
+            HideSelection = false, Dock = DockStyle.Fill
+        };
         private readonly CheckBox _chkFrom = new() { Text = "Từ", AutoSize = true };
         private readonly DateTimePicker _dtpFrom = new() { Format = DateTimePickerFormat.Short, Width = 105 };
         private readonly CheckBox _chkTo = new() { Text = "Đến", AutoSize = true };
@@ -87,11 +92,23 @@ namespace E_Tax
             FormClosing += (_, e) => { if (_busy) e.Cancel = true; };
         }
 
+        /// <summary>ListView bỏ thông điệp bấm đúp để bấm nhanh hai lần không tự đổi tick.</summary>
+        private sealed class CompanyList : ListView
+        {
+            protected override void WndProc(ref Message m)
+            {
+                if (m.Msg == 0x0203) return; // WM_LBUTTONDBLCLK
+                base.WndProc(ref m);
+            }
+        }
+
         private void BuildInvoicesTab(TabPage tab)
         {
             var left = new Panel { Dock = DockStyle.Left, Width = 190 };
-            left.Controls.Add(_clbCompanies);
-            left.Controls.Add(new Label { Text = "Doanh nghiệp (chọn để xem, tick để xuất Excel)", Dock = DockStyle.Top, Height = 36, Padding = new Padding(2, 4, 2, 0) });
+            _lvCompanies.Columns.Add("MST", 160);
+            _lvCompanies.SizeChanged += (_, _) => _lvCompanies.Columns[0].Width = Math.Max(60, _lvCompanies.ClientSize.Width - 2);
+            left.Controls.Add(_lvCompanies);
+            left.Controls.Add(new Label { Text = "Doanh nghiệp (bấm để xem, tick ô vuông để xuất Excel)", Dock = DockStyle.Top, Height = 36, Padding = new Padding(2, 4, 2, 0) });
 
             var filter = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true };
             filter.Controls.AddRange(new Control[] { _chkFrom, _dtpFrom, _chkTo, _dtpTo, _txtSupplier, _txtNumber, _cboType, _cboStatus, _btnSearch });
@@ -167,10 +184,12 @@ namespace E_Tax
 
         private void WireEvents(TabControl tabs)
         {
-            _clbCompanies.SelectedIndexChanged += async (_, _) =>
+            _lvCompanies.SelectedIndexChanged += async (_, _) =>
             {
-                if (_loadingCompanies || _busy) return;
-                _viewed = _clbCompanies.SelectedItem as string;
+                if (_loadingCompanies || _busy || _lvCompanies.SelectedItems.Count == 0) return;
+                string selected = _lvCompanies.SelectedItems[0].Text;
+                if (selected == _viewed) return;
+                _viewed = selected;
                 await QueryAsync();
             };
             _btnSearch.Click += async (_, _) => await QueryAsync();
@@ -250,11 +269,12 @@ namespace E_Tax
                 _loadingCompanies = true;
                 try
                 {
-                    _clbCompanies.Items.Clear();
-                    foreach (string c in companies) _clbCompanies.Items.Add(c);
+                    var ticked = _lvCompanies.CheckedItems.Cast<ListViewItem>().Select(i => i.Text).ToHashSet();
+                    _lvCompanies.Items.Clear();
+                    foreach (string c in companies) _lvCompanies.Items.Add(new ListViewItem(c) { Checked = ticked.Contains(c) });
                     string? pick = new[] { keep, _currentTaxCode }.FirstOrDefault(c => c != null && companies.Contains(c)) ?? companies.FirstOrDefault();
                     _viewed = pick;
-                    if (pick != null) _clbCompanies.SelectedItem = pick;
+                    if (pick != null) _lvCompanies.Items.Cast<ListViewItem>().First(i => i.Text == pick).Selected = true;
                 }
                 finally { _loadingCompanies = false; }
                 await QueryCoreAsync();
@@ -380,14 +400,19 @@ namespace E_Tax
 
         private async Task ExportAsync()
         {
-            var codes = _clbCompanies.CheckedItems.Cast<string>().ToList();
-            if (codes.Count == 0 && _viewed != null) codes.Add(_viewed);
+            var codes = _lvCompanies.CheckedItems.Cast<ListViewItem>().Select(i => i.Text).ToList();
             if (codes.Count == 0)
             {
-                MessageBox.Show(this, "Chưa có doanh nghiệp nào để xuất.", "Chưa chọn", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                if (_viewed == null)
+                {
+                    MessageBox.Show(this, "Chưa có doanh nghiệp nào để xuất.", "Chưa chọn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (MessageBox.Show(this, $"Chưa tick doanh nghiệp nào. Xuất doanh nghiệp đang xem ({_viewed})?", "Xuất Excel",
+                        MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+                codes.Add(_viewed);
             }
-            using var dlg = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = $"KhoHoaDon_{DateTime.Now:yyyyMMdd}.xlsx" };
+            using var dlg = new SaveFileDialog { Title = "Xuất Excel: " + string.Join(", ", codes), Filter = "Excel (*.xlsx)|*.xlsx", FileName = $"KhoHoaDon_{DateTime.Now:yyyyMMdd}.xlsx" };
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
             string path = dlg.FileName;
 

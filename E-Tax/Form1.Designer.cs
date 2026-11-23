@@ -1148,6 +1148,7 @@ namespace E_Tax
             // lblStatusMessage
             // 
             lblStatusMessage.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            lblStatusMessage.AutoEllipsis = true;
             lblStatusMessage.Location = new Point(300, 5);
             lblStatusMessage.Name = "lblStatusMessage";
             lblStatusMessage.Size = new Size(555, 21);

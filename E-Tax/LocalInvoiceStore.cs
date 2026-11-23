@@ -192,7 +192,18 @@ namespace E_Tax
             lock (_lock)
             {
                 Directory.CreateDirectory(dir);
-                File.Copy(sourcePath, target, true);
+                // Chép ra file tạm cùng thư mục rồi đổi tên: lỗi giữa chừng không để lại file cụt và không làm hỏng bản đang có
+                string temp = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    File.Copy(sourcePath, temp, true);
+                    File.Move(temp, target, true);
+                }
+                catch
+                {
+                    try { File.Delete(temp); } catch { }
+                    throw;
+                }
             }
             return target;
         }
@@ -203,6 +214,7 @@ namespace E_Tax
             if (!Directory.Exists(dir)) return Array.Empty<string>();
             string id = invoice.FileIdentifier;
             return Directory.GetFiles(dir)
+                .Where(f => !f.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 .Where(f => string.Equals(Path.GetFileNameWithoutExtension(f), id, StringComparison.Ordinal))
                 .OrderBy(f => f, StringComparer.Ordinal)
                 .ToList();
