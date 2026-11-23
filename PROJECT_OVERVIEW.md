@@ -1,7 +1,7 @@
 # E-Tax — Tổng quan dự án
 
 > Tài liệu tham chiếu nhanh để cập nhật code mà không cần đọc lại toàn bộ source.
-> Khảo sát lần cuối: 2026-11-23 (commit `2c413e1`, nhánh `feat/hoan-thien-viec-dang-do`), cập nhật sau đợt hoàn thiện các việc dở. Khi sửa code lớn, nhớ cập nhật lại file này.
+> Cập nhật lần cuối: 2026-11-24, nhánh `feat/v1-desktop`, sau khi thêm các module V1 (mục 8). Khi sửa code lớn, nhớ cập nhật lại file này.
 
 ## 1. Mục đích
 
@@ -246,3 +246,41 @@ Các điểm dưới đây dựa trên giả định/test giả lập, chưa ch�
 - Bảng kê: HĐ thiếu chi tiết phải trả `null` (không dữ liệu một phần) để `LastFailedCount` chặn xuất; thêm cột/quy tắc thì sửa `TaxListing` + `ExcelExporter.ExportTaxListing` + `TaxListingTests`.
 - Khóa HĐ: dùng `InvoiceSearchResults.KeyOf`, không tự ghép; dedupe luôn kèm loại HĐ.
 - PDFsharp ghim `[6.2.4]` (MIT): không nâng lên 6.5.0 (AGPL-3.0).
+
+## 8. Bản V1 desktop
+
+### 8.1 Module mới (thư mục `E-Tax/`, test tương ứng ở `E-Tax.Tests/`)
+- `LocalInvoiceStore.cs`: kho HĐ cục bộ theo doanh nghiệp, `{root}\{mst}\{yyyy-MM}.json` (HĐ không rõ ngày: `unknown-date.json`), file đính kèm ở `{root}\{mst}\files\`.
+- `KhoHoaDonForm.cs`: màn hình kho (dựng bằng code): xem theo doanh nghiệp, lọc, phân trang, mở PDF/XML, ghi chú, xuất Excel, sao lưu/khôi phục, quản lý tác vụ tải.
+- `DownloadJobStore.cs`: tiến độ tải theo từng khóa HĐ, ghi nguyên tử, cho phép tiếp tục tác vụ bị dừng.
+- `BackupService.cs`: sao lưu/khôi phục kho và ghi chú ra file ZIP.
+- `BusyGate.cs`: một cổng bận chung cho mọi luồng dài (không chạy đồng thời).
+- `InvoiceClassifier.cs`, `InvoiceLinker.cs`: phân loại HĐ và gắn HĐ thay thế/điều chỉnh với HĐ gốc.
+- `LocalRiskList.cs`: danh sách NCC rủi ro nhập từ CSV/XLSX. Chỉ trả Risky hoặc Unknown; không có trong danh sách không có nghĩa là an toàn.
+- `VatReturn.cs`, `ReductionAppendix.cs`, `KeKhaiForm.cs`: màn hình lập tờ khai 01/GTGT dự thảo và phụ lục giảm thuế. Chỉ là dự thảo, chưa đối chiếu mẫu gốc.
+- `AccountingExport.cs`: xuất dữ liệu cho phần mềm kế toán theo mẫu cột chung; file xuất có dòng `CHƯA ĐỐI CHIẾU VỚI MẪU GỐC`.
+- `UserPreferences.cs` (nhớ tên đăng nhập gần nhất, không lưu mật khẩu), `AppErrorHandler.cs` (bắt lỗi toàn cục), `UpdateChecker.cs` (`ManifestUrl` rỗng thì không kiểm tra, không gọi mạng), `FlexibleStringConverter.cs`, `ChromiumUnavailableException.cs`.
+
+### 8.2 Nơi lưu dữ liệu
+| Vị trí | Nội dung |
+|---|---|
+| `%AppData%\E-Tax\store\` | Kho HĐ cục bộ |
+| `%AppData%\E-Tax\jobs\` | Tiến độ tác vụ tải |
+| `%AppData%\E-Tax\notes.json` | Ghi chú theo HĐ |
+| `%AppData%\E-Tax\preferences.json` | Tùy chọn người dùng |
+| `%AppData%\E-Tax\risk-list.json` | Danh sách NCC rủi ro cục bộ |
+| `%AppData%\E-Tax\accounting-profiles\` | Mẫu cột xuất kế toán (JSON) |
+| `%LocalAppData%\E-Tax\logs\` | Log theo ngày |
+| `%LocalAppData%\E-Tax\work\` | Thư mục làm việc tạm của tác vụ tải |
+| `HKCU\Software\ETaxDemoApp` | Trạng thái bản quyền |
+
+Gỡ cài đặt không xóa dữ liệu trong hai thư mục `E-Tax` ở trên.
+
+### 8.3 V1 không làm
+- Không có server, không có tài khoản hệ thống hay kho dùng chung (mục 7.1 cũ vẫn chưa làm).
+- Không nộp tờ khai, không xuất XML để nộp qua HTKK.
+- Không kết nối `thuedientu.gdt.gov.vn` hay `dichvucong.gdt.gov.vn`. Chỉ gọi cổng hóa đơn điện tử như mục 4.
+- Mẫu tờ khai và mẫu kế toán là dự thảo/chung, người dùng tự đối chiếu trước khi dùng.
+
+### 8.4 Đóng gói
+Chạy `powershell -NoProfile -ExecutionPolicy Bypass -File installer\publish-v1.ps1` (đóng app trước; script dừng nếu `E-Tax.exe` đang chạy và không tự tắt). Script: `dotnet publish -c Release -r win-x64 --self-contained true`, dừng nếu output có `appsettings.json`/`*.pem`/`*.pfx`/`*.private.*` (kiểm theo tên file), nén `artifacts\E-Tax-<Version>-win-x64.zip` (version lấy từ `<Version>` trong csproj), và gọi Inno Setup (`ISCC`) với `installer\E-Tax.iss` nếu máy có cài. `E-Tax.iss` cài theo người dùng vào `%LocalAppData%\Programs\E-Tax`, không cần admin. `artifacts/` và `publish/` đã ignore, không commit. Bản phát hành chưa ký số. Trước khi phát hành thật phải thay `PublicKeyPem` (hiện là key DEV).
