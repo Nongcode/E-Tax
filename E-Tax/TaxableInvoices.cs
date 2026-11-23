@@ -73,6 +73,61 @@ namespace E_Tax
             $"Có {count} hóa đơn có trạng thái khác 1 (thay thế, điều chỉnh hoặc bị điều chỉnh) đã bao gồm trong tổng. " +
             "Phải kiểm tra dấu của số tiền điều chỉnh trên dữ liệu thật.";
 
+        /// <summary>
+        /// Số HĐ thay thế/điều chỉnh có ngày HĐ gốc ở kỳ khác. Số liệu kỳ vẫn tính theo ngày lập;
+        /// việc đưa vào kỳ nào do kế toán quyết định.
+        /// </summary>
+        public static int CountCrossPeriod(IEnumerable<SearchResult> headers, TaxPeriod period, string? direction = null)
+        {
+            var list = headers.Where(h => h != null).ToList();
+            var links = InvoiceLinker.Link(list);
+            return list.Count(h =>
+            {
+                if (direction != null && h.Loai_hoa_don != direction) return false;
+                var relation = InvoiceClassifier.RelationOf(h.Trang_thai_hoa_don);
+                if (relation != InvoiceRelation.ThayThe && relation != InvoiceRelation.DieuChinh) return false;
+                InvoiceLink? link = null;
+                if (h.Id != null) links.TryGetValue(h.Id, out link);
+                var original = link?.OriginalDate ?? InvoiceDate.ToVietnamDate(h.Ngay_lap_goc);
+                return original is DateTime d && (d < period.From.Date || d > period.To.Date);
+            });
+        }
+
+        /// <summary>
+        /// Số HĐ được tính có tổng dòng hàng lệch tổng trên hóa đơn quá 1 đồng mỗi dòng (so riêng tiền chưa thuế và tiền thuế,
+        /// chỉ khi hóa đơn có giá trị đó). Chỉ cảnh báo vì ý nghĩa của tchat chưa được xác minh.
+        /// </summary>
+        public static int CountTotalMismatches(IEnumerable<InvoiceDetailItem> items, IEnumerable<SearchResult> headers, string? direction = null)
+        {
+            var byInvoice = items.Where(i => i != null).ToLookup(i => (i.LoaiHoaDon ?? "", LineKey(i)));
+            return headers.Count(h =>
+            {
+                if (h == null || !IsIncluded(h.Trang_thai_hoa_don)) return false;
+                if (direction != null && h.Loai_hoa_don != direction) return false;
+                var lines = byInvoice[(h.Loai_hoa_don ?? "", InvoiceSearchResults.KeyOf(h))].ToList();
+                if (lines.Count == 0) return false;
+                decimal tolerance = lines.Count;
+                bool amountOff = h.Tong_tien_chua_thue is decimal a && Math.Abs(lines.Sum(l => l.DoanhSoChuaThue ?? 0m) - a) > tolerance;
+                bool taxOff = h.Tong_tien_thue is decimal t && Math.Abs(lines.Sum(l => l.TienThueGTGT ?? 0m) - t) > tolerance;
+                return amountOff || taxOff;
+            });
+        }
+
+        /// <summary>Ghi chú cho file xuất: số HĐ bị loại, HĐ có HĐ gốc ở kỳ khác và HĐ lệch tổng.</summary>
+        public static IReadOnlyList<string> OutputNotes(IEnumerable<InvoiceDetailItem> items, IEnumerable<SearchResult> headers, TaxPeriod period, string? direction = null)
+        {
+            var itemList = items.ToList();
+            var headerList = headers.ToList();
+            var notes = new List<string>(Select(itemList, headerList, direction).ExclusionNotes());
+            int crossPeriod = CountCrossPeriod(headerList, period, direction);
+            if (crossPeriod > 0)
+                notes.Add($"Có {crossPeriod} hóa đơn thay thế/điều chỉnh có hóa đơn gốc thuộc kỳ khác. Số liệu đang tính theo ngày lập; kế toán phải quyết định kỳ kê khai.");
+            int mismatches = CountTotalMismatches(itemList, headerList, direction);
+            if (mismatches > 0)
+                notes.Add($"Có {mismatches} hóa đơn có tổng dòng hàng không khớp tổng tiền trên hóa đơn (lệch quá 1 đồng mỗi dòng). Hãy đối chiếu trước khi dùng.");
+            return notes;
+        }
+
         private static string LineKey(InvoiceDetailItem l) =>
             !string.IsNullOrEmpty(l.InvoiceKey) ? l.InvoiceKey : $"{l.MSTNguoiBan}|{l.KyHieuHD}|{l.SoHD}";
     }

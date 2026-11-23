@@ -153,7 +153,8 @@ namespace E_Tax
         internal const string UnverifiedWarning = "CHƯA ĐỐI CHIẾU VỚI MẪU GỐC";
 
         /// <summary>Chỉ ghi các hóa đơn được tính thuế (TaxableInvoices).</summary>
-        public static void Export(AccountingProfile profile, IReadOnlyList<InvoiceDetailItem> items, string filePath)
+        public static void Export(AccountingProfile profile, IReadOnlyList<InvoiceDetailItem> items, string filePath,
+            IReadOnlyList<string>? notes = null)
         {
             items = TaxableInvoices.Select(items).Items;
             using var wb = new XLWorkbook();
@@ -179,12 +180,19 @@ namespace E_Tax
             }
             ws.SheetView.FreezeRows(1);
 
-            if (!profile.Verified)
+            if (!profile.Verified || notes is { Count: > 0 })
             {
                 var note = wb.Worksheets.Add(NoteSheet);
-                note.Cell(1, 1).Value = UnverifiedWarning;
-                note.Cell(1, 1).Style.Font.Bold = true;
-                note.Cell(2, 1).Value = $"Mẫu '{profile.Name}' chỉ là bộ cột chung, chưa được so với mẫu nhập của phần mềm kế toán. Hãy kiểm tra trước khi nhập.";
+                int noteRow = 1;
+                if (!profile.Verified)
+                {
+                    note.Cell(noteRow, 1).Value = UnverifiedWarning;
+                    note.Cell(noteRow, 1).Style.Font.Bold = true;
+                    noteRow++;
+                    note.Cell(noteRow++, 1).Value = $"Mẫu '{profile.Name}' chỉ là bộ cột chung, chưa được so với mẫu nhập của phần mềm kế toán. Hãy kiểm tra trước khi nhập.";
+                }
+                foreach (var w in notes ?? Array.Empty<string>())
+                    note.Cell(noteRow++, 1).SetValue(w);
             }
 
             wb.SaveAs(filePath);

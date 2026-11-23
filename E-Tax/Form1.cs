@@ -54,6 +54,10 @@ namespace E_Tax
         private TaxPeriod _lastSearchPeriod;
         /// <summary>Số trang tìm kiếm bị lỗi của lần tìm kiếm gần nhất.</summary>
         private int _lastFailedSearchPages;
+        /// <summary>Chiều đã tìm của lần tìm kiếm gần nhất; tờ khai cần cả hai chiều.</summary>
+        private SearchScope _lastSearchScope;
+        /// <summary>Cảnh báo thiếu hóa đơn so với tổng cổng thuế báo của lần tìm kiếm gần nhất.</summary>
+        private IReadOnlyList<string> _lastSearchWarnings = Array.Empty<string>();
 
         public Form1()
         {
@@ -572,12 +576,13 @@ namespace E_Tax
         /// Tìm hóa đơn trong khoảng ngày: chia thành các lát 30 ngày, mỗi lát lấy hết các trang.
         /// Kết quả đã loại trùng theo Id, sắp theo ngày lập giảm dần; Loai_hoa_don = "Bán ra"/"Mua vào".
         /// </summary>
-        private async Task<(List<SearchResult> Results, List<string> FailedChunks)> SearchInvoicesAsync(
+        private async Task<(List<SearchResult> Results, List<string> FailedChunks, IReadOnlyList<string> CompletenessWarnings)> SearchInvoicesAsync(
             DateTime fromDate, DateTime toDate, bool includeSold, bool includeBought, Action<string> reportStatus,
             CancellationToken ct = default)
         {
             var allResults = new List<SearchResult>();
             var failedChunks = new List<string>();
+            var totals = new SearchTotals();
             DateTime loopStartDate = fromDate;
 
             while (loopStartDate <= toDate)
@@ -598,10 +603,10 @@ namespace E_Tax
                     reportStatus($"Đang tìm [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}], Trang {currentPage + 1}...");
 
                     if (keepFetchingSold)
-                        keepFetchingSold = await FetchSearchPageAsync(InvoiceType.Sold, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, ct);
+                        keepFetchingSold = await FetchSearchPageAsync(InvoiceType.Sold, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, totals, ct);
 
                     if (keepFetchingBought)
-                        keepFetchingBought = await FetchSearchPageAsync(InvoiceType.Bought, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, ct);
+                        keepFetchingBought = await FetchSearchPageAsync(InvoiceType.Bought, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, totals, ct);
 
                     if (keepFetchingSold || keepFetchingBought)
                     {
@@ -614,14 +619,14 @@ namespace E_Tax
             }
 
             var results = InvoiceSearchResults.Deduplicate(allResults);
-            return (results, failedChunks);
+            return (results, failedChunks, totals.Warnings(results));
         }
 
         /// <summary>
         /// Lấy một trang kết quả. Trả về true nếu có thể còn trang tiếp theo.
         /// </summary>
         private async Task<bool> FetchSearchPageAsync(InvoiceType type, DateTime from, DateTime to, int page,
-            List<SearchResult> results, List<string> failedChunks, CancellationToken ct = default)
+            List<SearchResult> results, List<string> failedChunks, SearchTotals totals, CancellationToken ct = default)
         {
             string endpoint = type == InvoiceType.Sold ? "query/invoices/sold" : "query/invoices/purchase";
             string typeLabel = type == InvoiceType.Sold ? "Bán ra" : "Mua vào";
@@ -641,6 +646,8 @@ namespace E_Tax
                 failedChunks.Add($"{typeLabel} [{from:dd/MM} - {to:dd/MM}], Trang {page + 1} (phản hồi không hợp lệ)");
                 return false;
             }
+            if (InvoiceSearchResults.ParseTotal(response) is int reportedTotal)
+                totals.Record(typeLabel, from.Date, reportedTotal);
             if (items == null)
                 return false;
 
@@ -856,6 +863,8 @@ namespace E_Tax
             _riskResults = new Dictionary<string, RiskResult>();
             _lastSearchPeriod = default;
             _lastFailedSearchPages = 0;
+            _lastSearchScope = default;
+            _lastSearchWarnings = Array.Empty<string>();
             dgvMain.DataSource = null;
             dgvDetails.DataSource = null;
             dgvMua.DataSource = null;
@@ -902,7 +911,9 @@ namespace E_Tax
             // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất. Các cảnh báo này cũng được ghi vào file.
             var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount,
                     TaxListing.CountNonVnd(TaxableInvoices.IncludedHeaders(_latestResults), type))
-                .Concat(selection.ExclusionNotes()).ToList();
+                .Concat(TaxableInvoices.OutputNotes(items, _latestResults, _lastSearchPeriod, TaxListing.DirectionLabel(type)))
+                .Concat(_lastSearchWarnings.Where(w => w.StartsWith(TaxListing.DirectionLabel(type), StringComparison.Ordinal)))
+                .ToList();
             if (warnings.Count > 0 && MessageBox.Show(this,
                     $"Bảng kê {kindText} có các điểm cần lưu ý:\n\n - {string.Join("\n - ", warnings)}\n\nVẫn xuất bảng kê?",
                     "Cảnh báo trước khi xuất", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -954,6 +965,8 @@ namespace E_Tax
 
             ClearSearchData();
             _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
+            var searchScope = new SearchScope(rbBought.Checked || rbAllInvoices.Checked, rbSold.Checked || rbAllInvoices.Checked);
+            _lastSearchScope = searchScope;
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
@@ -965,16 +978,17 @@ namespace E_Tax
 
             try
             {
-                var (results, failedChunks) = await SearchInvoicesAsync(
+                var (results, failedChunks, completenessWarnings) = await SearchInvoicesAsync(
                     globalFromDate, globalToDate,
-                    includeSold: rbSold.Checked || rbAllInvoices.Checked,
-                    includeBought: rbBought.Checked || rbAllInvoices.Checked,
+                    includeSold: searchScope.Sold,
+                    includeBought: searchScope.Bought,
                     modal.UpdateStatus, ct);
 
                 ct.ThrowIfCancellationRequested();
                 modal.UpdateStatus("Đang tổng hợp kết quả...");
                 _latestResults = results;
                 _lastFailedSearchPages = failedChunks.Count;
+                _lastSearchWarnings = completenessWarnings;
 
                 if (_latestResults.Any())
                 {
@@ -989,7 +1003,7 @@ namespace E_Tax
                     modal.UpdateStatus($"Đang tải chi tiết cho {_latestResults.Count} hóa đơn...");
                     int detailFailed = await _detailGridManager.PopulateDetailGridAsync(_latestResults, ct,
                         done => modal.Report(new BatchProgress("Tải chi tiết HĐ", done, _latestResults.Count, 0)));
-                    showCompleted = !failedChunks.Any() && detailFailed == 0;
+                    showCompleted = !failedChunks.Any() && detailFailed == 0 && !completenessWarnings.Any();
                     if (detailFailed > 0)
                     {
                         MessageBox.Show($"Không lấy được chi tiết hàng hóa của {detailFailed}/{_latestResults.Count} hóa đơn (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối).\nCác bảng chi tiết có thể bị thiếu, hãy tìm kiếm lại. Xem log để biết thêm.", "Thiếu dữ liệu chi tiết", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1010,6 +1024,12 @@ namespace E_Tax
                         lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                         MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
+                }
+
+                if (_latestResults.Any() && completenessWarnings.Any())
+                {
+                    foreach (string warning in completenessWarnings) AppendLog("⚠️ " + warning);
+                    MessageBox.Show(string.Join("\n", completenessWarnings), "Kết quả tìm kiếm có thể thiếu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
 
                 if (_latestResults.Any() && failedChunks.Any())
@@ -1230,11 +1250,12 @@ namespace E_Tax
                 modal.UpdateStatus("Bước 1: Đang tìm kiếm hóa đơn...");
                 modal.Report(new BatchProgress("Tìm hóa đơn", 0, 0, 0));
 
-                var (invoicesToDownload, failedChunks) = await SearchInvoicesAsync(
+                var (invoicesToDownload, failedChunks, downloadSearchWarnings) = await SearchInvoicesAsync(
                     globalFromDate, globalToDate,
                     includeSold: rbSold.Checked || rbAllInvoices.Checked,
                     includeBought: rbBought.Checked || rbAllInvoices.Checked,
                     status => modal.UpdateStatus("Bước 1: " + status), ct);
+                foreach (string warning in downloadSearchWarnings) AppendLog("⚠️ (Tải gốc) " + warning);
 
                 if (!invoicesToDownload.Any())
                 {
@@ -1720,9 +1741,11 @@ namespace E_Tax
                     MessageBox.Show(this, "Chưa có dữ liệu chi tiết hóa đơn. Hãy tìm kiếm trước khi lập tờ khai.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return Task.CompletedTask;
                 }
-                int nonVnd = TaxListing.CountNonVnd(_latestResults, InvoiceType.Bought) + TaxListing.CountNonVnd(_latestResults, InvoiceType.Sold);
+                var included = TaxableInvoices.IncludedHeaders(_latestResults).ToList();
+                int nonVnd = TaxListing.CountNonVnd(included, InvoiceType.Bought) + TaxListing.CountNonVnd(included, InvoiceType.Sold);
                 using var form = new KeKhaiForm(items, _lastSearchPeriod, _currentTaxCode,
-                    _detailGridManager.LastFailedCount + _lastFailedSearchPages, _detailGridManager.LastNoLineCount, nonVnd);
+                    _detailGridManager.LastFailedCount + _lastFailedSearchPages, _detailGridManager.LastNoLineCount, nonVnd,
+                    _latestResults, _lastSearchScope, _lastSearchWarnings);
                 form.ShowDialog(this);
                 return Task.CompletedTask;
             });

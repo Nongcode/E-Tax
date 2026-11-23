@@ -5,6 +5,34 @@ using System.Text.Json;
 
 namespace E_Tax
 {
+    /// <summary>Tổng số hóa đơn cổng thuế báo theo từng chiều và lát ngày, để phát hiện kết quả lấy về bị thiếu.</summary>
+    internal sealed class SearchTotals
+    {
+        private readonly Dictionary<(string Direction, DateTime Chunk), int> _totals = new();
+
+        /// <summary>Ghi total của một trang; cùng lát ngày giữ giá trị lớn nhất.</summary>
+        public void Record(string direction, DateTime chunkStart, int total)
+        {
+            var key = (direction, chunkStart);
+            if (!_totals.TryGetValue(key, out int current) || total > current) _totals[key] = total;
+        }
+
+        /// <summary>Cảnh báo cho mỗi chiều có số hóa đơn duy nhất ít hơn tổng cổng thuế báo.</summary>
+        public IReadOnlyList<string> Warnings(IEnumerable<SearchResult> results)
+        {
+            var unique = InvoiceSearchResults.Deduplicate(results);
+            var warnings = new List<string>();
+            foreach (var group in _totals.GroupBy(t => t.Key.Direction).OrderBy(g => g.Key, StringComparer.Ordinal))
+            {
+                int expected = group.Sum(t => t.Value);
+                int got = unique.Count(r => r.Loai_hoa_don == group.Key);
+                if (got < expected)
+                    warnings.Add($"{group.Key}: cổng thuế báo {expected} hóa đơn nhưng chỉ lấy được {got}. Số liệu có thể bị thiếu, hãy tìm kiếm lại.");
+            }
+            return warnings;
+        }
+    }
+
     /// <summary>Xử lý kết quả tìm kiếm hóa đơn: loại trùng và nhận biết trang cuối.</summary>
     internal static class InvoiceSearchResults
     {
@@ -35,6 +63,23 @@ namespace E_Tax
                 ? null
                 : "Không tải được danh sách hóa đơn (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối). " +
                   $"Chưa thể kết luận kỳ này không có hóa đơn.\n\nCác khoảng thời gian/trang bị lỗi:\n - {string.Join("\n - ", failedChunks)}";
+
+        /// <summary>Đọc trường "total" của phản hồi; null nếu không có hoặc không phải số nguyên.</summary>
+        public static int? ParseTotal(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                return doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("total", out var total)
+                    && total.ValueKind == JsonValueKind.Number
+                    && total.TryGetInt32(out int value) ? value : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
 
         /// <summary>
         /// Phân loại một trang kết quả tìm kiếm. Items có giá trị khi trang có hóa đơn; IsEnd khi hết dữ liệu hợp lệ;

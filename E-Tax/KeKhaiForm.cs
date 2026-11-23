@@ -2,6 +2,12 @@
 
 namespace E_Tax
 {
+    /// <summary>Phạm vi của lần tìm kiếm gần nhất (một lần tìm là một kỳ).</summary>
+    internal readonly record struct SearchScope(bool Bought, bool Sold);
+
+    /// <summary>Lý do khóa từng nút xuất; null là được xuất. Vat là lý do đầy đủ nhất nên dùng để hiển thị.</summary>
+    internal sealed record KeKhaiBlocks(string? Common, string? Vat, string? Appendix, string? Accounting);
+
     /// <summary>Logic thuần của màn hình kê khai (tách ra để kiểm thử).</summary>
     internal static class KeKhaiLogic
     {
@@ -97,6 +103,30 @@ namespace E_Tax
         public static bool CanExport(string? blockReason, bool exporting, bool inputValid, bool hasCurrent) =>
             blockReason == null && !exporting && inputValid && hasCurrent;
 
+        /// <summary>
+        /// Thiếu dữ liệu, trạng thái không rõ hoặc ngoại tệ khóa cả ba loại xuất. Tờ khai cần cả hai chiều của cùng kỳ,
+        /// phụ lục chỉ cần Bán ra, file kế toán xuất theo phần đã tìm.
+        /// </summary>
+        public static KeKhaiBlocks DecideBlocks(int failedInvoices, int unknownStatus, int nonVnd, SearchScope scope)
+        {
+            string? foreign = nonVnd > 0
+                ? $"Có {nonVnd} hóa đơn không tính bằng VND. V1 chưa quy đổi tỷ giá nên không được xuất tờ khai, phụ lục và file kế toán."
+                : null;
+            string? common = Join(TaxListing.ExportBlockReason(failedInvoices), TaxableInvoices.UnknownBlockReason(unknownStatus), foreign);
+
+            string? vatScope = scope.Bought && scope.Sold
+                ? null
+                : $"Tờ khai cần cả Mua vào và Bán ra của cùng kỳ; lần tìm kiếm này thiếu {(scope.Bought ? "Bán ra" : scope.Sold ? "Mua vào" : "Mua vào và Bán ra")}. Hãy tìm với loại Tất cả.";
+            string? appendixScope = scope.Sold ? null : "Phụ lục giảm thuế cần dữ liệu Bán ra; lần tìm kiếm này không có Bán ra.";
+            return new KeKhaiBlocks(common, Join(common, vatScope), Join(common, appendixScope), common);
+        }
+
+        private static string? Join(params string?[] reasons)
+        {
+            var present = reasons.Where(r => r != null).ToList();
+            return present.Count == 0 ? null : string.Join(" ", present);
+        }
+
         /// <summary>Danh sách cảnh báo hiển thị: lý do khóa (nếu có), cảnh báo bảng kê, rồi cảnh báo tờ khai.</summary>
         public static IReadOnlyList<string> ComposeWarnings(string? blockReason, IEnumerable<string> listingWarnings, IEnumerable<string> returnWarnings)
         {
@@ -104,7 +134,7 @@ namespace E_Tax
             if (blockReason != null) list.Add(blockReason);
             list.AddRange(listingWarnings);
             list.AddRange(returnWarnings);
-            return list;
+            return list.Distinct().ToList();
         }
     }
 
@@ -119,7 +149,11 @@ namespace E_Tax
         private readonly IReadOnlyList<InvoiceDetailItem> _items;
         private readonly TaxPeriod _period;
         private readonly string _taxCode;
-        private readonly string? _blockReason;
+        private readonly KeKhaiBlocks _blocks;
+        private readonly IReadOnlyList<SearchResult> _headers;
+        private readonly IReadOnlyList<string> _searchWarnings;
+        private readonly int _noLineCount;
+        private readonly int _nonVndCount;
         private readonly IReadOnlyList<string> _listingWarnings;
         private readonly IReadOnlyList<TaxListingGroup> _bought;
         private readonly IReadOnlyList<TaxListingGroup> _sold;
@@ -155,15 +189,23 @@ namespace E_Tax
         private bool _exporting;
 
         public KeKhaiForm(IReadOnlyList<InvoiceDetailItem> items, TaxPeriod period, string? taxCode, int failedInvoices,
-            int noLineCount = 0, int nonVndCount = 0)
+            int noLineCount, int nonVndCount, IReadOnlyList<SearchResult> headers, SearchScope scope, IReadOnlyList<string> searchWarnings)
         {
             _items = (items ?? throw new ArgumentNullException(nameof(items))).ToList();
             _period = period;
             _taxCode = taxCode ?? "";
-            _blockReason = TaxListing.ExportBlockReason(failedInvoices);
+            _headers = (headers ?? throw new ArgumentNullException(nameof(headers))).ToList();
+            _searchWarnings = searchWarnings ?? Array.Empty<string>();
+            _noLineCount = noLineCount;
+            _nonVndCount = nonVndCount;
+            _blocks = KeKhaiLogic.DecideBlocks(failedInvoices, TaxableInvoices.Select(_items, _headers).Unknown, nonVndCount, scope);
             _bought = TaxListing.Build(_items, InvoiceType.Bought);
             _sold = TaxListing.Build(_items, InvoiceType.Sold);
-            _listingWarnings = TaxListing.ExportWarnings(_bought.Concat(_sold).ToList(), noLineCount, nonVndCount);
+            _listingWarnings = TaxListing.ExportWarnings(_bought.Concat(_sold).ToList(), noLineCount, nonVndCount)
+                .Concat(TaxableInvoices.OutputNotes(_items, _headers, period))
+                .Concat(_searchWarnings)
+                .Distinct()
+                .ToList();
             _profiles = LoadProfiles();
 
             Text = $"Lập tờ khai dự thảo - {period.Label}";
@@ -243,9 +285,9 @@ namespace E_Tax
                 MaximumSize = new Size(1050, 0),
                 ForeColor = Color.Red,
                 Font = new Font(Font, FontStyle.Bold),
-                Text = _blockReason == null ? "" : _blockReason + " Mọi nút xuất đã bị khóa; vẫn xem được số liệu."
+                Text = _blocks.Vat == null ? "" : _blocks.Vat + " Các nút xuất liên quan đã bị khóa; vẫn xem được số liệu."
             };
-            block.Visible = _blockReason != null;
+            block.Visible = _blocks.Vat != null;
             root.Controls.Add(block, 0, 1);
 
             var main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
@@ -355,7 +397,7 @@ namespace E_Tax
                     for (int r = 0; r < VatReturnBuilder.Codes.Count; r++)
                         _grid.Rows[r].Cells[2].Value = result.Values[VatReturnBuilder.Codes[r]].ToString("#,##0.##", ViCulture);
                     _txtWarnings.Text = string.Join(Environment.NewLine,
-                        KeKhaiLogic.ComposeWarnings(_blockReason, _listingWarnings, result.Warnings).Select(w => "- " + w));
+                        KeKhaiLogic.ComposeWarnings(_blocks.Vat, _listingWarnings, result.Warnings).Select(w => "- " + w));
                     _lblStale.Visible = false;
                     _grid.ForeColor = SystemColors.ControlText;
                     _current = result;
@@ -385,10 +427,9 @@ namespace E_Tax
 
         private void UpdateButtons()
         {
-            bool allowed = CanExportNow();
-            _btnVat.Enabled = allowed;
-            _btnReduction.Enabled = allowed;
-            _btnAccounting.Enabled = allowed && _cboProfile.SelectedItem is ProfileItem;
+            _btnVat.Enabled = CanExportNow(_blocks.Vat);
+            _btnReduction.Enabled = CanExportNow(_blocks.Appendix);
+            _btnAccounting.Enabled = CanExportNow(_blocks.Accounting) && _cboProfile.SelectedItem is ProfileItem;
             _cboProfile.Enabled = !_exporting;
             foreach (var t in _inputs) t.Enabled = !_exporting;
         }
@@ -399,12 +440,20 @@ namespace E_Tax
             return string.Concat(_period.Label.Select(c => invalid.Contains(c) ? '-' : c)).Replace(' ', '_');
         }
 
-        private bool CanExportNow() => KeKhaiLogic.CanExport(_blockReason, _exporting, _inputValid, _current != null);
+        private bool CanExportNow(string? blockReason) => KeKhaiLogic.CanExport(blockReason, _exporting, _inputValid, _current != null);
+
+        // Cảnh báo ghi vào phụ lục: chỉ tính phần Bán ra 8% mà phụ lục thực sự dùng
+        private IReadOnlyList<string> AppendixNotes() =>
+            KeKhaiLogic.ComposeWarnings(null,
+                TaxListing.ExportWarnings(_sold.Where(g => g.ThueSuat == "8%").ToList(), _noLineCount, _nonVndCount),
+                TaxableInvoices.OutputNotes(_items, _headers, _period, TaxListing.DirectionLabel(InvoiceType.Sold))
+                    .Concat(_searchWarnings.Where(w => w.StartsWith(TaxListing.DirectionLabel(InvoiceType.Sold), StringComparison.Ordinal))));
 
         private Task ExportVatAsync()
         {
-            if (!CanExportNow()) return Task.CompletedTask;
-            var snapshot = _current!;
+            if (!CanExportNow(_blocks.Vat)) return Task.CompletedTask;
+            // File tờ khai mang đủ cảnh báo đang hiển thị, không chỉ cảnh báo của phép tính
+            var snapshot = _current! with { Warnings = KeKhaiLogic.ComposeWarnings(null, _listingWarnings, _current!.Warnings) };
             string taxCode = _taxCode, label = _period.Label;
             var period = _period;
             return RunExportAsync("Lưu tờ khai dự thảo", $"ToKhai01GTGT_{SafeLabel()}.xlsx",
@@ -414,7 +463,7 @@ namespace E_Tax
 
         private Task ExportReductionAsync()
         {
-            if (!CanExportNow()) return Task.CompletedTask;
+            if (!CanExportNow(_blocks.Appendix)) return Task.CompletedTask;
             var lines = ReductionAppendix.Build(_items);
             if (lines.Count == 0)
             {
@@ -424,19 +473,21 @@ namespace E_Tax
             }
             string taxCode = _taxCode;
             var period = _period;
+            var notes = AppendixNotes();
             return RunExportAsync("Lưu phụ lục giảm thuế dự thảo", $"PhuLucGiamThue_{SafeLabel()}.xlsx",
-                path => ExcelExporter.ExportReductionAppendix(lines, period, taxCode, path),
+                path => ExcelExporter.ExportReductionAppendix(lines, period, taxCode, path, notes),
                 $"Đã xuất phụ lục giảm thuế dự thảo ({period.Label}).");
         }
 
         private Task ExportAccountingAsync()
         {
-            if (!CanExportNow() || _cboProfile.SelectedItem is not ProfileItem item) return Task.CompletedTask;
+            if (!CanExportNow(_blocks.Accounting) || _cboProfile.SelectedItem is not ProfileItem item) return Task.CompletedTask;
             var profile = item.Profile;
             var items = _items;
+            var notes = _listingWarnings;
             string safeName = string.Concat(profile.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '-' : c)).Replace(' ', '_');
             return RunExportAsync($"Lưu file nhập kế toán ({profile.Name})", $"KeToan_{safeName}_{SafeLabel()}.xlsx",
-                path => AccountingExporter.Export(profile, items, path),
+                path => AccountingExporter.Export(profile, items, path, notes),
                 profile.Verified
                     ? $"Đã xuất file nhập theo mẫu {profile.Name}."
                     : $"Đã xuất file nhập theo mẫu {profile.Name}. Mẫu này {AccountingExporter.UnverifiedWarning}, hãy kiểm tra trước khi nhập vào phần mềm kế toán.");

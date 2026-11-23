@@ -417,7 +417,8 @@ namespace E_Tax
         }
 
         /// <summary>Xuất phụ lục giảm thuế dự thảo: dòng cảnh báo chưa đối chiếu, MST, kỳ, bảng theo tên hàng và dòng tổng.</summary>
-        internal static void ExportReductionAppendix(IReadOnlyList<ReductionLine> lines, TaxPeriod period, string taxCode, string filePath)
+        internal static void ExportReductionAppendix(IReadOnlyList<ReductionLine> lines, TaxPeriod period, string taxCode, string filePath,
+            IReadOnlyList<string>? notes = null)
         {
             const int colCount = 6;
             using var wb = new XLWorkbook();
@@ -474,6 +475,24 @@ namespace E_Tax
             totalRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
 
             SetThinBorders(ws.Range(headerRow, 1, row, colCount));
+            if (notes is { Count: > 0 })
+            {
+                row += 2;
+                ws.Cell(row, 1).Value = "CẢNH BÁO";
+                ws.Cell(row, 1).Style.Font.Bold = true;
+                ws.Cell(row, 1).Style.Font.FontColor = XLColor.DarkRed;
+                row++;
+                foreach (var w in notes)
+                {
+                    ws.Cell(row, 1).Value = w;
+                    ws.Range(row, 1, row, colCount).Merge();
+                    ws.Cell(row, 1).Style.Alignment.WrapText = true;
+                    ws.Cell(row, 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
+                    ws.Row(row).Height = 48; // ô gộp không tự giãn chiều cao
+                    row++;
+                }
+            }
+
             ws.Column(1).Width = 8;
             ws.Column(2).Width = 50;
             for (int c = 3; c <= colCount; c++) ws.Column(c).Width = 24;
