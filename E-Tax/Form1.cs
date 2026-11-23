@@ -289,10 +289,7 @@ namespace E_Tax
         {
             jwtToken = "";
             client.DefaultRequestHeaders.Authorization = null;
-            foreach (Cookie cookie in cookieContainer.GetCookies(new Uri(GdtApi.PortalUrl)))
-            {
-                if (cookie.Name == "jwt" || cookie.Name == "jwtToken") cookie.Expired = true;
-            }
+            GdtApi.ExpireSessionCookies(cookieContainer, new Uri(GdtApi.PortalUrl));
         }
 
         private async Task<bool> LoginAsync(string username, string password, string captchaValue)
@@ -793,27 +790,21 @@ namespace E_Tax
 
             try
             {
-                var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
-                var installedBrowser = await browserFetcher.DownloadAsync();
+                string path = await ChromiumUnavailableException.RunAsync(async () =>
+                {
+                    var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
+                    var installedBrowser = await browserFetcher.DownloadAsync();
 
-                string? path = null;
-                if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
-                {
-                    path = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
-                }
-                if (string.IsNullOrEmpty(path))
-                {
-                    throw new Exception("Không thể xác định đường dẫn thực thi Chromium. Quá trình convert PDF không thể tiếp tục.");
-                }
+                    string? found = null;
+                    if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+                    {
+                        found = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
+                    }
+                    return found;
+                }, CancellationToken.None, ex => AppendLog("❌ Tải Chromium thất bại: " + ex.GetType().Name));
 
                 _chromiumExecutablePath = path;
                 return path;
-            }
-            catch (Exception ex) when (ex is HttpRequestException || ex is IOException || ex is OperationCanceledException || ex is PuppeteerException)
-            {
-                AppendLog("❌ Tải Chromium thất bại: " + ex.GetType().Name);
-                throw new InvalidOperationException(
-                    "Không tải được trình duyệt Chromium để chuyển PDF. Vui lòng kiểm tra kết nối mạng hoặc tường lửa rồi thử lại.", ex);
             }
             finally
             {
@@ -1400,7 +1391,7 @@ namespace E_Tax
                     {
                         throw; // Hủy: không tính là lỗi giải nén/convert của HĐ này
                     }
-                    catch (Exception exConvert)
+                    catch (Exception exConvert) when (exConvert is not ChromiumUnavailableException)
                     {
                         AppendLog($"❌ (Tải gốc) Lỗi Giải nén/Convert HĐ {invoiceIdentifier}: {exConvert.Message}");
                         failedChunks.Add($"{invoiceIdentifier} (Lỗi giải nén/convert)");
@@ -1496,6 +1487,14 @@ namespace E_Tax
                 cancelled = true;
                 AppendLog("ℹ️ (Tải gốc) Người dùng đã hủy.");
                 ShowStatusMessage("Đã hủy tải HĐ gốc.", Color.OrangeRed);
+            }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                // Dừng cả lô ở lỗi đầu tiên; HĐ chưa xử lý giữ trạng thái Pending, thư mục làm việc được giữ để chạy tiếp
+                itemsNotDone++;
+                AppendLog("❌ (Tải gốc) Không có Chromium, dừng lô: " + exChromium.GetType().Name);
+                CloseModal();
+                MessageBox.Show(this, exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (JsonException jsonEx)
             {
@@ -1838,6 +1837,12 @@ namespace E_Tax
                     SavePdfFilesToFolder(finalPdfPaths, failedInvoicesInfo);
                 }
             }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                AppendLog("❌ Không có Chromium (in HĐ): " + exChromium.GetType().Name);
+                MessageBox.Show(exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                downloadProgressBar.Value = downloadProgressBar.Maximum;
+            }
             catch (Exception ex)
             {
                 AppendLog($"❌ Lỗi nghiêm trọng trong btnCnKoPdf_Click: {ex}");
@@ -1972,6 +1977,11 @@ namespace E_Tax
                                 MessageBoxButtons.OK,
                                 problems.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                AppendLog("❌ Không có Chromium (gộp PDF): " + exChromium.GetType().Name);
+                MessageBox.Show(exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
             catch (Exception ex)
             {
                 AppendLog($"❌ Lỗi nghiêm trọng trong btnGopPdf_Click: {ex}");
@@ -2053,7 +2063,7 @@ namespace E_Tax
                             await converter.ConvertAsync(htmlFile, outputPdfPath);
                             paths.Add(outputPdfPath);
                         }
-                        catch (Exception exConvert)
+                        catch (Exception exConvert) when (exConvert is not ChromiumUnavailableException)
                         {
                             AppendLog($"  -> Lỗi convert HTML->PDF HĐ {invoiceIdentifier}: {exConvert}");
                             failed.Add($"{invoiceIdentifier} (Lỗi convert HTML sang PDF)");
@@ -2064,7 +2074,7 @@ namespace E_Tax
                         failed.Add($"{invoiceIdentifier} (Không tìm thấy file PDF/HTML)");
                     }
                 }
-                catch (Exception exInvoice)
+                catch (Exception exInvoice) when (exInvoice is not ChromiumUnavailableException)
                 {
                     AppendLog($"❌ Lỗi xử lý HĐ {invoiceIdentifier}: {exInvoice}");
                     failed.Add($"{invoiceIdentifier} (Lỗi chung: {exInvoice.Message})");

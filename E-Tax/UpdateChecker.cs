@@ -34,8 +34,9 @@ namespace E_Tax
 
                 return new UpdateInfo(version, url, GetString(root, "notes"));
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException || ex is ArgumentException)
             {
+                // JSON hỏng, chuỗi chứa surrogate lẻ (InvalidOperationException khi GetString) hoặc dữ liệu sai
                 return null;
             }
         }

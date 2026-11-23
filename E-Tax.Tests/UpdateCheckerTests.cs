@@ -31,6 +31,17 @@ namespace E_Tax.Tests
             Assert.Null(UpdateChecker.Parse(json));
         }
 
+        [Theory]
+        [InlineData("notes")]
+        [InlineData("version")]
+        [InlineData("downloadUrl")]
+        public void Parse_SurrogateLe_TraNullKhongNem(string field)
+        {
+            string ok = "{\"version\":\"1.0.1\",\"downloadUrl\":\"https://example.com/a.zip\",\"notes\":\"n\"}";
+            string json = ok.Replace("\"" + field + "\":\"", "\"" + field + "\":\"\\uD800");
+            Assert.Null(UpdateChecker.Parse(json));
+        }
+
         [Fact]
         public void IsNewer_SoSanhVersion()
         {
