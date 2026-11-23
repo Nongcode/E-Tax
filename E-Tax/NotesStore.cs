@@ -45,8 +45,8 @@ namespace E_Tax
             }
         }
 
-        public string Get(string invoiceId) =>
-            _notes.TryGetValue(invoiceId, out string? note) ? note : "";
+        public string Get(string? invoiceId) =>
+            !string.IsNullOrEmpty(invoiceId) && _notes.TryGetValue(invoiceId, out string? note) ? note : "";
 
         public void Set(string invoiceId, string note) => _notes[invoiceId] = note;
 

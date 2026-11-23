@@ -291,6 +291,8 @@ namespace E_Tax
                     cookieContainer.Add(portalUri, new Cookie("jwt", jwtToken));
                 }
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
+                // Có thể đăng nhập lại bằng MST khác: bỏ dữ liệu của phiên trước
+                ClearSearchData();
                 return true;
             }
             catch (Exception ex)
@@ -528,12 +530,7 @@ namespace E_Tax
                 loopStartDate = loopEndDate.AddDays(1);
             }
 
-            var results = allResults
-                .GroupBy(r => r.Id)
-                .Select(g => g.First())
-                .OrderByDescending(r => r.Ngay_lap)
-                .ThenBy(r => r.So_hoa_don)
-                .ToList();
+            var results = InvoiceSearchResults.Deduplicate(allResults);
             return (results, failedChunks);
         }
 
@@ -555,7 +552,14 @@ namespace E_Tax
             }
 
             var parsed = JsonSerializer.Deserialize<SearchResponse>(response, InvoiceJson.Options);
-            if (parsed?.Datas == null || !parsed.Datas.Any())
+            if (parsed?.Datas == null)
+            {
+                // Phản hồi 200 nhưng không có mảng "datas": chỉ là hết dữ liệu khi total = 0, còn lại là trang lỗi
+                if (!InvoiceSearchResults.IsEndOfResults(response))
+                    failedChunks.Add($"{typeLabel} [{from:dd/MM} - {to:dd/MM}], Trang {page + 1} (phản hồi không hợp lệ)");
+                return false;
+            }
+            if (!parsed.Datas.Any())
                 return false;
 
             parsed.Datas.ForEach(item => item.Loai_hoa_don = typeLabel);
@@ -750,6 +754,26 @@ namespace E_Tax
 
         #region Bảng kê mua vào, bán ra
 
+        /// <summary>
+        /// Xóa toàn bộ dữ liệu của lần tìm kiếm trước (kết quả, chi tiết, cache, kỳ, bộ đếm lỗi và các lưới)
+        /// để không xuất hay hiển thị số liệu cũ. Dùng khi tìm mới, không có kết quả, hủy và đăng nhập lại.
+        /// </summary>
+        private void ClearSearchData()
+        {
+            _detailService.ClearCache();
+            _detailGridManager.ClearLatest();
+            _latestResults = new List<SearchResult>();
+            _visibleResults = new List<SearchResult>();
+            _lastSearchPeriod = default;
+            _lastFailedSearchPages = 0;
+            dgvMain.DataSource = null;
+            dgvDetails.DataSource = null;
+            dgvMua.DataSource = null;
+            dgvBan.DataSource = null;
+            dgvVatNop.DataSource = null;
+            dgvGiamThue.DataSource = null;
+        }
+
         private void btnExportBangKeMua_Click(object sender, EventArgs e) => ExportTaxListing(InvoiceType.Bought);
 
         private void btnExportBangKeBan_Click(object sender, EventArgs e) => ExportTaxListing(InvoiceType.Sold);
@@ -787,6 +811,12 @@ namespace E_Tax
                 MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+
+            int nonVnd = TaxListing.CountNonVnd(_latestResults, type);
+            if (nonVnd > 0 && MessageBox.Show(this,
+                    $"Có {nonVnd} hóa đơn không tính bằng VND. Bảng kê cộng nguyên số tiền của các hóa đơn này vào tổng, không quy đổi.\nVẫn xuất bảng kê?",
+                    "Hóa đơn ngoại tệ", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
 
             var period = _lastSearchPeriod;
             var invalid = Path.GetInvalidFileNameChars();
@@ -830,16 +860,11 @@ namespace E_Tax
                 return;
             }
 
-            _detailService.ClearCache();
-            _detailGridManager.ClearLatest();
-            _lastFailedSearchPages = 0;
+            ClearSearchData();
             _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
-            dgvMain.DataSource = null;
-            _latestResults.Clear();
-            _visibleResults = new List<SearchResult>();
             ResetFilterInputs();
 
             var modal = ProcessingForm.ShowFor(this);
@@ -878,16 +903,9 @@ namespace E_Tax
                 }
                 else
                 {
-                    _detailGridManager.ClearLatest();
+                    ClearSearchData();
                     lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                     MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    _visibleResults = new List<SearchResult>();
-                    dgvMain.DataSource = null;
-                    dgvDetails.DataSource = null;
-                    dgvMua.DataSource = null;
-                    dgvBan.DataSource = null;
-                    dgvVatNop.DataSource = null;
-                    dgvGiamThue.DataSource = null;
                 }
 
                 if (failedChunks.Any())
@@ -900,16 +918,7 @@ namespace E_Tax
             {
                 // Hủy: bỏ mọi kết quả dở dang, không hiện lỗi/"Hoàn tất"
                 AppendLog("ℹ️ Người dùng đã hủy tìm kiếm.");
-                _detailGridManager.ClearLatest();
-                _lastFailedSearchPages = 0;
-                _latestResults = new List<SearchResult>();
-                _visibleResults = new List<SearchResult>();
-                dgvMain.DataSource = null;
-                dgvDetails.DataSource = null;
-                dgvMua.DataSource = null;
-                dgvBan.DataSource = null;
-                dgvVatNop.DataSource = null;
-                dgvGiamThue.DataSource = null;
+                ClearSearchData();
                 showCompleted = false;
                 ShowStatusMessage("Đã hủy tìm kiếm.", Color.OrangeRed);
             }
@@ -2141,6 +2150,12 @@ namespace E_Tax
             if (dgvMain.CurrentRow?.DataBoundItem is not SearchResult selectedInvoice)
             {
                 MessageBox.Show("Vui lòng chọn một hóa đơn để ghi chú.", "Chưa chọn hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(selectedInvoice.Id))
+            {
+                MessageBox.Show("Hóa đơn này không có mã định danh nên không lưu được ghi chú.", "Không thể ghi chú", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 

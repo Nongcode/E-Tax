@@ -31,6 +31,14 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void Get_NullOrEmptyId_ReturnsEmpty()
+        {
+            var store = new NotesStore(NewPath, null);
+            Assert.Equal("", store.Get(null));
+            Assert.Equal("", store.Get(""));
+        }
+
+        [Fact]
         public void Load_PrefersNewFile()
         {
             File.WriteAllText(LegacyPath, "{\"a\":\"old\"}");

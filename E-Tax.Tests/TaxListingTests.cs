@@ -120,6 +120,44 @@ namespace E_Tax.Tests
             Assert.Null(row.TrangThai);
         }
 
+        [Theory]
+        [InlineData("10%")]
+        [InlineData("10 %")]
+        [InlineData("10.0%")]
+        [InlineData("10")]
+        [InlineData("0.1")]
+        [InlineData("0,1")]
+        [InlineData(" 10,0 % ")]
+        public void NormalizeRate_TenPercentVariants(string raw) => Assert.Equal("10%", TaxListing.NormalizeRate(raw));
+
+        [Theory]
+        [InlineData("0", "0%")]
+        [InlineData("0%", "0%")]
+        [InlineData("3.5%", "3.5%")]
+        [InlineData("0.035", "3.5%")]
+        [InlineData("khac", "KHAC")]
+        [InlineData("kkknt", "KKKNT")]
+        [InlineData(null, "Không rõ")]
+        public void NormalizeRate_Others(string? raw, string expected) => Assert.Equal(expected, TaxListing.NormalizeRate(raw));
+
+        [Fact]
+        public void Build_RateVariantsShareOneGroup_OtherStaysSeparate()
+        {
+            var g = TaxListing.Build(new[] { Line("A", 1, "10%", 100, 10), Line("A", 2, "0.1", 100, 10), Line("A", 3, "10", 100, 10), Line("A", 4, "KHAC", 1, 1) }, InvoiceType.Bought);
+            Assert.Equal(new[] { "10%", "KHAC" }, g.Select(x => x.ThueSuat));
+            Assert.Equal(3, g[0].Rows.Count);
+            Assert.Equal(30m, g[0].TongThue);
+        }
+
+        [Fact]
+        public void CountNonVnd_FiltersByTypeAndTreatsEmptyAsVnd()
+        {
+            SearchResult S(string loai, string? cur) => new SearchResult { Loai_hoa_don = loai, Don_vi_tien_te = cur! };
+            var list = new[] { S("Mua vào", "USD"), S("Mua vào", " vnd "), S("Mua vào", "VNĐ"), S("Mua vào", ""), S("Mua vào", null), S("Mua vào", "eur"), S("Bán ra", "USD") };
+            Assert.Equal(2, TaxListing.CountNonVnd(list, InvoiceType.Bought));
+            Assert.Equal(1, TaxListing.CountNonVnd(list, InvoiceType.Sold));
+        }
+
         [Fact]
         public void ExportBlocked_WhenDetailFailed()
         {

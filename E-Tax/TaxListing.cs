@@ -18,11 +18,37 @@ namespace E_Tax
         private const string Bought = "Mua vào";
         private const string Sold = "Bán ra";
 
-        /// <summary>Chuẩn hóa thuế suất: cắt khoảng trắng, viết hoa; rỗng thành "Không rõ".</summary>
+        /// <summary>
+        /// Chuẩn hóa thuế suất: có dấu % thì lấy giá trị là phần trăm; số trần 0 &lt; x &lt; 1 là tỷ lệ (x*100%),
+        /// 0 là 0%, x &gt;= 1 là x%. Chấp nhận dấu . hoặc , thập phân. KCT/KKKNT giữ nguyên; rỗng thành "Không rõ";
+        /// giá trị lạ giữ nguyên (viết hoa) thành nhóm riêng.
+        /// </summary>
         public static string NormalizeRate(string? rate)
         {
             string r = (rate ?? "").Trim().ToUpperInvariant();
-            return r.Length == 0 ? UnknownRate : r;
+            if (r.Length == 0) return UnknownRate;
+            if (IsNoTaxRate(r)) return r;
+
+            bool percent = r.EndsWith("%");
+            string num = (percent ? r.Substring(0, r.Length - 1) : r).Trim().Replace(',', '.');
+            if (!decimal.TryParse(num, System.Globalization.NumberStyles.AllowDecimalPoint,
+                    System.Globalization.CultureInfo.InvariantCulture, out decimal x))
+                return r;
+            if (!percent && x > 0m && x < 1m) x *= 100m;
+            return x.ToString("0.############################", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        }
+
+        /// <summary>Số hóa đơn thuộc loại đã chọn có đơn vị tiền tệ khác VND (rỗng được coi là VND).</summary>
+        public static int CountNonVnd(IEnumerable<SearchResult> invoices, InvoiceType type)
+        {
+            string loai = type == InvoiceType.Bought ? Bought : Sold;
+            return invoices.Count(i =>
+            {
+                if (i == null || i.Loai_hoa_don != loai) return false;
+                string c = (i.Don_vi_tien_te ?? "").Trim();
+                return c.Length > 0 && !c.Equals("VND", StringComparison.OrdinalIgnoreCase)
+                    && !c.Equals("VNĐ", StringComparison.OrdinalIgnoreCase);
+            });
         }
 
         private static bool IsNoTaxRate(string rate) => rate == "KCT" || rate == "KKKNT";
