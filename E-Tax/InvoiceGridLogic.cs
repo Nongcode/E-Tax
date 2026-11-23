@@ -88,6 +88,9 @@ namespace E_Tax
                 note ?? "");
         }
 
+        /// <summary>Chỉ mở màn hình kho khi không có luồng tải/tìm kiếm đang chạy và form chính còn sống.</summary>
+        public static bool CanOpenStore(bool downloadRunning, bool formDisposed) => !downloadRunning && !formDisposed;
+
         public static List<string> ExistingNonEmptyFiles(params string[] paths)
         {
             var result = new List<string>();

@@ -39,6 +39,12 @@ namespace E_Tax
         private readonly List<Task> _storeTasks = new List<Task>();
         /// <summary>Đang gắn file vào kho: không cho người dùng đóng form.</summary>
         private bool _attaching;
+        /// <summary>Luồng tải gốc đang chạy (đặt đầu luồng, xóa trong finally của nó).</summary>
+        private bool _downloadRunning;
+        /// <summary>Tìm kiếm đang chạy.</summary>
+        private bool _searchRunning;
+        /// <summary>Đang đợi ghi kho/mở màn hình kho: chặn bấm lại nút.</summary>
+        private bool _storeOpening;
         /// <summary>Liên kết HĐ thay thế/điều chỉnh với HĐ gốc của lần tìm kiếm gần nhất (theo Id HĐ).</summary>
         private IReadOnlyDictionary<string, InvoiceLink> _invoiceLinks = new Dictionary<string, InvoiceLink>();
 
@@ -942,6 +948,8 @@ namespace E_Tax
 
             ClearSearchData();
             _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
+            _searchRunning = true;
+            btnKhoHoaDon.Enabled = false;
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
@@ -1029,6 +1037,8 @@ namespace E_Tax
                 this.Enabled = true;
                 modal.CloseFromOwner();
 
+                _searchRunning = false;
+                btnKhoHoaDon.Enabled = true;
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
@@ -1163,6 +1173,7 @@ namespace E_Tax
                 return;
             }
 
+            _downloadRunning = true;
             btnTaiHDGoc.Enabled = false;
             btnKhoHoaDon.Enabled = false; // kho không mở trong lúc tải, đến hết bước gắn file
             this.Cursor = Cursors.WaitCursor;
@@ -1570,6 +1581,7 @@ namespace E_Tax
                     AppendLog($"⚠️ Không thể dọn dẹp file/thư mục tạm: {ex.Message}");
                 }
 
+                _downloadRunning = false;
                 btnTaiHDGoc.Enabled = true;
                 btnKhoHoaDon.Enabled = true;
                 downloadProgressBar.Visible = false;
@@ -1664,22 +1676,55 @@ namespace E_Tax
         private async void btnKhoHoaDon_Click(object? sender, EventArgs e)
         {
             // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null
-            var pending = _storeTasks.Where(t => !t.IsCompleted).ToList();
-            if (pending.Count > 0)
+            if (_storeOpening) return;
+            _storeOpening = true;
+            try
             {
-                btnKhoHoaDon.Enabled = false;
-                ShowStatusMessage("Đang ghi dữ liệu vào kho, vui lòng đợi...", Color.OrangeRed, 60000);
-                try { await Task.WhenAll(pending); }
-                catch (Exception ex) { AppendLog($"⚠️ Tác vụ ghi kho lỗi, vẫn mở kho: {ex.GetType().Name}"); }
-                finally
+                const string waitMessage = "Đang ghi dữ liệu vào kho, vui lòng đợi...";
+                bool waited = false;
+                bool disabledHere = false;
+                // Đợi đến khi không còn tác vụ ghi kho nào (lấy lại danh sách mỗi vòng vì có thể có tác vụ mới); tác vụ lỗi không chặn
+                while (true)
                 {
-                    btnKhoHoaDon.Enabled = true;
+                    var pending = _storeTasks.Where(t => !t.IsCompleted).ToList();
+                    if (pending.Count == 0) break;
+                    if (!waited)
+                    {
+                        waited = true;
+                        if (btnKhoHoaDon.Enabled) { btnKhoHoaDon.Enabled = false; disabledHere = true; }
+                        ShowStatusMessage(waitMessage, Color.OrangeRed, 60000);
+                    }
+                    foreach (var t in pending)
+                    {
+                        try { await t; }
+                        catch (Exception ex) { AppendLog($"⚠️ Tác vụ ghi kho lỗi, vẫn mở kho: {ex.GetType().Name}"); }
+                    }
+                }
+                // Chỉ xóa thông báo chờ nếu nó vẫn đang hiện (không che cảnh báo ghi kho vừa hiện)
+                if (waited && lblStatusMessage.Visible && lblStatusMessage.Text == waitMessage)
+                {
                     lblStatusMessage.Visible = false;
                     statusTimer.Stop();
                 }
+
+                // Trong lúc chờ có thể một luồng tải/tìm kiếm đã bắt đầu: không mở, và để luồng đó tự bật lại nút ở finally
+                bool downloadRunning = _downloadRunning || _searchRunning;
+                if (!InvoiceGridLogic.CanOpenStore(downloadRunning, IsDisposed))
+                {
+                    if (!IsDisposed && downloadRunning)
+                        ShowStatusMessage("Đang tải/tìm kiếm, chưa mở kho được. Thử lại khi xong.", Color.OrangeRed, 5000);
+                    return;
+                }
+                if (disabledHere) { btnKhoHoaDon.Enabled = true; disabledHere = false; }
+                using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
+                form.ShowDialog(this);
             }
-            using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
-            form.ShowDialog(this);
+            finally
+            {
+                _storeOpening = false;
+                // Không bật lại nút nếu luồng tải/tìm kiếm đang chạy: finally của luồng đó sẽ làm
+                if (!IsDisposed && !_downloadRunning && !_searchRunning) btnKhoHoaDon.Enabled = true;
+            }
         }
 
         private void statusTimer_Tick(object sender, EventArgs e)
