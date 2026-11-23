@@ -135,14 +135,6 @@ namespace E_Tax.Tests
         public void PartyCheckTaxCode_OnlyWhenLoggedInAsViewedCompany(string? current, string viewed, string? expected) =>
             Assert.Equal(expected, InvoiceGridLogic.PartyCheckTaxCode(current, viewed));
 
-        [Theory]
-        [InlineData(false, false, true)]
-        [InlineData(true, false, false)]
-        [InlineData(false, true, false)]
-        [InlineData(true, true, false)]
-        public void CanOpenStore_OnlyWhenIdleAndAlive(bool downloadRunning, bool disposed, bool expected) =>
-            Assert.Equal(expected, InvoiceGridLogic.CanOpenStore(downloadRunning, disposed));
-
         [Fact]
         public void ExistingNonEmptyFiles_SkipsMissingAndEmpty()
         {

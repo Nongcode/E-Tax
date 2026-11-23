@@ -39,12 +39,8 @@ namespace E_Tax
         private readonly List<Task> _storeTasks = new List<Task>();
         /// <summary>Đang gắn file vào kho: không cho người dùng đóng form.</summary>
         private bool _attaching;
-        /// <summary>Luồng tải gốc đang chạy (đặt đầu luồng, xóa trong finally của nó).</summary>
-        private bool _downloadRunning;
-        /// <summary>Tìm kiếm đang chạy.</summary>
-        private bool _searchRunning;
-        /// <summary>Đang đợi ghi kho/mở màn hình kho: chặn bấm lại nút.</summary>
-        private bool _storeOpening;
+        /// <summary>Cổng bận chung: mỗi lúc chỉ một luồng dài chạy; nút Kho hóa đơn bật/tắt theo cổng này.</summary>
+        private readonly BusyGate _gate = new BusyGate();
         /// <summary>Liên kết HĐ thay thế/điều chỉnh với HĐ gốc của lần tìm kiếm gần nhất (theo Id HĐ).</summary>
         private IReadOnlyDictionary<string, InvoiceLink> _invoiceLinks = new Dictionary<string, InvoiceLink>();
 
@@ -63,6 +59,7 @@ namespace E_Tax
         {
             InitializeComponent();
             FormClosing += Form1_FormClosing;
+            _gate.Changed += () => { if (!IsDisposed) btnKhoHoaDon.Enabled = !_gate.IsBusy; };
             InitPeriodSelector();
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
@@ -240,7 +237,9 @@ namespace E_Tax
             old?.Dispose();
         }
 
-        private async void btnLogin_Click(object sender, EventArgs e)
+        private async void btnLogin_Click(object sender, EventArgs e) => await RunFlowAsync("Đăng nhập", () => btnLogin_RunAsync(sender, e));
+
+        private async Task btnLogin_RunAsync(object sender, EventArgs e)
         {
             string username = txtUser.Text.Trim();
             string password = txtPass.Text;
@@ -931,7 +930,9 @@ namespace E_Tax
 
         #region Tìm kiếm & lọc
 
-        private async void btnLeftSearch_Click(object sender, EventArgs e)
+        private async void btnLeftSearch_Click(object sender, EventArgs e) => await RunFlowAsync("Tìm kiếm", () => btnLeftSearch_RunAsync(sender, e));
+
+        private async Task btnLeftSearch_RunAsync(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(jwtToken))
             {
@@ -948,8 +949,6 @@ namespace E_Tax
 
             ClearSearchData();
             _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
-            _searchRunning = true;
-            btnKhoHoaDon.Enabled = false;
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
@@ -1037,8 +1036,6 @@ namespace E_Tax
                 this.Enabled = true;
                 modal.CloseFromOwner();
 
-                _searchRunning = false;
-                btnKhoHoaDon.Enabled = true;
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
@@ -1127,7 +1124,9 @@ namespace E_Tax
 
         #region Thao tác trên hóa đơn
 
-        private async void btnTaiHDGoc_Click(object sender, EventArgs e)
+        private async void btnTaiHDGoc_Click(object sender, EventArgs e) => await RunFlowAsync("Tải HĐ gốc", () => btnTaiHDGoc_RunAsync(sender, e));
+
+        private async Task btnTaiHDGoc_RunAsync(object sender, EventArgs e)
         {
             btnTaiHDGoc.Text = "Đang xử lý...";
             btnTaiHDGoc.Refresh();
@@ -1173,9 +1172,7 @@ namespace E_Tax
                 return;
             }
 
-            _downloadRunning = true;
             btnTaiHDGoc.Enabled = false;
-            btnKhoHoaDon.Enabled = false; // kho không mở trong lúc tải, đến hết bước gắn file
             this.Cursor = Cursors.WaitCursor;
 
             // Cửa sổ tiến trình có nút Hủy thay cho thanh tiến trình của form chính
@@ -1581,9 +1578,7 @@ namespace E_Tax
                     AppendLog($"⚠️ Không thể dọn dẹp file/thư mục tạm: {ex.Message}");
                 }
 
-                _downloadRunning = false;
                 btnTaiHDGoc.Enabled = true;
-                btnKhoHoaDon.Enabled = true;
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
@@ -1675,15 +1670,13 @@ namespace E_Tax
 
         private async void btnKhoHoaDon_Click(object? sender, EventArgs e)
         {
-            // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null
-            if (_storeOpening) return;
-            _storeOpening = true;
-            try
+            // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null.
+            // Giữ cổng bận suốt lúc đợi ghi kho và lúc kho mở, nên không luồng nào khác bắt đầu được.
+            await RunFlowAsync("Kho hóa đơn", async () =>
             {
                 const string waitMessage = "Đang ghi dữ liệu vào kho, vui lòng đợi...";
                 bool waited = false;
-                bool disabledHere = false;
-                // Đợi đến khi không còn tác vụ ghi kho nào (lấy lại danh sách mỗi vòng vì có thể có tác vụ mới); tác vụ lỗi không chặn
+                // Đợi đến khi không còn tác vụ ghi kho nào (snapshot mới mỗi vòng); tác vụ lỗi không chặn
                 while (true)
                 {
                     var pending = _storeTasks.Where(t => !t.IsCompleted).ToList();
@@ -1691,7 +1684,6 @@ namespace E_Tax
                     if (!waited)
                     {
                         waited = true;
-                        if (btnKhoHoaDon.Enabled) { btnKhoHoaDon.Enabled = false; disabledHere = true; }
                         ShowStatusMessage(waitMessage, Color.OrangeRed, 60000);
                     }
                     foreach (var t in pending)
@@ -1706,24 +1698,30 @@ namespace E_Tax
                     lblStatusMessage.Visible = false;
                     statusTimer.Stop();
                 }
-
-                // Trong lúc chờ có thể một luồng tải/tìm kiếm đã bắt đầu: không mở, và để luồng đó tự bật lại nút ở finally
-                bool downloadRunning = _downloadRunning || _searchRunning;
-                if (!InvoiceGridLogic.CanOpenStore(downloadRunning, IsDisposed))
-                {
-                    if (!IsDisposed && downloadRunning)
-                        ShowStatusMessage("Đang tải/tìm kiếm, chưa mở kho được. Thử lại khi xong.", Color.OrangeRed, 5000);
-                    return;
-                }
-                if (disabledHere) { btnKhoHoaDon.Enabled = true; disabledHere = false; }
+                if (IsDisposed) return;
                 using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
                 form.ShowDialog(this);
+            });
+        }
+
+        /// <summary>
+        /// Chạy một luồng dài qua cổng bận chung: vào cổng trước khi đụng giao diện; bị từ chối thì báo tên luồng đang chạy.
+        /// Exit luôn nằm trong finally. Chỉ gọi ở handler ngoài cùng (handler lồng nhau không được vào cổng lần nữa).
+        /// </summary>
+        private async Task RunFlowAsync(string flowName, Func<Task> body)
+        {
+            if (!_gate.TryEnter(flowName))
+            {
+                ShowStatusMessage($"Đang chạy \"{_gate.CurrentFlow}\". Vui lòng đợi xong rồi thử lại.", Color.OrangeRed, 4000);
+                return;
+            }
+            try
+            {
+                await body();
             }
             finally
             {
-                _storeOpening = false;
-                // Không bật lại nút nếu luồng tải/tìm kiếm đang chạy: finally của luồng đó sẽ làm
-                if (!IsDisposed && !_downloadRunning && !_searchRunning) btnKhoHoaDon.Enabled = true;
+                _gate.Exit();
             }
         }
 
@@ -1751,7 +1749,9 @@ namespace E_Tax
             return invoice;
         }
 
-        private async void btnXemHD_Click(object sender, EventArgs e)
+        private async void btnXemHD_Click(object sender, EventArgs e) => await RunFlowAsync("Xem hóa đơn", () => btnXemHD_RunAsync(sender, e));
+
+        private async Task btnXemHD_RunAsync(object sender, EventArgs e)
         {
             if (dgvMain.CurrentRow == null)
             {
@@ -1822,7 +1822,9 @@ namespace E_Tax
             }
         }
 
-        private async void btnExportDS_Click(object sender, EventArgs e)
+        private async void btnExportDS_Click(object sender, EventArgs e) => await RunFlowAsync("Xuất danh sách", () => btnExportDS_RunAsync(sender, e));
+
+        private async Task btnExportDS_RunAsync(object sender, EventArgs e)
         {
             if (_visibleResults == null || !_visibleResults.Any())
             {
@@ -1870,7 +1872,9 @@ namespace E_Tax
         /// <summary>
         /// Xuất Excel chi tiết hàng hóa của một hóa đơn đang chọn.
         /// </summary>
-        private async void btnExportChiTiet_Click(object sender, EventArgs e)
+        private async void btnExportChiTiet_Click(object sender, EventArgs e) => await RunFlowAsync("Xuất chi tiết", () => btnExportChiTiet_RunAsync(sender, e));
+
+        private async Task btnExportChiTiet_RunAsync(object sender, EventArgs e)
         {
             if (dgvMain.SelectedRows.Count != 1 && dgvMain.CurrentRow == null)
             {
@@ -1937,7 +1941,9 @@ namespace E_Tax
         /// <summary>
         /// In (hoặc lưu PDF nếu không có máy in) các hóa đơn đang chọn.
         /// </summary>
-        private async void btnCnKoPdf_Click(object sender, EventArgs e)
+        private async void btnCnKoPdf_Click(object sender, EventArgs e) => await RunFlowAsync("In hóa đơn", () => btnCnKoPdf_RunAsync(sender, e));
+
+        private async Task btnCnKoPdf_RunAsync(object sender, EventArgs e)
         {
             List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
 
@@ -2076,7 +2082,9 @@ namespace E_Tax
         /// <summary>
         /// Gộp các hóa đơn đang chọn thành một file PDF duy nhất.
         /// </summary>
-        private async void btnGopPdf_Click(object sender, EventArgs e)
+        private async void btnGopPdf_Click(object sender, EventArgs e) => await RunFlowAsync("Gộp PDF", () => btnGopPdf_RunAsync(sender, e));
+
+        private async Task btnGopPdf_RunAsync(object sender, EventArgs e)
         {
             List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
             if (!validInvoices.Any())
@@ -2360,6 +2368,12 @@ namespace E_Tax
 
         private async void dgvMain_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
+            if (e.RowIndex < 0 || e.ColumnIndex != dgvMain.Columns["colDgvTraCuu"].Index) return;
+            await RunFlowAsync("Tra cứu hóa đơn", () => dgvMain_CellContentClick_RunAsync(sender, e));
+        }
+
+        private async Task dgvMain_CellContentClick_RunAsync(object sender, DataGridViewCellEventArgs e)
+        {
             // Chỉ xử lý click vào cột nút "Tra cứu"
             if (e.RowIndex < 0 || e.ColumnIndex != dgvMain.Columns["colDgvTraCuu"].Index) return;
 
@@ -2637,7 +2651,9 @@ namespace E_Tax
         /// <summary>
         /// Kiểm tra hàng loạt MST người bán của các HĐ "Mua vào" đang hiển thị. Hủy thì bỏ toàn bộ kết quả lần này.
         /// </summary>
-        private async void btnKiemTraNCC_Click(object? sender, EventArgs e)
+        private async void btnKiemTraNCC_Click(object? sender, EventArgs e) => await RunFlowAsync("Kiểm tra NCC", () => btnKiemTraNCC_RunAsync(sender, e));
+
+        private async Task btnKiemTraNCC_RunAsync(object? sender, EventArgs e)
         {
             var codes = _visibleResults
                 .Where(r => r.Loai_hoa_don == BoughtLabel)
@@ -2772,7 +2788,9 @@ namespace E_Tax
             }
         }
 
-        private async void btnKtraDNMuaLe_Click(object sender, EventArgs e)
+        private async void btnKtraDNMuaLe_Click(object sender, EventArgs e) => await RunFlowAsync("Kiểm tra doanh nghiệp", () => btnKtraDNMuaLe_RunAsync(sender, e));
+
+        private async Task btnKtraDNMuaLe_RunAsync(object sender, EventArgs e)
         {
             string taxCode = txtKtraMaDoanhNghiep.Text.Trim();
             if (string.IsNullOrEmpty(taxCode))
