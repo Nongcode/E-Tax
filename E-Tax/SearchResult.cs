@@ -56,10 +56,31 @@ namespace E_Tax
         public string Ket_qua_kiem_tra_hoa_don { get; set; }
 
         [JsonPropertyName("shdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string Hoa_don_lien_quan { get; set; }
 
         [JsonPropertyName("nmdchi")]
         public string Thong_tin_lien_quan { get; set; }
+
+        [JsonPropertyName("nmmst")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ma_so_thue_nguoi_mua { get; set; }
+
+        [JsonPropertyName("nmten")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ten_nguoi_mua { get; set; }
+
+        [JsonPropertyName("khmshdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ky_hieu_ma_so_goc { get; set; }
+
+        [JsonPropertyName("khhdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ky_hieu_hoa_don_goc { get; set; }
+
+        [JsonPropertyName("tdlhdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ngay_lap_goc { get; set; }
 
         /// <summary>
         /// "Bán ra" / "Mua vào" — gán sau khi tìm kiếm theo endpoint đã gọi, không có trong JSON.
