@@ -31,6 +31,13 @@ namespace E_Tax
         private readonly UserPreferences _prefs = new UserPreferences(UserPreferences.DefaultPath);
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
 
+        private readonly LocalInvoiceStore _store = new LocalInvoiceStore(LocalInvoiceStore.DefaultRoot);
+        private readonly DownloadJobStore _jobStore = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
+        /// <summary>MST doanh nghiệp = tên đăng nhập của phiên hiện tại nếu là MST hợp lệ; null thì không đối chiếu bên mua/bán và không ghi kho.</summary>
+        private string? _currentTaxCode;
+        /// <summary>Liên kết HĐ thay thế/điều chỉnh với HĐ gốc của lần tìm kiếm gần nhất (theo Id HĐ).</summary>
+        private IReadOnlyDictionary<string, InvoiceLink> _invoiceLinks = new Dictionary<string, InvoiceLink>();
+
         private string jwtToken = "";
         private string captchaKey = "";
         private List<SearchResult> _latestResults = new List<SearchResult>();
@@ -244,10 +251,17 @@ namespace E_Tax
                 if (success)
                 {
                     SaveLastUsername(username);
+                    // Thay MST của phiên trước; chỉ giữ tên đăng nhập (không bao giờ mật khẩu) và chỉ khi là MST hợp lệ
+                    _currentTaxCode = InvoiceGridLogic.CurrentTaxCode(username);
                     MessageBox.Show("✅ Đăng nhập thành công!");
 
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
+                    if (_currentTaxCode == null)
+                    {
+                        AppendLog("ℹ️ Tên đăng nhập không phải MST hợp lệ: không đối chiếu bên mua/bán và không ghi kho hóa đơn.");
+                        ShowStatusMessage("Tên đăng nhập không phải MST hợp lệ: kết quả tìm kiếm sẽ không được lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
+                    }
 
                     txtUser.Clear();
                     txtPass.Clear();
@@ -947,6 +961,8 @@ namespace E_Tax
 
                 if (_latestResults.Any())
                 {
+                    // Chỉ lưu những gì đã lấy được; trang lỗi không xóa gì khỏi kho (Upsert không bao giờ xóa)
+                    _ = StoreInvoicesAsync(_latestResults);
                     modal.UpdateStatus($"Đang hiển thị {_latestResults.Count} hóa đơn...");
                     BindMainGrid(_latestResults);
 
@@ -1027,6 +1043,7 @@ namespace E_Tax
         private void BindMainGrid(List<SearchResult> items)
         {
             _visibleResults = items;
+            _invoiceLinks = InvoiceLinker.Link(_latestResults);
             dgvMain.DataSource = null;
             dgvMain.DataSource = items;
             UpdateGridRowNumbers();
@@ -1171,6 +1188,9 @@ namespace E_Tax
             DownloadJobStore? jobStore = null;
             string? jobId = null;
             int sinceFlush = 0;
+            string? storeOwner = _currentTaxCode; // chụp lúc bắt đầu: đổi phiên giữa chừng không làm lẫn doanh nghiệp
+            // HĐ đã xong trong lượt này (hoặc bỏ qua hợp lệ khi tiếp tục) kèm đường dẫn file kết quả, để gắn vào kho trước khi xóa thư mục làm việc
+            var finishedForStore = new List<(SearchResult Invoice, string PdfPath, string XmlPath)>();
 
             void JobMark(string key, DownloadItemState state, string? error)
             {
@@ -1210,6 +1230,7 @@ namespace E_Tax
                 }
 
                 ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
+                _ = StoreInvoicesAsync(invoicesToDownload);
 
                 // Excel giữ đủ theo loại; phần tải chỉ lấy mỗi hóa đơn thật một lần
                 var downloadPlan = InvoiceDownloadPlan.Build(invoicesToDownload);
@@ -1321,6 +1342,7 @@ namespace E_Tax
                         successCount++;
                         convertSuccessCount++;
                         producedPdfs.Add((planItem, outputPdfPath));
+                        finishedForStore.Add((invoice, outputPdfPath, itemXmlPath));
                         continue;
                     }
 
@@ -1380,6 +1402,7 @@ namespace E_Tax
                         if (pdfProduced)
                         {
                             JobMark(invoiceIdentifier, DownloadItemState.Done, null);
+                            finishedForStore.Add((invoice, outputPdfPath, itemXmlPath));
                         }
                         else
                         {
@@ -1518,6 +1541,8 @@ namespace E_Tax
             {
                 CloseModal();
                 JobFlush();
+                // Gắn file vào kho trước khi thư mục làm việc bị xóa; lỗi chỉ cảnh báo
+                await AttachDownloadedFilesAsync(storeOwner, finishedForStore);
                 try
                 {
                     // Thư mục làm việc chỉ xóa khi không hủy, mọi HĐ đã xong và kết quả đã lưu; còn lại giữ để tiếp tục
@@ -1545,14 +1570,72 @@ namespace E_Tax
             }
         }
 
-        private void ShowStatusMessage(string message, Color color)
+        private void ShowStatusMessage(string message, Color color, int durationMs = 2000)
         {
             lblStatusMessage.Text = message;
             lblStatusMessage.ForeColor = color;
             lblStatusMessage.Visible = true;
 
             statusTimer.Stop();
+            statusTimer.Interval = durationMs;
             statusTimer.Start();
+        }
+
+        /// <summary>Lưu HĐ đã lấy được vào kho cục bộ ở luồng nền; lỗi chỉ ghi log và cảnh báo, không làm hỏng tìm kiếm/tải.</summary>
+        private async Task StoreInvoicesAsync(IReadOnlyCollection<SearchResult> invoices)
+        {
+            string? own = _currentTaxCode;
+            if (own == null || invoices.Count == 0) return;
+            var snapshot = invoices.ToList();
+            try
+            {
+                var result = await Task.Run(() => _store.Upsert(own, snapshot));
+                AppendLog($"ℹ️ Kho hóa đơn: thêm {result.Added}, cập nhật {result.Updated}, không đổi {result.Unchanged}.");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"⚠️ Không ghi được kho hóa đơn: {ex.GetType().Name}: {ex.Message}");
+                ShowStatusMessage("Cảnh báo: không lưu được vào kho hóa đơn cục bộ (xem log).", Color.OrangeRed, 6000);
+            }
+        }
+
+        /// <summary>Chép PDF/XML đã tải xong vào kho (luồng nền). Chỉ file có thật và không rỗng; lỗi từng HĐ không dừng các HĐ khác.</summary>
+        private async Task AttachDownloadedFilesAsync(string? own, IReadOnlyList<(SearchResult Invoice, string PdfPath, string XmlPath)> items)
+        {
+            if (own == null || items.Count == 0) return;
+            try
+            {
+                var (attached, failed) = await Task.Run(() =>
+                {
+                    int ok = 0, bad = 0;
+                    foreach (var (invoice, pdfPath, xmlPath) in items)
+                    {
+                        try
+                        {
+                            foreach (string file in InvoiceGridLogic.ExistingNonEmptyFiles(pdfPath, xmlPath))
+                                _store.AttachFile(own, invoice, file);
+                            ok++;
+                        }
+                        catch (Exception) { bad++; }
+                    }
+                    return (ok, bad);
+                });
+                AppendLog($"ℹ️ Kho hóa đơn: đã gắn file cho {attached} HĐ" + (failed > 0 ? $", lỗi {failed} HĐ." : "."));
+                if (failed > 0)
+                    ShowStatusMessage($"Cảnh báo: không gắn được file vào kho cho {failed} hóa đơn.", Color.OrangeRed, 6000);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"⚠️ Không gắn được file vào kho hóa đơn: {ex.GetType().Name}");
+                ShowStatusMessage("Cảnh báo: không gắn được file vào kho hóa đơn (xem log).", Color.OrangeRed, 6000);
+            }
+        }
+
+        private void btnKhoHoaDon_Click(object? sender, EventArgs e)
+        {
+            // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null
+            using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
+            form.ShowDialog(this);
         }
 
         private void statusTimer_Tick(object sender, EventArgs e)
@@ -2439,16 +2522,27 @@ namespace E_Tax
                 e.Value = InvoiceDate.ToDisplay(ngayLap);
                 e.FormattingApplied = true;
             }
-            var risk = RiskFor(dgvMain.Rows[e.RowIndex].DataBoundItem as SearchResult, _riskResults);
-            if (risk == null) return;
+            if (dgvMain.Rows[e.RowIndex].DataBoundItem is not SearchResult item) return;
 
-            if (e.ColumnIndex == dgvMain.Columns["colDgvRuiRo"]?.Index)
+            // Cột "Phân loại" chỉ để hiển thị (không bind, nằm cuối lưới)
+            if (e.ColumnIndex == dgvMain.Columns["colDgvPhanLoai"]?.Index)
+            {
+                InvoiceLink? link = null;
+                if (!string.IsNullOrEmpty(item.Id)) _invoiceLinks.TryGetValue(item.Id, out link);
+                e.Value = InvoiceGridLogic.ClassificationText(item, link);
+                e.FormattingApplied = true;
+            }
+
+            var risk = RiskFor(item, _riskResults);
+            if (risk != null && e.ColumnIndex == dgvMain.Columns["colDgvRuiRo"]?.Index)
             {
                 e.Value = RiskCheckService.Label(risk.Status);
                 e.FormattingApplied = true;
             }
-            if (risk.Status == RiskStatus.Risky) e.CellStyle.BackColor = RiskyRowColor;
-            else if (risk.Status == RiskStatus.Unknown) e.CellStyle.BackColor = UnknownRowColor;
+
+            // Thứ tự ưu tiên: rủi ro, chưa kiểm tra được, rồi màu phân loại. Chỉ đặt BackColor nên dòng đang chọn vẫn dùng SelectionBackColor.
+            var color = InvoiceGridLogic.RowColor(risk?.Status, InvoiceClassifier.RelationOf(item.Trang_thai_hoa_don), RiskyRowColor, UnknownRowColor);
+            if (color.HasValue && e.CellStyle != null) e.CellStyle.BackColor = color.Value;
         }
 
         /// <summary>

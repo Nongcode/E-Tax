@@ -47,6 +47,9 @@ namespace E_Tax
             _root = Path.GetFullPath(rootPath);
         }
 
+        /// <summary>Thư mục gốc của kho (dùng cho sao lưu/khôi phục).</summary>
+        public string Root => _root;
+
         public static string DefaultRoot =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "E-Tax", "store");
 
