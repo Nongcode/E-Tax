@@ -2382,12 +2382,6 @@ namespace E_Tax
         /// </summary>
         private async void btnKiemTraNCC_Click(object? sender, EventArgs e)
         {
-            if (_riskService == null)
-            {
-                MessageBox.Show(this, RiskNotConfiguredText, "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
             var codes = _visibleResults
                 .Where(r => r.Loai_hoa_don == BoughtLabel)
                 .Select(r => (r.Ma_so_thue ?? "").Trim())
@@ -2397,6 +2391,12 @@ namespace E_Tax
             if (codes.Count == 0)
             {
                 MessageBox.Show(this, "Không có hóa đơn mua vào nào đang hiển thị để kiểm tra nhà cung cấp.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_riskService == null)
+            {
+                CheckSuppliersWithLocalList(codes);
                 return;
             }
 
@@ -2457,6 +2457,62 @@ namespace E_Tax
             if (unknown > 0)
                 summary += $"\n\nCó {unknown} nhà cung cấp CHƯA được kiểm tra (lỗi mạng hoặc máy chủ), không có nghĩa là an toàn. Hãy kiểm tra lại các dòng tô xám.";
             MessageBox.Show(this, summary, "Kết quả kiểm tra NCC", MessageBoxButtons.OK, unknown > 0 || risky > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        }
+
+        private LocalRiskList? _localRiskList;
+
+        /// <summary>
+        /// Không có token: đối chiếu với danh sách rủi ro nhập từ file. Chỉ có "Rủi ro" hoặc "Không kiểm tra được",
+        /// không có trong danh sách KHÔNG có nghĩa là an toàn. Danh sách rỗng thì mời nhập file.
+        /// </summary>
+        private void CheckSuppliersWithLocalList(List<string> codes)
+        {
+            _localRiskList ??= new LocalRiskList(LocalRiskList.DefaultPath, AppendLog);
+            if (_localRiskList.Count == 0)
+            {
+                var ask = MessageBox.Show(this,
+                    "Chưa cấu hình kiểm tra trực tuyến và chưa có danh sách nhà cung cấp rủi ro cục bộ.\n\nBạn có muốn nhập danh sách từ file CSV/XLSX (có cột MST) ngay bây giờ không?",
+                    "Chưa có danh sách rủi ro", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ask != DialogResult.Yes || !ImportLocalRiskList()) return;
+            }
+
+            var merged = new Dictionary<string, RiskResult>(_riskResults);
+            foreach (var code in codes) merged[code] = _localRiskList.Check(code);
+            _riskResults = merged;
+            dgvMain.Invalidate();
+
+            int risky = codes.Count(c => merged[c].Status == RiskStatus.Risky);
+            int unknown = codes.Count - risky;
+            string summary = $"Đối chiếu {codes.Count} nhà cung cấp với danh sách cục bộ ({_localRiskList.Count} MST):\n - {RiskCheckService.Label(RiskStatus.Risky)}: {risky}\n - {RiskCheckService.Label(RiskStatus.Unknown)}: {unknown}" +
+                "\n\nNhà cung cấp không có trong danh sách KHÔNG có nghĩa là an toàn.\n\nBạn có muốn nhập lại danh sách từ file khác (thay thế danh sách hiện tại) không?";
+            var again = MessageBox.Show(this, summary, "Kết quả đối chiếu NCC", MessageBoxButtons.YesNo,
+                risky > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            if (again == DialogResult.Yes && ImportLocalRiskList())
+                CheckSuppliersWithLocalList(codes);
+        }
+
+        /// <summary>Chọn file và nhập danh sách; trả true nếu nhập thành công.</summary>
+        private bool ImportLocalRiskList()
+        {
+            using var dlg = new OpenFileDialog
+            {
+                Title = "Chọn file danh sách nhà cung cấp rủi ro",
+                Filter = "Danh sách MST (*.csv;*.xlsx)|*.csv;*.xlsx"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+            try
+            {
+                int n = _localRiskList!.Import(dlg.FileName);
+                AppendLog($"ℹ️ Đã nhập {n} MST vào danh sách NCC rủi ro cục bộ.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Nhập danh sách NCC rủi ro thất bại: {ex.GetType().Name}");
+                MessageBox.Show(this, ex is InvalidDataException ? ex.Message : "Không đọc hoặc ghi được file. Danh sách hiện tại được giữ nguyên.",
+                    "Không nhập được", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
         }
 
         private async void btnKtraDNMuaLe_Click(object sender, EventArgs e)
