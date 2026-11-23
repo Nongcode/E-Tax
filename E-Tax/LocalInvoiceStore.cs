@@ -18,6 +18,7 @@ namespace E_Tax
     {
         private const string UnknownDate = "unknown-date";
         private const string UnknownSupplier = "khong-ro";
+        private const string CorruptFileKey = "E-Tax.CorruptFile";
 
         private static readonly Regex TaxCodePattern = new(@"^[0-9]+(-[0-9]+)?\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex DataFilePattern = new(@"^(\d{4}-(0[1-9]|1[0-2])|unknown-date)\.json\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -220,6 +221,27 @@ namespace E_Tax
                 .ToList();
         }
 
+        /// <summary>Tên file tháng bị hỏng mà lỗi này nói tới; null nếu không phải lỗi file hỏng.</summary>
+        public static string? CorruptFileOf(Exception ex) => ex.Data[CorruptFileKey] as string;
+
+        /// <summary>
+        /// Cách ly file tháng hỏng bằng cách đổi tên thành .corrupt (không bao giờ xóa, không đè bản cách ly trước).
+        /// Trả về tên file mới.
+        /// </summary>
+        public string QuarantineCorruptFile(string ownTaxCode, string fileName)
+        {
+            if (fileName != Path.GetFileName(fileName) || !DataFilePattern.IsMatch(fileName))
+                throw new ArgumentException("Tên file tháng không hợp lệ.", nameof(fileName));
+            string source = Path.Combine(CompanyDir(ownTaxCode), fileName);
+            lock (_lock)
+            {
+                string target = source + ".corrupt";
+                if (File.Exists(target)) target = source + "." + Guid.NewGuid().ToString("N") + ".corrupt";
+                File.Move(source, target);
+                return Path.GetFileName(target);
+            }
+        }
+
         private static bool IsValidTaxCode(string? value) => value != null && TaxCodePattern.IsMatch(value);
 
         private string CompanyDir(string ownTaxCode)
@@ -305,20 +327,46 @@ namespace E_Tax
             {
                 var list = JsonSerializer.Deserialize<List<StoredInvoice>>(File.ReadAllText(path, Encoding.UTF8), JsonOptions);
                 if (list == null || list.Any(x => x == null || x.Invoice == null))
-                    throw new InvalidDataException($"File kho hóa đơn bị hỏng: {Path.GetFileName(path)}");
+                    throw CorruptFile(path, null);
                 return list;
             }
             catch (JsonException ex)
             {
-                throw new InvalidDataException($"File kho hóa đơn bị hỏng: {Path.GetFileName(path)}", ex);
+                throw CorruptFile(path, ex);
             }
+        }
+
+        private static InvalidDataException CorruptFile(string path, Exception? inner)
+        {
+            string name = Path.GetFileName(path);
+            var ex = new InvalidDataException($"File kho hóa đơn bị hỏng: {name}", inner);
+            ex.Data[CorruptFileKey] = name;
+            return ex;
         }
 
         private static void SaveFile(string path, List<StoredInvoice> list)
         {
-            string temp = path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(list, JsonOptions), new UTF8Encoding(false));
-            File.Move(temp, path, true);
+            WriteAtomic(path, JsonSerializer.Serialize(list, JsonOptions));
+        }
+
+        /// <summary>Ghi ra file tạm tên duy nhất, đẩy xuống đĩa rồi mới thay file đích, để mất điện không làm hỏng bản đang có.</summary>
+        internal static void WriteAtomic(string path, string content)
+        {
+            string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (var fs = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    fs.Write(new UTF8Encoding(false).GetBytes(content));
+                    fs.Flush(true);
+                }
+                File.Move(temp, path, true);
+            }
+            catch
+            {
+                try { File.Delete(temp); } catch { }
+                throw;
+            }
         }
     }
 }

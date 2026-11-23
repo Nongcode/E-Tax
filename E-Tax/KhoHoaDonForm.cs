@@ -305,15 +305,47 @@ namespace E_Tax
                 return;
             }
             var query = BuildQuery();
-            var (list, links) = await Task.Run(() =>
+            var quarantined = new List<string>();
+            while (true)
             {
-                var l = _store.Query(company, query);
-                return (l, InvoiceLinker.Link(l));
-            });
-            _all = list;
-            _links = links;
+                try
+                {
+                    var (list, links) = await Task.Run(() =>
+                    {
+                        var l = _store.Query(company, query);
+                        return (l, InvoiceLinker.Link(l));
+                    });
+                    _all = list;
+                    _links = links;
+                    break;
+                }
+                catch (InvalidDataException ex) when (LocalInvoiceStore.CorruptFileOf(ex) != null)
+                {
+                    string file = LocalInvoiceStore.CorruptFileOf(ex)!;
+                    Logger.Write($"❌ Kho hóa đơn: file tháng bị hỏng: {company}\\{file}");
+                    var answer = MessageBox.Show(this,
+                        $"File dữ liệu {file} của doanh nghiệp {company} bị hỏng nên chưa mở được kho.\n\n" +
+                        "Có: cách ly file này (đổi tên thành .corrupt, không xóa) rồi mở các tháng còn lại.\n" +
+                        "Không: giữ nguyên, không mở doanh nghiệp này.",
+                        "File kho bị hỏng", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                    if (answer != DialogResult.Yes)
+                    {
+                        _all = new List<SearchResult>();
+                        _links = new Dictionary<string, InvoiceLink>();
+                        _page = 0;
+                        await ShowPageAsync();
+                        return;
+                    }
+                    await Task.Run(() => _store.QuarantineCorruptFile(company, file));
+                    quarantined.Add(file);
+                }
+            }
             _page = 0;
             await ShowPageAsync();
+            if (quarantined.Count > 0)
+                MessageBox.Show(this,
+                    $"Đã cách ly: {string.Join(", ", quarantined)}.\nDữ liệu của các tháng này chưa có trong kho. Hãy dùng nút Khôi phục với một bản sao lưu để lấy lại.",
+                    "Cần khôi phục dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         private async Task ShowPageAsync()
@@ -415,6 +447,7 @@ namespace E_Tax
             using var dlg = new SaveFileDialog { Title = "Xuất Excel: " + string.Join(", ", codes), Filter = "Excel (*.xlsx)|*.xlsx", FileName = $"KhoHoaDon_{DateTime.Now:yyyyMMdd}.xlsx" };
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
             string path = dlg.FileName;
+            var query = BuildQuery(); // đọc bộ lọc trên UI thread, áp dụng cho mọi doanh nghiệp đã tick
 
             await RunBusyAsync("Đang xuất Excel...", async () =>
             {
@@ -422,10 +455,10 @@ namespace E_Tax
                 {
                     var data = new List<(string TaxCode, IReadOnlyList<SearchResult> Invoices)>();
                     foreach (string c in codes)
-                        data.Add((c, _store.Query(c, new StoreQuery(null, null, null, null, null, null))));
+                        data.Add((c, _store.Query(c, query)));
                     ExcelExporter.ExportCompanies(data, path);
                 });
-                MessageBox.Show(this, $"Đã xuất {codes.Count} doanh nghiệp ra:\n{path}", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, $"Đã xuất {codes.Count} doanh nghiệp theo bộ lọc hiện tại ra:\n{path}", "Hoàn tất", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
         }
 

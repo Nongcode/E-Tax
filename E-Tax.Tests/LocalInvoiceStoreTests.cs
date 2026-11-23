@@ -168,6 +168,70 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void Save_UsesUniqueTempName_AndLeavesNoTemp()
+        {
+            // tên tạm cố định cũ bị chiếm: bản ghi vẫn phải lưu được
+            Directory.CreateDirectory(MonthFile("2026-03") + ".tmp");
+
+            Assert.Equal(1, _store.Upsert(Own, new[] { Inv() }).Added);
+
+            Assert.Single(_store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
+            Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(MonthFile("2026-03"))!, "*.tmp"));
+        }
+
+        [Fact]
+        public void CorruptMonthFile_ErrorNamesThatFile()
+        {
+            _store.Upsert(Own, new[] { Inv() });
+            File.WriteAllText(MonthFile("2026-02"), "{ not json");
+
+            var ex = Assert.Throws<InvalidDataException>(() => _store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
+
+            Assert.Contains("2026-02.json", ex.Message);
+            Assert.Equal("2026-02.json", LocalInvoiceStore.CorruptFileOf(ex));
+            Assert.Null(LocalInvoiceStore.CorruptFileOf(new InvalidDataException("khác")));
+        }
+
+        [Fact]
+        public void Quarantine_RenamesWithoutDeleting_AndCompanyOpens()
+        {
+            _store.Upsert(Own, new[] { Inv() });
+            File.WriteAllText(MonthFile("2026-02"), "{ not json");
+
+            string renamed = _store.QuarantineCorruptFile(Own, "2026-02.json");
+
+            Assert.Equal("2026-02.json.corrupt", renamed);
+            Assert.False(File.Exists(MonthFile("2026-02")));
+            Assert.Equal("{ not json", File.ReadAllText(MonthFile("2026-02") + ".corrupt"));
+            Assert.Single(_store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
+        }
+
+        [Fact]
+        public void Quarantine_SecondTime_KeepsEarlierCorruptFile()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(MonthFile("2026-02"))!);
+            File.WriteAllText(MonthFile("2026-02"), "hỏng 1");
+            _store.QuarantineCorruptFile(Own, "2026-02.json");
+            File.WriteAllText(MonthFile("2026-02"), "hỏng 2");
+
+            string second = _store.QuarantineCorruptFile(Own, "2026-02.json");
+
+            Assert.NotEqual("2026-02.json.corrupt", second);
+            Assert.EndsWith(".corrupt", second);
+            Assert.Equal("hỏng 1", File.ReadAllText(MonthFile("2026-02") + ".corrupt"));
+            Assert.Equal("hỏng 2", File.ReadAllText(Path.Combine(Path.GetDirectoryName(MonthFile("2026-02"))!, second)));
+        }
+
+        [Theory]
+        [InlineData("..\\evil.json")]
+        [InlineData("notes.json")]
+        [InlineData("2026-13.json")]
+        public void Quarantine_RejectsNonDataFile(string name)
+        {
+            Assert.Throws<ArgumentException>(() => _store.QuarantineCorruptFile(Own, name));
+        }
+
+        [Fact]
         public void Save_LeftoverTempFile_DoesNotAffectData()
         {
             _store.Upsert(Own, new[] { Inv() });
