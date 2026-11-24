@@ -254,7 +254,8 @@ Các điểm dưới đây dựa trên giả định/test giả lập, chưa ch�
 - `LocalInvoiceStore.cs`: kho HĐ cục bộ theo doanh nghiệp, `{root}\{mst}\{yyyy-MM}.json` (HĐ không rõ ngày: `unknown-date.json`), file đính kèm ở `{root}\{mst}\files\`.
 - `KhoHoaDonForm.cs`: màn hình kho (dựng bằng code): xem theo doanh nghiệp, lọc, phân trang, mở PDF/XML, ghi chú, xuất Excel, sao lưu/khôi phục, quản lý tác vụ tải.
 - `DownloadJobStore.cs`: tiến độ tải theo từng khóa HĐ, ghi nguyên tử, cho phép tiếp tục tác vụ bị dừng.
-- `BackupService.cs`: sao lưu/khôi phục kho và ghi chú ra file ZIP. Bản sao lưu được kiểm tra trước khi đưa vào chỗ. Khôi phục kiểm tra toàn bộ JSON, tự tạo `{kho}-safety-*.zip` cạnh thư mục kho, rồi gộp file tháng theo khóa HĐ (`overwrite` chỉ quyết định khi trùng khóa).
+- `BackupService.cs`: sao lưu/khôi phục kho và ghi chú ra file ZIP. Bản sao lưu được kiểm tra trước khi đưa vào chỗ. Khôi phục kiểm tra toàn bộ JSON, tự tạo `{kho}-safety-*.zip` cạnh thư mục kho, rồi gộp file tháng theo khóa HĐ (`overwrite` chỉ quyết định khi trùng khóa). Tên file tháng sai hoa/thường trong zip bị từ chối; ghi chú hỏng được giữ bản `.corrupt` trước khi bị thay.
+- `AutoBackup.cs`: sao lưu tự động khi mở app, tối đa mỗi ngày một lần, vào `%AppData%\E-Tax\backups\auto-*.zip`, giữ 7 bản mới nhất.
 - `BusyGate.cs`: một cổng bận chung cho mọi luồng dài (không chạy đồng thời).
 - `InvoiceClassifier.cs`, `InvoiceLinker.cs`: phân loại HĐ và gắn HĐ thay thế/điều chỉnh với HĐ gốc.
 - `LocalRiskList.cs`: danh sách NCC rủi ro nhập từ CSV/XLSX. Chỉ trả Risky hoặc Unknown; không có trong danh sách không có nghĩa là an toàn.
