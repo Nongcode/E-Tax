@@ -55,12 +55,28 @@ namespace E_Tax.Tests
         public void SoldOnly_AppendixAndAccountingEnabled() =>
             Assert.Equal((false, true, true), ButtonStates(new SearchScope(false, true), 0));
 
-        [Fact]
-        public void ForeignCurrency_AllButtonsDisabled() =>
-            Assert.Equal((false, false, false), ButtonStates(new SearchScope(true, true), 1));
+        private static SearchResult Usd(string id, string loai)
+        {
+            var h = Header(id, loai);
+            h.Don_vi_tien_te = "USD";
+            return h;
+        }
 
         [Fact]
-        public void UnknownStatusWithoutLines_AllButtonsDisabled() =>
-            Assert.Equal((false, false, false), ButtonStates(new SearchScope(true, true), 0, Header("x", "Mua vào", null)));
+        public void ForeignCurrencyInSales_AllButtonsDisabled() =>
+            Assert.Equal((false, false, false), ButtonStates(new SearchScope(true, true), 1, Usd("x", "Bán ra")));
+
+        // N4: phụ lục chỉ dùng Bán ra nên vấn đề ở Mua vào không khóa phụ lục
+        [Fact]
+        public void ForeignCurrencyInPurchases_AppendixStaysEnabled() =>
+            Assert.Equal((false, true, false), ButtonStates(new SearchScope(true, true), 1, Usd("x", "Mua vào")));
+
+        [Fact]
+        public void UnknownStatusInSales_AllButtonsDisabled() =>
+            Assert.Equal((false, false, false), ButtonStates(new SearchScope(true, true), 0, Header("x", "Bán ra", null)));
+
+        [Fact]
+        public void UnknownStatusInPurchases_AppendixStaysEnabled() =>
+            Assert.Equal((false, true, false), ButtonStates(new SearchScope(true, true), 0, Header("x", "Mua vào", null)));
     }
 }

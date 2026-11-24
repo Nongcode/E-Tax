@@ -97,12 +97,16 @@ namespace E_Tax
         /// <summary>Số HĐ lấy chi tiết thành công nhưng không có dòng hàng nào, nên không có trong bảng kê.</summary>
         public int LastNoLineCount { get; private set; }
 
+        /// <summary>Số HĐ Bán ra không có dòng hàng trong lần nạp gần nhất (phần của LastNoLineCount).</summary>
+        public int LastNoLineSoldCount { get; private set; }
+
         /// <summary>Xóa dữ liệu lần tải trước để bảng kê không xuất số liệu cũ.</summary>
         public void ClearLatest()
         {
             _latestItems = new List<InvoiceDetailItem>();
             LastFailedCount = 0;
             LastNoLineCount = 0;
+            LastNoLineSoldCount = 0;
         }
 
         internal DetailGridManager(InvoiceDetailService detailService, DataGridView dgvDetails, DataGridView dgvMua,
@@ -227,6 +231,7 @@ namespace E_Tax
             int failedCount = 0;
             int skippedCount = 0;
             int noLineCount = 0;
+            int noLineSoldCount = 0;
 
             for (int i = 0; i < total; i++)
             {
@@ -272,7 +277,11 @@ namespace E_Tax
                         }
                     }
 
-                    if (invoiceItems.Count == 0) noLineCount++;
+                    if (invoiceItems.Count == 0)
+                    {
+                        noLineCount++;
+                        if (invoiceHeader.Loai_hoa_don == "Bán ra") noLineSoldCount++;
+                    }
                     foreach (var detailItem in invoiceItems)
                     {
                         detailItem.STT = globalStt++;
@@ -298,6 +307,7 @@ namespace E_Tax
             _latestItems = allDetailItems;
             LastFailedCount = failedCount + skippedCount;
             LastNoLineCount = noLineCount;
+            LastNoLineSoldCount = noLineSoldCount;
 
             try
             {

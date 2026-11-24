@@ -912,7 +912,10 @@ namespace E_Tax
             }
 
             // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất. Các cảnh báo này cũng được ghi vào file.
-            var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount,
+            int noLine = type == InvoiceType.Sold
+                ? _detailGridManager.LastNoLineSoldCount
+                : _detailGridManager.LastNoLineCount - _detailGridManager.LastNoLineSoldCount;
+            var warnings = TaxListing.ExportWarnings(groups, noLine,
                     TaxListing.CountNonVnd(TaxableInvoices.IncludedHeaders(_latestResults), type))
                 .Concat(TaxableInvoices.OutputNotes(items, _latestResults, _lastSearchPeriod, TaxListing.DirectionLabel(type)))
                 .Concat(_lastSearchWarnings.Where(w => w.StartsWith(TaxListing.DirectionLabel(type), StringComparison.Ordinal)))
@@ -1748,7 +1751,7 @@ namespace E_Tax
                 int nonVnd = TaxListing.CountNonVnd(included, InvoiceType.Bought) + TaxListing.CountNonVnd(included, InvoiceType.Sold);
                 using var form = new KeKhaiForm(items, _lastSearchPeriod, _currentTaxCode,
                     _detailGridManager.LastFailedCount + _lastFailedSearchPages, _detailGridManager.LastNoLineCount, nonVnd,
-                    _latestResults, _lastSearchScope, _lastSearchWarnings);
+                    _latestResults, _lastSearchScope, _lastSearchWarnings, _detailGridManager.LastNoLineSoldCount);
                 form.ShowDialog(this);
                 return Task.CompletedTask;
             });

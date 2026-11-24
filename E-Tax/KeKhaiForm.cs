@@ -107,18 +107,28 @@ namespace E_Tax
         /// Thiếu dữ liệu, trạng thái không rõ hoặc ngoại tệ khóa cả ba loại xuất. Tờ khai cần cả hai chiều của cùng kỳ,
         /// phụ lục chỉ cần Bán ra, file kế toán xuất theo phần đã tìm.
         /// </summary>
-        public static KeKhaiBlocks DecideBlocks(int failedInvoices, int unknownStatus, int nonVnd, SearchScope scope)
+        public static KeKhaiBlocks DecideBlocks(int failedInvoices, int unknownStatus, int nonVnd, SearchScope scope) =>
+            DecideBlocks(failedInvoices, unknownStatus, nonVnd, scope, unknownStatus, nonVnd);
+
+        /// <summary>unknownSold/nonVndSold: phần của Bán ra; phụ lục chỉ bị khóa bởi vấn đề ở Bán ra.</summary>
+        public static KeKhaiBlocks DecideBlocks(int failedInvoices, int unknownStatus, int nonVnd, SearchScope scope, int unknownSold, int nonVndSold)
         {
-            string? foreign = nonVnd > 0
-                ? $"Có {nonVnd} hóa đơn không tính bằng VND. V1 chưa quy đổi tỷ giá nên không được xuất tờ khai, phụ lục và file kế toán."
-                : null;
-            string? common = Join(TaxListing.ExportBlockReason(failedInvoices), TaxableInvoices.UnknownBlockReason(unknownStatus), foreign);
+            string? common = DataBlock(failedInvoices, unknownStatus, nonVnd);
+            string? soldData = DataBlock(failedInvoices, unknownSold, nonVndSold);
 
             string? vatScope = scope.Bought && scope.Sold
                 ? null
                 : $"Tờ khai cần cả Mua vào và Bán ra của cùng kỳ; lần tìm kiếm này thiếu {(scope.Bought ? "Bán ra" : scope.Sold ? "Mua vào" : "Mua vào và Bán ra")}. Hãy tìm với loại Tất cả.";
             string? appendixScope = scope.Sold ? null : "Phụ lục giảm thuế cần dữ liệu Bán ra; lần tìm kiếm này không có Bán ra.";
-            return new KeKhaiBlocks(common, Join(common, vatScope), Join(common, appendixScope), common);
+            return new KeKhaiBlocks(common, Join(common, vatScope), Join(soldData, appendixScope), common);
+        }
+
+        private static string? DataBlock(int failedInvoices, int unknownStatus, int nonVnd)
+        {
+            string? foreign = nonVnd > 0
+                ? $"Có {nonVnd} hóa đơn không tính bằng VND. V1 chưa quy đổi tỷ giá nên không được xuất tờ khai, phụ lục và file kế toán."
+                : null;
+            return Join(TaxListing.ExportBlockReason(failedInvoices), TaxableInvoices.UnknownBlockReason(unknownStatus), foreign);
         }
 
         private static string? Join(params string?[] reasons)
@@ -153,6 +163,8 @@ namespace E_Tax
         private readonly IReadOnlyList<SearchResult> _headers;
         private readonly IReadOnlyList<string> _searchWarnings;
         private readonly int _noLineCount;
+        private readonly int _noLineSoldCount;
+        private readonly int _nonVndSoldCount;
         private readonly int _nonVndCount;
         private readonly IReadOnlyList<string> _listingWarnings;
         private readonly IReadOnlyList<TaxListingGroup> _bought;
@@ -189,7 +201,8 @@ namespace E_Tax
         private bool _exporting;
 
         public KeKhaiForm(IReadOnlyList<InvoiceDetailItem> items, TaxPeriod period, string? taxCode, int failedInvoices,
-            int noLineCount, int nonVndCount, IReadOnlyList<SearchResult> headers, SearchScope scope, IReadOnlyList<string> searchWarnings)
+            int noLineCount, int nonVndCount, IReadOnlyList<SearchResult> headers, SearchScope scope, IReadOnlyList<string> searchWarnings,
+            int? noLineSoldCount = null)
         {
             _items = (items ?? throw new ArgumentNullException(nameof(items))).ToList();
             _period = period;
@@ -198,7 +211,11 @@ namespace E_Tax
             _searchWarnings = searchWarnings ?? Array.Empty<string>();
             _noLineCount = noLineCount;
             _nonVndCount = nonVndCount;
-            _blocks = KeKhaiLogic.DecideBlocks(failedInvoices, TaxableInvoices.Select(_items, _headers).Unknown, nonVndCount, scope);
+            string sold = TaxListing.DirectionLabel(InvoiceType.Sold);
+            _nonVndSoldCount = TaxListing.CountNonVnd(TaxableInvoices.IncludedHeaders(_headers), InvoiceType.Sold);
+            _noLineSoldCount = noLineSoldCount ?? noLineCount;
+            _blocks = KeKhaiLogic.DecideBlocks(failedInvoices, TaxableInvoices.Select(_items, _headers).Unknown, nonVndCount, scope,
+                TaxableInvoices.Select(_items, _headers, sold).Unknown, _nonVndSoldCount);
             _bought = TaxListing.Build(_items, InvoiceType.Bought);
             _sold = TaxListing.Build(_items, InvoiceType.Sold);
             _listingWarnings = TaxListing.ExportWarnings(_bought.Concat(_sold).ToList(), noLineCount, nonVndCount)
@@ -445,7 +462,7 @@ namespace E_Tax
         // Cảnh báo ghi vào phụ lục: chỉ tính phần Bán ra 8% mà phụ lục thực sự dùng
         private IReadOnlyList<string> AppendixNotes() =>
             KeKhaiLogic.ComposeWarnings(null,
-                TaxListing.ExportWarnings(_sold.Where(g => g.ThueSuat == "8%").ToList(), _noLineCount, _nonVndCount),
+                TaxListing.ExportWarnings(_sold.Where(g => g.ThueSuat == "8%").ToList(), _noLineSoldCount, _nonVndSoldCount),
                 TaxableInvoices.OutputNotes(_items, _headers, _period, TaxListing.DirectionLabel(InvoiceType.Sold))
                     .Concat(_searchWarnings.Where(w => w.StartsWith(TaxListing.DirectionLabel(InvoiceType.Sold), StringComparison.Ordinal))));
 

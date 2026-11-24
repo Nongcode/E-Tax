@@ -62,6 +62,26 @@ namespace E_Tax.Tests
             Assert.Contains(expected, b.Accounting);
         }
 
+        // N4: vấn đề chỉ ở Mua vào không được khóa phụ lục (phụ lục chỉ dùng Bán ra)
+        [Theory]
+        [InlineData(2, 0)]
+        [InlineData(0, 3)]
+        public void Blocks_ProblemOnlyInPurchases_LeavesAppendixOpen(int unknown, int nonVnd)
+        {
+            var b = KeKhaiLogic.DecideBlocks(0, unknown, nonVnd, Both, unknownSold: 0, nonVndSold: 0);
+            Assert.NotNull(b.Vat);
+            Assert.NotNull(b.Accounting);
+            Assert.Null(b.Appendix);
+        }
+
+        [Fact]
+        public void Blocks_ProblemInSales_BlocksAppendixWithSalesCount()
+        {
+            var b = KeKhaiLogic.DecideBlocks(0, 5, 0, Both, unknownSold: 2, nonVndSold: 0);
+            Assert.Contains("5 hóa đơn", b.Vat);
+            Assert.Contains("2 hóa đơn", b.Appendix);
+        }
+
         [Fact]
         public void Blocks_FailedInvoices_BlockAllThree()
         {

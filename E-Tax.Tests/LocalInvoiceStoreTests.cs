@@ -188,6 +188,7 @@ namespace E_Tax.Tests
             var ex = Assert.Throws<InvalidDataException>(() => _store.Query(Own, new StoreQuery(null, null, null, null, null, null)));
 
             Assert.Contains("2026-02.json", ex.Message);
+            Assert.Contains(Own, ex.Message);
             Assert.Equal("2026-02.json", LocalInvoiceStore.CorruptFileOf(ex));
             Assert.Null(LocalInvoiceStore.CorruptFileOf(new InvalidDataException("khác")));
         }

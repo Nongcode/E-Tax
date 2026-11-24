@@ -424,7 +424,9 @@ namespace E_Tax
         private static InvalidDataException CorruptFile(string path, Exception? inner)
         {
             string name = Path.GetFileName(path);
-            var ex = new InvalidDataException($"File kho hóa đơn bị hỏng: {name}", inner);
+            string company = Path.GetFileName(Path.GetDirectoryName(path) ?? "");
+            string shown = string.IsNullOrEmpty(company) ? name : $"{name} (MST {company})";
+            var ex = new InvalidDataException($"File kho hóa đơn bị hỏng: {shown}", inner);
             ex.Data[CorruptFileKey] = name;
             return ex;
         }
