@@ -133,7 +133,22 @@ namespace E_Tax
             if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
             dgvMain.AutoGenerateColumns = false;
             _ = CheckForUpdateAsync();
+            _ = RunAutoBackupAsync();
             await LoadCaptchaAsync();
+        }
+
+        /// <summary>Sao lưu tự động mỗi ngày ở nền vào %AppData%\E-Tax\backups; lỗi chỉ ghi log.</summary>
+        private async Task RunAutoBackupAsync()
+        {
+            try
+            {
+                string? path = await Task.Run(() => AutoBackup.RunIfDue(_store.Root, NotesStore.DefaultPath, AutoBackup.DefaultDir, DateTime.Now));
+                if (path != null && !IsDisposed) AppendLog($"ℹ️ Đã tự động sao lưu kho hóa đơn: {path}");
+            }
+            catch (Exception ex)
+            {
+                if (!IsDisposed) AppendLog($"❌ Sao lưu tự động thất bại: {ex.Message}");
+            }
         }
 
         #region Đăng nhập & bản quyền
