@@ -173,6 +173,54 @@ namespace E_Tax.Tests
             Assert.Empty(Directory.GetFiles(_dir, "*-safety-*"));
         }
 
+        [Theory]
+        [InlineData("2026-03.JSON")]
+        [InlineData("2026-03.Json")]
+        [InlineData("UNKNOWN-DATE.json")]
+        public void Restore_MonthFileNameInOtherCase_ThrowsAndWritesNothing(string name)
+        {
+            string file = Path.Combine(Store, "0101234567", "2026-03.json");
+            Put(file, Month((2, "LOCAL")));
+            string before = File.ReadAllText(file);
+            string z = MakeZip(("store/0101234567/" + name, Month((1, "BACKUP"))));
+
+            var ex = Assert.Throws<InvalidDataException>(() => BackupService.Restore(z, Store, null, null, true));
+
+            Assert.Contains(name, ex.Message);
+            Assert.Equal(before, File.ReadAllText(file));
+            Assert.Single(Directory.GetFiles(Path.Combine(Store, "0101234567")));
+            Assert.Empty(Directory.GetFiles(_dir, "*-safety-*"));
+        }
+
+        [Fact]
+        public void Restore_Overwrite_CorruptCurrentNotes_KeepsCopyBeforeReplacing()
+        {
+            Seed();
+            BackupService.Create(Store, Notes, Zip);
+            Put(Notes, "{ ghi chú hỏng");
+
+            BackupService.Restore(Zip, Store, Notes, null, true);
+
+            Assert.Equal(NotesJson, File.ReadAllText(Notes));
+            var kept = Directory.GetFiles(_dir, "notes.json*.corrupt");
+            Assert.Single(kept);
+            Assert.Equal("{ ghi chú hỏng", File.ReadAllText(kept[0]));
+        }
+
+        [Fact]
+        public void Restore_Overwrite_CorruptNotes_DoesNotReplaceEarlierKeptCopy()
+        {
+            Seed();
+            BackupService.Create(Store, Notes, Zip);
+            Put(Notes + ".corrupt", "bản giữ cũ");
+            Put(Notes, "{ hỏng lần hai");
+
+            BackupService.Restore(Zip, Store, Notes, null, true);
+
+            Assert.Equal("bản giữ cũ", File.ReadAllText(Notes + ".corrupt"));
+            Assert.Contains(Directory.GetFiles(_dir, "notes.json*.corrupt"), f => File.ReadAllText(f) == "{ hỏng lần hai");
+        }
+
         [Fact]
         public void Restore_CorruptMonthInStore_WritesNothing()
         {

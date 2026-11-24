@@ -105,6 +105,15 @@ namespace E_Tax
                 Create(root, notesPath, safetyBackup);
             }
 
+            // Bản sao lưu an toàn bỏ qua ghi chú hỏng, nên giữ một bản riêng trước khi file ghi chú bị thay
+            if (!string.IsNullOrEmpty(notesPath))
+            {
+                string notesFull = Path.GetFullPath(notesPath);
+                if (files.Any(f => string.Equals(f.Target, notesFull, StringComparison.OrdinalIgnoreCase))
+                    && File.Exists(notesFull) && !NotesStore.IsValidContent(File.ReadAllText(notesFull)))
+                    KeepCorruptNotes(notesFull);
+            }
+
             foreach (var (path, json) in merges)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -157,6 +166,9 @@ namespace E_Tax
                     if (isDir) continue;
 
                     bool selected = onlyCompany == null || parts[1] == onlyCompany;
+                    // Windows không phân biệt hoa thường: 2026-03.JSON sẽ đè lên 2026-03.json mà không qua kiểm tra và gộp
+                    if (parts.Length == 3 && !LocalInvoiceStore.IsDataFileName(parts[2]) && LocalInvoiceStore.IsDataFileName(parts[2].ToLowerInvariant()))
+                        throw new InvalidDataException($"Tên file tháng sai chữ hoa/thường: {entry.FullName}");
                     if (parts.Length == 3 && LocalInvoiceStore.IsDataFileName(parts[2]))
                     {
                         // File tháng của mọi doanh nghiệp đều phải đọc được, kể cả khi chỉ khôi phục một doanh nghiệp
@@ -185,6 +197,16 @@ namespace E_Tax
                 }
             }
             return plan;
+        }
+
+        // Chép sang tên .corrupt chưa dùng; không bao giờ đè bản giữ trước đó
+        private static void KeepCorruptNotes(string notesPath)
+        {
+            string target = notesPath + ".corrupt";
+            if (File.Exists(target))
+                target = $"{notesPath}.{DateTime.Now:yyyyMMdd_HHmmss}-{Guid.NewGuid():N}.corrupt";
+            File.Copy(notesPath, target);
+            Logger.Write($"❌ Ghi chú hiện tại bị hỏng, đã giữ bản sao tại {target} trước khi khôi phục.");
         }
 
         private static string ReadEntry(ZipArchiveEntry entry)
