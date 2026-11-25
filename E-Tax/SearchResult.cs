@@ -78,6 +78,11 @@ namespace E_Tax
         [JsonConverter(typeof(FlexibleStringConverter))]
         public string? Ky_hieu_hoa_don_goc { get; set; }
 
+        /// <summary>Ngày ký (nky). Chưa xác minh tên trường trên dữ liệu thật; thiếu thì là null.</summary>
+        [JsonPropertyName("nky")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ngay_ky { get; set; }
+
         [JsonPropertyName("tdlhdgoc")]
         [JsonConverter(typeof(FlexibleStringConverter))]
         public string? Ngay_lap_goc { get; set; }

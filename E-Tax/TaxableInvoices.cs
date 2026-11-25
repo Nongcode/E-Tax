@@ -119,14 +119,21 @@ namespace E_Tax
             var itemList = items.ToList();
             var headerList = headers.ToList();
             var notes = new List<string>(Select(itemList, headerList, direction).ExclusionNotes());
-            int crossPeriod = CountCrossPeriod(headerList, period, direction);
-            if (crossPeriod > 0)
-                notes.Add($"Có {crossPeriod} hóa đơn thay thế/điều chỉnh có hóa đơn gốc thuộc kỳ khác. Số liệu đang tính theo ngày lập; kế toán phải quyết định kỳ kê khai.");
+            var scoped = headerList.Where(h => h != null && (direction == null || h.Loai_hoa_don == direction)).ToList();
+            notes.AddRange(AdjustmentPeriodRules.Split(itemList, scoped, period).Notes());
+            int signedOutside = CountPurchasesSignedOutside(scoped, period);
+            if (signedOutside > 0)
+                notes.Add($"Có {signedOutside} hóa đơn mua vào có ngày ký ngoài kỳ. Mua vào ghi nhận theo ngày ký: hãy kiểm tra ngày ký trên file XML và chuyển sang kỳ đúng.");
             int mismatches = CountTotalMismatches(itemList, headerList, direction);
             if (mismatches > 0)
                 notes.Add($"Có {mismatches} hóa đơn có tổng dòng hàng không khớp tổng tiền trên hóa đơn (lệch quá 1 đồng mỗi dòng). Hãy đối chiếu trước khi dùng.");
             return notes;
         }
+
+        /// <summary>HĐ mua vào được tính có ngày ký (nếu cổng trả về) nằm ngoài kỳ.</summary>
+        public static int CountPurchasesSignedOutside(IEnumerable<SearchResult> headers, TaxPeriod period) =>
+            headers.Count(h => h != null && h.Loai_hoa_don == TaxListing.DirectionLabel(InvoiceType.Bought) && IsIncluded(h.Trang_thai_hoa_don)
+                && InvoiceDate.ToVietnamDate(h.Ngay_ky) is DateTime d && (d < period.From.Date || d > period.To.Date));
 
         private static string LineKey(InvoiceDetailItem l) =>
             !string.IsNullOrEmpty(l.InvoiceKey) ? l.InvoiceKey : $"{l.MSTNguoiBan}|{l.KyHieuHD}|{l.SoHD}";

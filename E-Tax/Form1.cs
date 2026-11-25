@@ -1074,7 +1074,8 @@ namespace E_Tax
                 return;
             }
 
-            var groups = TaxListing.Build(items, type);
+            // HĐ điều chỉnh/thay thế có HĐ gốc ở kỳ khác không nằm trong bảng kê kỳ này (quy tắc kế toán, xem ghi chú xuất)
+            var groups = TaxListing.Build(AdjustmentPeriodRules.Split(items, _latestResults, _lastSearchPeriod).Current, type);
             if (groups.Count == 0)
             {
                 string excludedText = string.Concat(selection.ExclusionNotes().Select(n => "\n" + n));

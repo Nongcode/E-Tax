@@ -164,6 +164,7 @@ namespace E_Tax
         private readonly IReadOnlyList<string> _searchWarnings;
         private readonly int _noLineCount;
         private readonly int _noLineSoldCount;
+        private readonly PeriodSplit _split;
         private readonly int _nonVndSoldCount;
         private readonly int _nonVndCount;
         private readonly IReadOnlyList<string> _listingWarnings;
@@ -216,8 +217,10 @@ namespace E_Tax
             _noLineSoldCount = noLineSoldCount ?? noLineCount;
             _blocks = KeKhaiLogic.DecideBlocks(failedInvoices, TaxableInvoices.Select(_items, _headers).Unknown, nonVndCount, scope,
                 TaxableInvoices.Select(_items, _headers, sold).Unknown, _nonVndSoldCount);
-            _bought = TaxListing.Build(_items, InvoiceType.Bought);
-            _sold = TaxListing.Build(_items, InvoiceType.Sold);
+            // HĐ điều chỉnh/thay thế có HĐ gốc ở kỳ khác được tách theo quy tắc kế toán; phần [38] được điền sẵn
+            _split = AdjustmentPeriodRules.Split(_items, _headers, period);
+            _bought = TaxListing.Build(_split.Current, InvoiceType.Bought);
+            _sold = TaxListing.Build(_split.Current, InvoiceType.Sold);
             _listingWarnings = TaxListing.ExportWarnings(_bought.Concat(_sold).ToList(), noLineCount, nonVndCount)
                 .Concat(TaxableInvoices.OutputNotes(_items, _headers, period))
                 .Concat(_searchWarnings)
@@ -340,7 +343,8 @@ namespace E_Tax
             for (int i = 0; i < Fields.Length; i++)
             {
                 var label = new Label { Text = Fields[i].Caption, AutoSize = true, MaximumSize = new Size(245, 0), Padding = new Padding(0, 6, 0, 2) };
-                var txt = new TextBox { Text = "0", Width = 110, TextAlign = HorizontalAlignment.Right };
+                string initial = Fields[i].Code == "38" && _split.Ct38 != 0m ? _split.Ct38.ToString("0", CultureInfo.InvariantCulture) : "0";
+                var txt = new TextBox { Text = initial, Width = 110, TextAlign = HorizontalAlignment.Right };
                 var err = new Label { AutoSize = true, ForeColor = Color.Red, Padding = new Padding(0, 6, 0, 0) };
                 txt.TextChanged += (_, _) => Recalculate();
                 _inputs[i] = txt;
@@ -481,7 +485,7 @@ namespace E_Tax
         private Task ExportReductionAsync()
         {
             if (!CanExportNow(_blocks.Appendix)) return Task.CompletedTask;
-            var lines = ReductionAppendix.Build(_items);
+            var lines = ReductionAppendix.Build(_split.Current);
             if (lines.Count == 0)
             {
                 MessageBox.Show(this, "Kỳ này không có hàng bán ra thuế suất 8% nên không có gì để lập phụ lục giảm thuế.",
