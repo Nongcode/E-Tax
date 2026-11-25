@@ -33,7 +33,7 @@ namespace E_Tax
             // Phải cài trước khi tạo bất kỳ form nào
             AppErrorHandler.Install();
             // To customize application configuration such as set high DPI settings or default font,
-           // see https://hoadondientu.gdt.gov.vn:30000/security-taxpayer/authenticate.
+           // see https://hoadondientu.gdt.gov.vn/api/security-taxpayer/authenticate.
             ApplicationConfiguration.Initialize();
 
             string user = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;

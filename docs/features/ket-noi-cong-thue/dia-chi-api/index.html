@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>Địa chỉ API cổng hoá đơn</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;max-width:900px;margin:24px auto;color:#1f2937}
+h1{color:#0b6bcb}table{border-collapse:collapse;width:100%;margin:12px 0}td,th{border:1px solid #d1d5db;padding:6px 8px;text-align:left}
+th{background:#eef4fb}.ok{color:#16a34a;font-weight:600}img{max-width:100%;border:1px solid #d1d5db;margin:8px 0}code{background:#f3f4f6;padding:1px 4px}</style></head>
+<body>
+<h1>Địa chỉ API cổng hoá đơn điện tử</h1>
+<p>Trạng thái: <span class="ok">✅ DONE</span> · CR-001 · 2026-11-25</p>
+<p>Không đổi giao diện. Cổng hoadondientu.gdt.gov.vn đổi cách nhận yêu cầu; app được cập nhật cho khớp trang chính thức.</p>
+<h2>Thay đổi</h2>
+<table><tr><th>Task</th><th>Thay đổi</th><th>Lỗi trước đó</th></tr>
+<tr><td>T-001.1</td><td>Địa chỉ gốc <code>:30000/</code> → <code>/api/</code></td><td>Không tải được captcha</td></tr>
+<tr><td>T-001.3</td><td>Header <code>request-id</code>, <code>Action</code>, <code>End-Point</code></td><td>Đăng nhập 403</td></tr>
+<tr><td>T-001.4</td><td>End-Point <code>/tra-cuu/tra-cuu-hoa-don</code> cho lệnh tra cứu; log lỗi</td><td>Tra cứu 500</td></tr>
+<tr><td>T-001.5</td><td>Sắp xếp chỉ theo <code>tdlap:desc</code></td><td>500 "Không hỗ trợ sắp xếp theo nhiều trường"</td></tr>
+<tr><td>T-001.2</td><td>Kiểm tra thật: đăng nhập + tra cứu</td><td class="ok">Bán ra 16 HĐ, mua vào 1 HĐ</td></tr></table>
+<h2>Ảnh kiểm tra</h2>
+<img src="screenshots/T-001.2-captcha.png" alt="Captcha hiển thị">
+<img src="screenshots/T-001.2-tra-cuu-ok.png" alt="Tra cứu thành công">
+</body></html>

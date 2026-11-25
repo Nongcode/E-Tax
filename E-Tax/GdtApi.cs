@@ -9,7 +9,7 @@ namespace E_Tax
     /// </summary>
     internal static class GdtApi
     {
-        public const string BaseUrl = "https://hoadondientu.gdt.gov.vn:30000/";
+        public const string BaseUrl = "https://hoadondientu.gdt.gov.vn/api/";
         public const string PortalUrl = "https://hoadondientu.gdt.gov.vn/";
         public const string PortalOrigin = "https://hoadondientu.gdt.gov.vn";
 
@@ -25,6 +25,10 @@ namespace E_Tax
             var req = new HttpRequestMessage(method, url);
             req.Headers.UserAgent.ParseAdd(BrowserUserAgent);
             req.Headers.Add("Accept", accept);
+            // Trang chính thức gắn 3 header này vào mọi request; thiếu thì đăng nhập bị 403
+            req.Headers.TryAddWithoutValidation("request-id", Guid.NewGuid().ToString());
+            req.Headers.TryAddWithoutValidation("Action", "");
+            req.Headers.TryAddWithoutValidation("End-Point", EndPointFor(url));
             if (withPortalHeaders)
             {
                 req.Headers.Add("Referer", PortalUrl);
@@ -36,6 +40,27 @@ namespace E_Tax
             }
             return req;
         }
+
+        /// <summary>
+        /// Tham số tra cứu danh sách hóa đơn trong khoảng ngày. Cổng chỉ cho sắp xếp theo một trường
+        /// (nhiều trường trả 500); các trang có thể trùng hóa đơn, kết quả được loại trùng sau.
+        /// </summary>
+        public static string BuildSearchQuery(DateTime from, DateTime to, InvoiceType type, int page, int size)
+        {
+            string search = $"tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
+
+            // Hóa đơn mua vào: chỉ lấy trạng thái xử lý 5
+            if (type == InvoiceType.Bought)
+            {
+                search += ";ttxly==5";
+            }
+
+            return $"size={size}&page={page}&sort=tdlap:desc&search={search}";
+        }
+
+        /// <summary>Trang của cổng mà request giả lập đang đứng (header End-Point).</summary>
+        private static string EndPointFor(string url) =>
+            url.StartsWith("query/") || url.StartsWith("sco-query/") ? "/tra-cuu/tra-cuu-hoa-don" : "/";
 
         /// <summary>
         /// Hết hạn mọi cookie phiên cũ ("jwt", "jwtToken") thuộc host của cổng, bất kể path.

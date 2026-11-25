@@ -503,7 +503,7 @@ namespace E_Tax
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    AppendLog("❌ Đăng nhập trả mã lỗi.");
+                    AppendLog("❌ Đăng nhập trả mã lỗi: " + (respText.Length > 300 ? respText[..300] : respText));
                     return false;
                 }
 
@@ -730,6 +730,7 @@ namespace E_Tax
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    AppendLog("❌ Tra cứu trả lỗi: " + (text.Length > 300 ? text[..300] : text));
                     return $"❌ Lỗi khi gọi API: {text}";
                 }
                 return text;
@@ -742,19 +743,6 @@ namespace E_Tax
             {
                 return $"❌ Lỗi hệ thống: {ex.Message}";
             }
-        }
-
-        private static string BuildSearchQuery(DateTime from, DateTime to, InvoiceType type, int page, int size)
-        {
-            string search = $"tdlap=ge={from:dd/MM/yyyyTHH:mm:ss};tdlap=le={to:dd/MM/yyyyTHH:mm:ss}";
-
-            // Hóa đơn mua vào: chỉ lấy trạng thái xử lý 5
-            if (type == InvoiceType.Bought)
-            {
-                search += ";ttxly==5";
-            }
-
-            return $"size={size}&page={page}&sort=tdlap:desc,khmshdon:asc,shdon:desc&search={search}";
         }
 
         /// <summary>
@@ -816,7 +804,7 @@ namespace E_Tax
             string endpoint = type == InvoiceType.Sold ? "query/invoices/sold" : "query/invoices/purchase";
             string typeLabel = type == InvoiceType.Sold ? "Bán ra" : "Mua vào";
 
-            string response = await GetInvoiceListAsync(endpoint, BuildSearchQuery(from, to, type, page, SearchPageSize), ct);
+            string response = await GetInvoiceListAsync(endpoint, GdtApi.BuildSearchQuery(from, to, type, page, SearchPageSize), ct);
             ct.ThrowIfCancellationRequested(); // trang bị hủy không được tính là trang lỗi
             if (response.StartsWith("❌"))
             {
