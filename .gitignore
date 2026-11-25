@@ -369,4 +369,5 @@ E-Tax/appsettings.json
 .claude/worktrees/
 # Private key ky so key kich hoat (E-Tax.KeyGen) - khong bao gio commit
 *.private.pem
+.playwright-mcp/
 CLAUDE.local.md

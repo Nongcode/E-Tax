@@ -1,0 +1,102 @@
+# Design — Hiện đại hóa giao diện
+
+## Kiến trúc
+
+App WinForms một form (`Form1`). Ở màn hình đăng nhập (`panelLogin`), sau khi đăng nhập thì `panelSearch` hiện ra. `panelSearch` chứa `mainSplitContainer` (Dock Fill) gồm: bộ lọc ngày, loại HĐ, các nút, `gbNguoiBan` ở góc phải và `tabControlMain` với 6 bảng.
+
+CR-001 thêm 3 lớp nhỏ, không đụng luồng nghiệp vụ:
+- `UiTheme`: màu và style dùng chung → `StyleGrid(dgv)`.
+- `WindowSettings`: đọc/ghi `%AppData%\E-Tax\window.json`, đặt lại vị trí cửa sổ vào màn hình.
+- `InvoiceSummary`: tính số HĐ / tổng thanh toán theo Bán ra / Mua vào cho thanh trạng thái.
+
+## Vị trí code (dự kiến — cập nhật số dòng thật sau mỗi task)
+
+| File | Symbol | Dòng | Vai trò |
+|---|---|---|---|
+| `E-Tax/Form1.Designer.cs` | `Form1` (FormBorderStyle, ClientSize) | L996–L1001 | Đổi sang `Sizable`, thêm `MinimumSize`, `MaximizeBox` |
+| `E-Tax/Form1.Designer.cs` | `panelSearch` | L384–L387 | Thêm `Anchor` 4 cạnh |
+| `E-Tax/Form1.Designer.cs` | `gbNguoiBan`, `tabControlMain` | L829, L578 | Đã neo sẵn — chỉ kiểm tra |
+| `E-Tax/Form1.Designer.cs` | `statusBar` (mới) | — | `StatusStrip` Dock Bottom, 3 nhãn |
+| `E-Tax/Form1.cs` | `Form1_Load` | L60–L70 | Áp dụng `WindowSettings`, demo mode (`#if DEBUG`) |
+| `E-Tax/Form1.cs` | `Form1_Resize`, `Form1_FormClosing` (mới) | — | Căn giữa `panelLogin`; lưu cửa sổ |
+| `E-Tax/Form1.cs` | `BindMainGrid` | ~L760 | Cập nhật `lblStatusInvoices` |
+| `E-Tax/Form1.cs` | `CheckForLicense` | ~L295–L315 | Cập nhật `lblStatusLicense` |
+| `E-Tax/Form1.cs` | Đăng nhập thành công | ~L205 | Cập nhật `lblStatusUser` |
+| `E-Tax/GridColumnHelper.cs` | `ApplyDefaultStyle` | L11–L18 | Gọi `UiTheme.StyleGrid` |
+| `E-Tax/DetailGridManager.cs` | `ConfigureGrid` | L92 | Đã gọi `ApplyDefaultStyle` — không sửa |
+| `E-Tax/UiTheme.cs` (mới) | `UiTheme.StyleGrid` | — | Style bảng |
+| `E-Tax/WindowSettings.cs` (mới) | `Load`, `Save`, `Fit` | — | Nhớ cửa sổ |
+| `E-Tax/InvoiceSummary.cs` (mới) | `Compute`, `Format` | — | Nội dung thanh trạng thái |
+
+## API
+
+Không có API mới, không gọi thêm API cổng thuế.
+
+## Dữ liệu
+
+- `%AppData%\E-Tax\window.json`: `{ "X": 120, "Y": 80, "Width": 1280, "Height": 800, "Maximized": false }`. Thiếu hoặc hỏng → dùng mặc định (giữa màn hình, 1000×725).
+- Thanh trạng thái tính từ `_latestResults` (`Loai_hoa_don`, `Tong_tien_thanh_toan`). `null` tính là 0.
+
+## Giao diện
+
+Bảng màu (khớp màu nút hiện có `#0075D6`):
+
+| Token | Giá trị | Dùng cho |
+|---|---|---|
+| Accent | `#0075D6` | Nền tiêu đề bảng, nút chính |
+| HeaderText | `#FFFFFF` | Chữ tiêu đề bảng |
+| GridLine | `#E5E7EB` | Đường kẻ ngang |
+| RowAlt | `#F8FAFC` | Dòng xen kẽ |
+| Selection | `#DBEAFE` / chữ `#1D2330` | Dòng đang chọn |
+| StatusBar | nền `#F3F4F6`, chữ `#374151` | Thanh trạng thái |
+| License | xanh `#16A34A` đầy đủ · cam `#D97706` dùng thử · đỏ `#DC2626` hết hạn | Ô bản quyền |
+
+Trạng thái:
+- **Màn hình đăng nhập:**
+  - Panel ở giữa cửa sổ.
+  - Thanh trạng thái hiện "Chưa có dữ liệu", ô tài khoản để trống, ô bản quyền vẫn hiện.
+- **Chưa tìm kiếm:** bảng trống có tiêu đề, thanh trạng thái hiện "Chưa có dữ liệu".
+- **Có dữ liệu:** thanh trạng thái hiện số HĐ và tổng tiền theo loại.
+
+Prototype: `index.html`, tab "Giao diện".
+
+## Nhật ký sửa đổi
+
+### CR-001 — Nhóm 1: cửa sổ co giãn, bảng hiện đại, thanh trạng thái
+
+| Task | File:dòng | Thay đổi | Lý do |
+|---|---|---|---|
+| T-001.1 | `E-Tax/WindowSettings.cs` (mới, L1–L50) | `record WindowSettings(X,Y,Width,Height,Maximized)`: `Load` (không ném), `Save` (tạo thư mục), `Fit` (kẹp kích thước tối thiểu; null nếu không giao màn hình nào) | Nhớ cửa sổ, an toàn khi rút màn hình phụ |
+| T-001.1 | `E-Tax.Tests/WindowSettingsTests.cs` (mới) | 6 test | TDD |
+| T-001.2 | `E-Tax/Form1.Designer.cs:L384`, `:L1001` | `panelSearch.Anchor` 4 cạnh; `FormBorderStyle = Sizable` | Co giãn theo cửa sổ |
+| T-001.2 | `E-Tax/Form1.cs:L69-L73` (constructor) | `MinimumSize = Size`; `RestoreWindowBounds()`; `Resize → CenterLoginPanel`; `FormClosing → SaveWindowBounds` | Khôi phục trước khi form hiện |
+| T-001.3 | `E-Tax/UiTheme.cs` (mới) | Hằng màu `Accent/HeaderText/GridLine/RowAlt/Selection/SelectionText`; `StyleGrid(dgv)`: tiêu đề 34px khoá, nền Accent; dòng 28px; kẻ ngang; không viền; padding ngang 6px; Segoe UI 9 | Style dùng chung |
+| T-001.3 | `E-Tax/GridColumnHelper.cs:L14` `ApplyDefaultStyle` | Gọi `UiTheme.StyleGrid` thay cho font/màu xen kẽ cũ | `dgvDetails`, `dgvMua`, `dgvBan`, `dgvVatNop`, `dgvGiamThue` nhận theme qua đây |
+| T-001.3 | `E-Tax/Form1.cs:L66`, `:L101-L113` `StyleMainGrid` | `UiTheme.StyleGrid(dgvMain)`; 3 cột tiền `#,##0` căn phải | `dgvMain` cấu hình trong Designer |
+| T-001.3 | `E-Tax.Tests/UiThemeTests.cs` (mới) | `StyleGrid_AppliesTheme`, `ApplyDefaultStyle_UsesTheme` | TDD |
+| T-001.4 | `E-Tax/InvoiceSummary.cs` (mới) | `record InvoiceSummary(SoldCount, SoldTotal, BoughtCount, BoughtTotal)`; `Compute` theo `Loai_hoa_don`; `Format` dùng `vi-VN` `#,##0` | Nội dung ô số HĐ |
+| T-001.4 | `E-Tax.Tests/InvoiceSummaryTests.cs` (mới) | 4 test | TDD |
+| T-001.4 | `E-Tax/Form1.Designer.cs:L125-L130`, `:L999-L1028` | `statusBar` (nền `#F3F4F6`) + `lblStatusInvoices` (Spring) / `lblStatusUser` / `lblStatusLicense` (đậm); `ClientSize` 984×686 → 984×708 | Thanh trạng thái không che `panelSearch` |
+| T-001.4 | `E-Tax/Form1.cs:L265` | Đăng nhập thành công → `lblStatusUser = "👤 <tài khoản>"` | |
+| T-001.4 | `E-Tax/Form1.cs:L360`, `:L388` `ShowLicenseStatus` | Ô bản quyền: xanh "Đầy đủ" / cam "Dùng thử: còn N ngày" / đỏ "đã hết hạn"; `lblVersion` theo bản quyền | Sửa lỗi `lblVersion` luôn ghi "dùng thử" |
+| T-001.4 | `E-Tax/Form1.cs:L784`, `:L863`, `:L874` | `UpdateInvoiceSummary()` khi xóa kết quả lúc bắt đầu tìm và trong `BindMainGrid` | |
+| T-001.4 | `E-Tax/LicenseManager.cs` `GetTrialExpiry()` | Đọc `TrialExpiryDate` (UTC), null nếu thiếu/lỗi | Số ngày dùng thử còn lại |
+| T-001.5 | `E-Tax/Form1.cs:L101-L109` `Form1_Load`, `:L112-L158` `ShowDemoData` (`#if DEBUG`) | `ETAX_UI_DEMO=1` → 60 HĐ mẫu (30 bán/30 mua), bỏ đăng nhập, focus bảng; `=progress` → hiện thêm thanh tiến độ 24/60 | Chụp màn hình chính không cần cổng thuế; không có trong Release |
+| T-001.5 | `E-Tax/Form1.cs:L68-L69` | `downloadProgressBar`/`lblDownloadStatus.BringToFront()` | Sửa lỗi có sẵn: bị `mainSplitContainer` che |
+| T-001.5 | `E-Tax/Form1.cs:L166-L168` `StyleMainGrid` | `FullRowSelect`; `colDgvThongTinHD` `Fill`, tối thiểu 200 | Dòng chọn nổi bật; lấp chiều ngang khi phóng to |
+| T-001.6 | `E-Tax/WindowSettings.cs` `ClampMinimum`, `Fit` | Tối thiểu ≤ vùng làm việc; `Fit` đòi thanh tiêu đề 30px trên màn hình, thu kích thước về vùng làm việc | Fix review: laptop 1366×768, cửa sổ mất thanh tiêu đề |
+| T-001.6 | `E-Tax/Form1.Designer.cs` | `ClientSize` 984×686 (như cũ); `panelSearch`/`panelLogin` cao 649 → 627; `statusBar` y=664 | Cửa sổ 1000×725 |
+| T-001.6 | `E-Tax/Form1.cs:L75` | `MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea)` | |
+| T-001.6 | `E-Tax/Form1.cs:L928`, `:L989` | `UpdateInvoiceSummary(shown)` — khi lọc MST hiện "Lọc x/y HĐ — …" | Thanh trạng thái khớp bảng |
+| T-001.2 | `E-Tax/Form1.cs:L99-L137` `#region Cửa sổ` | `RestoreWindowBounds`, `SaveWindowBounds` (lưu `RestoreBounds` khi phóng to), `CenterLoginPanel` (Top ≥ `lblVersion.Bottom`) | |
+
+### CR-002 — Bỏ logo màn hình đăng nhập, cân đối khối đăng nhập
+
+| Task | File:dòng | Thay đổi | Lý do |
+|---|---|---|---|
+| T-002.1 | `E-Tax/Form1.Designer.cs` | Xoá `pictureBox1` (logo "E") và `pictureBox2` (ẩn, không dùng); thêm `lblLoginTitle` (L238, "Đăng nhập", Segoe UI 20 đậm, Accent) và `lblLoginSubtitle` ("Tài khoản hoadondientu.gdt.gov.vn", `#6B7280`) | Người dùng chọn tiêu đề chữ thay logo |
+| T-002.1 | `E-Tax/Form1.Designer.cs` `panelLogin` | Mọi ô/đường kẻ/captcha/nút cùng cột x=60 rộng 350; dời lên vào chỗ logo cũ (txtUser y=88 … btnLogin y=340); `panelActivation` y=410 | Trước lệch 60/61/67 |
+| T-002.1 | `E-Tax/Form1.resx` | Xoá `pictureBox1.Image`, `pictureBox2.Image` (~53 KB) | |
+| T-002.1 | `E-Tax/Form1.cs:L221` `CenterLoginPanel` | Cao theo nội dung (`btnLogin` hoặc `panelActivation` nếu hiện); căn giữa vùng trên thanh trạng thái | Cân đối; sửa minor CR-001 lệch ~11px |
+| T-002.1 | `E-Tax/Form1.cs:L79` | Gọi lại khi `panelActivation.VisibleChanged` và `Shown` | Khối kích hoạt hiện/ẩn → căn lại |
+| T-002.1 | `E-Tax/Form1.cs:L111` (`#if DEBUG`) | `ETAX_UI_DEMO=activation` hiện khối kích hoạt | Chụp TC-09 không sửa registry |

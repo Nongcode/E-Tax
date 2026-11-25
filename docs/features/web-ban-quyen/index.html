@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web bán bản quyền E-Tax</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1d2330; --muted: #667085; --border: #e3e6ea;
+    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --err: #dc2626; --changed: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --surface: #1b1f27; --text: #e6e8ec; --muted: #98a2b3; --border: #2c323d;
+      --accent: #60a5fa; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --changed: #3b3214;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  .meta { color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid currentColor; }
+  .s-doing { color: var(--warn); } .s-done { color: var(--ok); } .s-todo { color: var(--muted); } .s-blocked { color: var(--err); }
+  nav.tabs { display: flex; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; }
+  nav.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; color: var(--muted); font: inherit; cursor: pointer; white-space: nowrap; }
+  nav.tabs button[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+  main { padding: 24px; max-width: 1280px; margin: 0 auto; }
+  main > section[hidden] { display: none; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .next { border-left: 4px solid var(--warn); }
+  .legend { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  @media (max-width: 640px) { main, header { padding: 16px; } nav.tabs { padding: 0 16px; } }
+
+  /* ===== Prototype: mô phỏng Ant Design, luôn nền sáng ===== */
+  .screens { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .screens button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+  .screens button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .screens .grp { color: var(--muted); font-size: 12px; align-self: center; margin-left: 6px; }
+  .viewport-toggle { margin-left: auto; }
+  .frame { margin: 0 auto; border: 1px solid #d9d9d9; border-radius: 10px; overflow: hidden; background: #f5f5f5; color: rgba(0,0,0,.88);
+    font: 14px/1.5715 "Segoe UI", Inter, system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.08); transition: max-width .2s; max-width: 1200px; }
+  .frame.mobile { max-width: 390px; }
+  .p { --pri: #0075D6; --pri-bg: #e6f4ff; }
+  .p a { color: var(--pri); text-decoration: none; cursor: pointer; }
+  .p h1, .p h2, .p h3 { margin: 0; color: rgba(0,0,0,.88); }
+  .p .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 15px; border-radius: 8px; border: 1px solid #d9d9d9; background: #fff; color: rgba(0,0,0,.88); font: inherit; cursor: pointer; white-space: nowrap; }
+  .p .btn.pri { background: var(--pri); border-color: var(--pri); color: #fff; box-shadow: 0 2px 0 rgba(5,145,255,.1); }
+  .p .btn.lg { height: 40px; padding: 0 20px; font-size: 16px; }
+  .p .btn.sm { height: 24px; padding: 0 7px; font-size: 13px; border-radius: 6px; }
+  .p .btn.danger { color: #ff4d4f; border-color: #ff4d4f; }
+  .p .btn.link { border: 0; background: none; color: var(--pri); padding: 0 4px; }
+  .p .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  .p .tag { display: inline-block; padding: 0 7px; font-size: 12px; line-height: 20px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+  .p .tag.gold { color: #d48806; background: #fffbe6; border-color: #ffe58f; }
+  .p .tag.green { color: #389e0d; background: #f6ffed; border-color: #b7eb8f; }
+  .p .tag.red { color: #cf1322; background: #fff1f0; border-color: #ffa39e; }
+  .p .tag.def { color: rgba(0,0,0,.65); background: #fafafa; border-color: #d9d9d9; }
+  .p .acard { background: #fff; border-radius: 8px; border: 1px solid #f0f0f0; padding: 20px; }
+  .p .acard > .ttl { font-weight: 600; font-size: 16px; margin-bottom: 12px; }
+  .p table th { text-transform: none; font-size: 14px; color: rgba(0,0,0,.88); background: #fafafa; font-weight: 600; }
+  .p table td, .p table th { border-bottom: 1px solid #f0f0f0; padding: 12px 10px; }
+  .p .tablewrap { overflow-x: auto; }
+  .p input, .p select, .p textarea { width: 100%; height: 32px; padding: 4px 11px; border: 1px solid #d9d9d9; border-radius: 8px; font: inherit; background: #fff; color: inherit; }
+  .p textarea { height: auto; }
+  .p input.err { border-color: #ff4d4f; }
+  .p .field { margin-bottom: 16px; }
+  .p .field label { display: block; margin-bottom: 6px; }
+  .p .field .help { color: rgba(0,0,0,.45); font-size: 13px; margin-top: 4px; }
+  .p .field .msg { color: #ff4d4f; font-size: 13px; margin-top: 4px; }
+  .p .muted { color: rgba(0,0,0,.45); }
+  .p .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .p .stat { flex: 1 1 180px; }
+  .p .stat .lbl { color: rgba(0,0,0,.45); }
+  .p .stat .val { font-size: 24px; font-weight: 600; }
+  .p .alert { padding: 8px 12px; border-radius: 8px; border: 1px solid; margin-bottom: 16px; }
+  .p .alert.warn { background: #fffbe6; border-color: #ffe58f; }
+  .p .alert.info { background: var(--pri-bg); border-color: #91caff; }
+  .p .alert.ok { background: #f6ffed; border-color: #b7eb8f; }
+  .p .alert.error { background: #fff2f0; border-color: #ffccc7; }
+  /* Public */
+  .p .topbar { display: flex; align-items: center; gap: 24px; height: 64px; padding: 0 32px; background: #fff; border-bottom: 1px solid #f0f0f0; }
+  .p .logo { font-weight: 800; font-size: 20px; color: var(--pri); letter-spacing: -.5px; }
+  .p .topbar .menu { display: flex; gap: 20px; flex: 1; }
+  .p .topbar .menu a { color: rgba(0,0,0,.88); }
+  .p .topbar .menu a.on { color: var(--pri); }
+  .p .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: center; padding: 56px 32px; background: linear-gradient(135deg, #e6f4ff 0%, #fff 70%); }
+  .p .hero h1 { font-size: 36px; line-height: 1.25; margin-bottom: 16px; }
+  .p .hero p { font-size: 16px; color: rgba(0,0,0,.65); margin: 0 0 24px; }
+  .p .appmock { background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,117,214,.18); overflow: hidden; }
+  .p .appmock .bar { height: 28px; background: var(--pri); }
+  .p .appmock .body { padding: 12px; display: grid; gap: 6px; }
+  .p .appmock .line { height: 14px; background: #f0f0f0; border-radius: 4px; }
+  .p .appmock .line.h { background: #e6f4ff; }
+  .p .sec { padding: 40px 32px; }
+  .p .sec > h2 { text-align: center; font-size: 26px; margin-bottom: 24px; }
+  .p .feat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .p .feat .acard .ic { width: 40px; height: 40px; border-radius: 10px; background: var(--pri-bg); color: var(--pri); display: grid; place-items: center; font-size: 20px; margin-bottom: 8px; }
+  .p .steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
+  .p .steps3 .n { width: 36px; height: 36px; border-radius: 50%; background: var(--pri); color: #fff; display: inline-grid; place-items: center; font-weight: 700; margin-bottom: 8px; }
+  .p .plans { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .p .plan { position: relative; display: flex; flex-direction: column; }
+  .p .plan.feat-on { border: 2px solid var(--pri); }
+  .p .plan .ribbon { position: absolute; top: 10px; right: -1px; background: var(--pri); color: #fff; font-size: 12px; padding: 2px 10px; border-radius: 4px 0 0 4px; }
+  .p .plan .price { font-size: 28px; font-weight: 700; color: var(--pri); margin: 8px 0 0; }
+  .p .plan ul { padding-left: 18px; flex: 1; color: rgba(0,0,0,.65); }
+  .p footer.pf { padding: 24px 32px; background: #001529; color: rgba(255,255,255,.65); font-size: 13px; }
+  /* Auth */
+  .p .authwrap { min-height: 520px; display: grid; place-items: center; padding: 32px 16px; background: linear-gradient(135deg, #e6f4ff, #f5f5f5); }
+  .p .authwrap .acard { width: 100%; max-width: 400px; }
+  /* App shell */
+  .p .shell { display: flex; min-height: 620px; }
+  .p .sider { width: 220px; flex: none; background: #fff; border-right: 1px solid #f0f0f0; padding: 12px 8px; }
+  .p .sider.dark { background: #001529; border: 0; }
+  .p .sider .logo { padding: 8px 16px 16px; display: block; }
+  .p .sider.dark .logo { color: #fff; }
+  .p .sider .mi { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; border-radius: 8px; cursor: pointer; color: rgba(0,0,0,.88); margin-bottom: 4px; }
+  .p .sider .mi.on { background: var(--pri-bg); color: var(--pri); }
+  .p .sider.dark .mi { color: rgba(255,255,255,.65); }
+  .p .sider.dark .mi.on { background: var(--pri); color: #fff; }
+  .p .sider .cnt { background: #ff4d4f; color: #fff; border-radius: 10px; font-size: 12px; padding: 0 6px; line-height: 18px; }
+  .p .content { flex: 1; min-width: 0; }
+  .p .contentbar { height: 56px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; padding: 0 24px; gap: 12px; }
+  .p .contentbar .ham { display: none; }
+  .p .contentbar .who { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .p .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--pri); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .p .page { padding: 24px; display: grid; gap: 16px; }
+  .p .page > * { min-width: 0; }
+  .p .pagehead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .p .pagehead h2 { font-size: 20px; flex: 1; }
+  .p .copy { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px dashed #f0f0f0; }
+  .p .copy .k { color: rgba(0,0,0,.45); min-width: 140px; }
+  .p .copy .v { flex: 1; font-weight: 500; word-break: break-all; }
+  .p .qr { width: 240px; height: 240px; border-radius: 8px; border: 1px solid #f0f0f0; display: grid; place-items: center; background:
+      repeating-conic-gradient(#000 0 25%, #fff 0 50%) 0 0/24px 24px; position: relative; }
+  .p .qr::after { content: "VietQR"; position: absolute; background: #fff; padding: 4px 10px; border-radius: 6px; font-weight: 700; color: var(--pri); }
+  .p .lic { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .p .progress { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+  .p .progress > div { height: 100%; background: var(--pri); }
+  .p .seg { display: inline-flex; background: #f5f5f5; border-radius: 8px; padding: 2px; flex-wrap: wrap; }
+  .p .seg button { border: 0; background: none; font: inherit; padding: 4px 12px; border-radius: 6px; cursor: pointer; color: rgba(0,0,0,.65); }
+  .p .seg button.on { background: #fff; color: rgba(0,0,0,.88); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .p .desc { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #f0f0f0; border-radius: 8px; overflow: hidden; }
+  .p .desc > div { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; }
+  .p .desc .dk { color: rgba(0,0,0,.45); font-size: 13px; }
+  /* Modal */
+  .p .mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: start center; padding-top: 60px; z-index: 5; }
+  .p .modal { background: #fff; border-radius: 8px; width: min(480px, 92%); padding: 20px 24px; box-shadow: 0 6px 16px rgba(0,0,0,.08); }
+  .p .modal h3 { font-size: 16px; margin-bottom: 16px; }
+  .p .modal .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .p .toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: #fff; padding: 9px 12px; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,.12); z-index: 6; }
+  .p .toast.ok::before { content: "✔ "; color: #52c41a; }
+  .p .toast.err::before { content: "✖ "; color: #ff4d4f; }
+  .p .result { text-align: center; padding: 32px 16px; }
+  .p .result .ic { font-size: 56px; }
+  .p .devbtn { position: absolute; right: 12px; bottom: 12px; z-index: 4; }
+  .frame-in { position: relative; }
+  /* Mobile */
+  .frame.mobile .p .hero, .frame.mobile .p .feat, .frame.mobile .p .steps3, .frame.mobile .p .plans { grid-template-columns: 1fr; }
+  .frame.mobile .p .hero { padding: 32px 16px; } .frame.mobile .p .hero h1 { font-size: 26px; }
+  .frame.mobile .p .sec, .frame.mobile .p .topbar { padding-left: 16px; padding-right: 16px; }
+  .frame.mobile .p .topbar .menu { display: none; }
+  .frame.mobile .p .sider { display: none; }
+  .frame.mobile .p .sider.open { display: block; position: absolute; top: 0; bottom: 0; left: 0; z-index: 5; box-shadow: 4px 0 16px rgba(0,0,0,.2); }
+  .frame.mobile .p .contentbar .ham { display: inline-flex; }
+  .frame.mobile .p .page { padding: 16px; }
+  .frame.mobile .p .desc { grid-template-columns: 1fr; }
+  .frame.mobile .p .copy .k { min-width: 100px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Web bán bản quyền E-Tax</h1>
+  <div class="meta">
+    <span>Module: <code>web-ban-quyen</code> · code <code>web/</code></span>
+    <span>Trạng thái: <span class="badge s-doing">🟡 IN_PROGRESS</span></span>
+    <span>Bước: brainstorming — spec chờ duyệt</span>
+    <span>Cập nhật: 2026-11-16 23:15</span>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="ui">Giao diện</button>
+  <button role="tab" aria-selected="false" data-tab="func">Chức năng &amp; API</button>
+  <button role="tab" aria-selected="false" data-tab="progress">Tiến độ</button>
+  <button role="tab" aria-selected="false" data-tab="children">Chức năng con</button>
+</nav>
+
+<main>
+  <!-- ===== Giao diện ===== -->
+  <section id="ui">
+    <p class="legend">Prototype tương tác với dữ liệu mẫu. Giao diện mô phỏng Ant Design, màu chủ đạo #0075D6. Có thể bấm theo luồng: Bảng giá → Mua gói → Thanh toán → (Admin) Xác nhận → Bản quyền → Thêm máy.</p>
+    <div class="screens" id="screenBtns"></div>
+    <div class="frame" id="frame" data-testid="prototype"><div class="frame-in p" id="app"></div></div>
+  </section>
+
+  <!-- ===== Chức năng & API ===== -->
+  <section id="func" hidden>
+    <div class="card">
+      <h2>Chức năng</h2>
+      <table>
+        <thead><tr><th>Phần</th><th>Màn hình</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+          <tr><td>nen-tang</td><td>Khung dự án, lớp API, MSW + mockDb (R1–R20), đăng nhập / đăng ký / quên mật khẩu, 3 layout, 404/403, công cụ dev</td><td><span class="badge s-done">✅ DONE</span></td></tr>
+          <tr><td>trang-cong-khai</td><td>Trang chủ, Bảng giá, Tải ứng dụng</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>tai-khoan-khach</td><td>Tổng quan, Mua gói, Thanh toán VietQR, Đơn hàng, Bản quyền + thêm/gỡ máy lấy key, Hồ sơ</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+          <tr><td>quan-tri</td><td>Bảng điều khiển, Đơn hàng + xác nhận, Khách hàng, Bản quyền (gia hạn/thu hồi), Gói &amp; giá, Cài đặt</td><td><span class="badge s-todo">⬜ TODO</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>API (tiền tố <code>/api</code>, giai đoạn này do MSW giả lập)</h2>
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Quyền</th><th>Mô tả</th></tr></thead>
+        <tbody>
+          <tr><td><code>POST</code></td><td><code>/auth/register</code>, <code>/auth/login</code></td><td>công khai</td><td>Trả <code>{token, user}</code></td></tr>
+          <tr><td><code>GET</code></td><td><code>/auth/me</code></td><td>đăng nhập</td><td>Người dùng hiện tại</td></tr>
+          <tr><td><code>POST</code></td><td><code>/auth/forgot-password</code></td><td>công khai</td><td>Luôn 204</td></tr>
+          <tr><td><code>PUT/POST</code></td><td><code>/auth/profile</code>, <code>/auth/change-password</code></td><td>đăng nhập</td><td>Hồ sơ, đổi mật khẩu</td></tr>
+          <tr><td><code>GET</code></td><td><code>/plans</code>, <code>/app/latest</code></td><td>công khai</td><td>Gói đang bán, phiên bản app</td></tr>
+          <tr><td><code>POST/GET</code></td><td><code>/orders</code>, <code>/orders/{id}</code>, <code>/orders/{id}/cancel</code></td><td>customer</td><td>Tạo đơn kèm thông tin VietQR, xem, huỷ</td></tr>
+          <tr><td><code>GET</code></td><td><code>/licenses</code>, <code>/licenses/{id}</code></td><td>customer</td><td>Bản quyền và máy</td></tr>
+          <tr><td><code>POST/DELETE</code></td><td><code>/licenses/{id}/activations[/{actId}]</code></td><td>customer</td><td>Thêm máy, lấy key / gỡ máy</td></tr>
+          <tr><td><code>GET</code></td><td><code>/admin/stats</code></td><td>admin</td><td>Số liệu bảng điều khiển</td></tr>
+          <tr><td><code>GET/PATCH</code></td><td><code>/admin/users[/{id}]</code></td><td>admin</td><td>Khách hàng, khoá/mở</td></tr>
+          <tr><td><code>GET/POST/PUT</code></td><td><code>/admin/plans[/{id}]</code></td><td>admin</td><td>Gói &amp; giá</td></tr>
+          <tr><td><code>GET/POST</code></td><td><code>/admin/orders</code>, <code>/{id}/confirm</code>, <code>/{id}/cancel</code></td><td>admin</td><td>Đơn hàng, xác nhận thanh toán, sinh bản quyền</td></tr>
+          <tr><td><code>GET/POST</code></td><td><code>/admin/licenses[/{id}]</code>, <code>/revoke</code>, <code>/extend</code></td><td>admin</td><td>Bản quyền, thu hồi, gia hạn</td></tr>
+          <tr><td><code>GET/PUT</code></td><td><code>/admin/settings/bank</code>, <code>/admin/settings/app</code></td><td>admin</td><td>Tài khoản nhận tiền, phiên bản app</td></tr>
+        </tbody>
+      </table>
+      <p class="legend">Chi tiết request/response và quy tắc R1–R20: <a href="design.md">design.md</a>.</p>
+    </div>
+  </section>
+
+  <!-- ===== Tiến độ ===== -->
+  <section id="progress" hidden>
+    <div class="card next">
+      <h2>Bước tiếp theo</h2>
+      <p>nen-tang xong. Tiếp theo: lập kế hoạch <a href="trang-cong-khai/status.md">trang-cong-khai</a>.</p>
+    </div>
+    <div class="card">
+      <h2>CR-001 — Dựng web bán bản quyền (giao diện + API giả lập)</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Task</th><th>Trạng thái</th><th>Test</th></tr></thead>
+        <tbody>
+          <tr><td>T-001.0</td><td>Brainstorming: chốt thiết kế, viết spec + prototype</td><td><span class="badge s-done">✅ DONE</span></td><td>Playwright mở index.html</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== Chức năng con ===== -->
+  <section id="children" hidden>
+    <div class="grid-2">
+      <a class="card" href="nen-tang/index.html" style="text-decoration:none;color:inherit"><h2>1. Nền tảng web</h2><p class="legend">Khung, API, giả lập, đăng nhập, layout</p><span class="badge s-done">✅ DONE</span></a>
+      <a class="card" href="trang-cong-khai/index.html" style="text-decoration:none;color:inherit"><h2>2. Trang công khai</h2><p class="legend">Trang chủ, bảng giá, tải ứng dụng</p><span class="badge s-todo">⬜ TODO</span></a>
+      <a class="card" href="tai-khoan-khach/index.html" style="text-decoration:none;color:inherit"><h2>3. Tài khoản khách hàng</h2><p class="legend">Mua gói, VietQR, đơn hàng, bản quyền, key</p><span class="badge s-todo">⬜ TODO</span></a>
+      <a class="card" href="quan-tri/index.html" style="text-decoration:none;color:inherit"><h2>4. Trang quản trị</h2><p class="legend">Đơn hàng, khách, gói, bản quyền, cài đặt</p><span class="badge s-todo">⬜ TODO</span></a>
+    </div>
+  </section>
+</main>
+
+<script>
+  /* ---------- Tabs ---------- */
+  const tabs = document.querySelectorAll('nav.tabs [role="tab"]');
+  function showTab(id) {
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+    document.querySelectorAll('main > section').forEach(s => { s.hidden = s.id !== id; });
+  }
+  tabs.forEach(t => t.addEventListener('click', () => { showTab(t.dataset.tab); history.replaceState(null, '', '#' + t.dataset.tab); }));
+
+  /* ---------- Dữ liệu mẫu ---------- */
+  const vnd = n => new Intl.NumberFormat('vi-VN').format(n) + ' ₫';
+  const S = {
+    plans: [
+      { id: 'p3', name: 'Gói 3 tháng', months: 3, machines: 1, changes: 1, price: 300000 },
+      { id: 'p6', name: 'Gói 6 tháng', months: 6, machines: 1, changes: 2, price: 500000 },
+      { id: 'p12', name: 'Gói 12 tháng', months: 12, machines: 2, changes: 3, price: 900000, featured: true },
+      { id: 'pl', name: 'Trọn đời', months: null, machines: 3, changes: 5, price: 2500000 },
+    ],
+    orders: [
+      { id: 'o1', code: 'ET482915', user: 'Nguyễn Văn An', email: 'khach@etax.vn', plan: 'Gói 6 tháng', amount: 500000, status: 'pending', created: '16/11/2026 09:12' },
+      { id: 'o2', code: 'ET120377', user: 'Trần Thị Bình', email: 'binh.tt@abc.vn', plan: 'Gói 12 tháng', amount: 900000, status: 'pending', created: '16/11/2026 08:40' },
+      { id: 'o3', code: 'ET903311', user: 'Nguyễn Văn An', email: 'khach@etax.vn', plan: 'Gói 12 tháng', amount: 900000, status: 'paid', created: '02/03/2026 14:05' },
+      { id: 'o4', code: 'ET556120', user: 'Lê Minh Châu', email: 'chau@ketoanxyz.vn', plan: 'Trọn đời', amount: 2500000, status: 'paid', created: '10/11/2026 10:21' },
+      { id: 'o5', code: 'ET771045', user: 'Phạm Quốc Dũng', email: 'dung.pq@gmail.com', plan: 'Gói 3 tháng', amount: 300000, status: 'expired', created: '01/11/2026 16:30' },
+    ],
+    machines: [{ name: 'Máy kế toán 1', id: '3FA2C91B7E0D4A55', key: 'eyJtYWNoaW5lIjoiM0ZBMkM5MUI3RTBENEE1NSIsImN1c3RvbWVyIjoia2hhY2hAZXRheC52biJ9.MEUCIQ…', at: '02/03/2026' }],
+    payOrder: null,
+  };
+  const ST = { pending: ['gold', 'Chờ thanh toán'], paid: ['green', 'Đã thanh toán'], cancelled: ['def', 'Đã huỷ'], expired: ['red', 'Quá hạn'] };
+  const tag = s => `<span class="tag ${ST[s][0]}">${ST[s][1]}</span>`;
+  const term = p => p.months ? `/ ${p.months} tháng` : 'trọn đời';
+
+  /* ---------- Khung ---------- */
+  function publicShell(active, body) {
+    const m = [['home', 'Trang chủ'], ['pricing', 'Bảng giá'], ['download', 'Tải ứng dụng']];
+    return `<div class="topbar"><span class="logo">E-Tax</span><div class="menu">${m.map(([k, t]) => `<a data-go="${k}" class="${k === active ? 'on' : ''}">${t}</a>`).join('')}</div>
+      <button class="btn" data-go="login">Đăng nhập</button><button class="btn pri" data-go="pricing">Mua ngay</button></div>${body}
+      <footer class="pf">© 2026 E-Tax · Hotline 0900 000 000 · Zalo hỗ trợ · Chính sách bảo mật · Điều khoản sử dụng</footer>`;
+  }
+  function appShell(kind, active, body) {
+    const cust = [['c-dash', 'Tổng quan'], ['c-buy', 'Mua gói'], ['c-orders', 'Đơn hàng'], ['c-licenses', 'Bản quyền'], ['c-profile', 'Hồ sơ']];
+    const pending = S.orders.filter(o => o.status === 'pending').length;
+    const adm = [['a-dash', 'Bảng điều khiển'], ['a-orders', 'Đơn hàng', pending], ['a-users', 'Khách hàng'], ['a-licenses', 'Bản quyền'], ['a-plans', 'Gói & giá'], ['a-settings', 'Cài đặt']];
+    const items = kind === 'admin' ? adm : cust;
+    const who = kind === 'admin' ? ['QT', 'Quản trị viên'] : ['NA', 'Nguyễn Văn An'];
+    return `<div class="shell"><aside class="sider ${kind === 'admin' ? 'dark' : ''}" id="sider"><span class="logo">E-Tax${kind === 'admin' ? ' · Admin' : ''}</span>
+      ${items.map(([k, t, c]) => `<div class="mi ${k === active ? 'on' : ''}" data-go="${k}"><span>${t}</span>${c ? `<span class="cnt">${c}</span>` : ''}</div>`).join('')}
+      <div class="mi" data-go="home"><span>Đăng xuất</span></div></aside>
+      <div class="content"><div class="contentbar"><button class="btn ham" data-act="drawer">☰</button><a data-go="home">← Trang chủ</a>
+      <span class="who"><span class="avatar">${who[0]}</span>${who[1]}</span></div><div class="page">${body}</div></div></div>`;
+  }
+
+  /* ---------- Màn hình ---------- */
+  const planCards = () => `<div class="plans">${S.plans.map(p => `<div class="acard plan ${p.featured ? 'feat-on' : ''}">${p.featured ? '<span class="ribbon">Phổ biến</span>' : ''}
+      <h3>${p.name}</h3><div class="price">${vnd(p.price)}</div><div class="muted">${term(p)}</div>
+      <ul><li>Dùng trên ${p.machines} máy</li><li>Đổi máy ${p.changes} lần</li><li>Cập nhật miễn phí trong thời hạn</li><li>Hỗ trợ qua Zalo/điện thoại</li></ul>
+      <button class="btn ${p.featured ? 'pri' : ''}" data-buy="${p.id}">Mua gói</button></div>`).join('')}</div>`;
+
+  const V = {
+    home: () => publicShell('home', `
+      <div class="hero"><div><h1>Tải hoá đơn điện tử hàng loạt chỉ trong vài phút</h1>
+        <p>E-Tax tự động tra cứu và tải hoá đơn mua vào, bán ra từ cổng hoadondientu.gdt.gov.vn, xuất Excel chi tiết từng dòng hàng.</p>
+        <div class="row"><button class="btn pri lg" data-go="pricing">Xem bảng giá</button><button class="btn lg" data-go="download">Tải ứng dụng</button></div></div>
+        <div class="appmock"><div class="bar"></div><div class="body">${'<div class="line h"></div><div class="line"></div><div class="line"></div>'.repeat(3)}</div></div></div>
+      <div class="sec"><h2>Mọi thứ kế toán cần để lấy hoá đơn</h2><div class="feat">${[
+        ['⇣', 'Tải hàng loạt theo kỳ', 'Chọn khoảng ngày, tải toàn bộ HĐ mua vào / bán ra.'],
+        ['▦', 'Xuất Excel tổng hợp & chi tiết', 'Danh sách HĐ và chi tiết từng dòng hàng hoá.'],
+        ['⌂', 'Nhiều mã số thuế', 'Chuyển nhanh giữa các doanh nghiệp bạn phụ trách.'],
+        ['⚲', 'Lọc theo trạng thái, loại HĐ', 'Có mã / không mã, máy tính tiền, đã huỷ, thay thế.'],
+        ['🖥', 'Chạy trên máy của bạn', 'Đăng nhập cổng thuế trực tiếp, không qua máy chủ trung gian.'],
+        ['🔒', 'Kích hoạt theo máy, bảo mật', 'Key ký số gắn với mã máy, không dùng chung trái phép.'],
+      ].map(([i, t, d]) => `<div class="acard"><div class="ic">${i}</div><b>${t}</b><div class="muted">${d}</div></div>`).join('')}</div></div>
+      <div class="sec" style="background:#fff"><h2>Bắt đầu trong 3 bước</h2><div class="steps3">${['Mua gói phù hợp', 'Cài ứng dụng & sao chép mã máy', 'Lấy key trên web, dán vào ứng dụng'].map((t, i) => `<div><span class="n">${i + 1}</span><div><b>${t}</b></div></div>`).join('')}</div></div>
+      <div class="sec"><h2>Bảng giá</h2>${planCards()}</div>`),
+    pricing: () => publicShell('pricing', `<div class="sec"><h2>Chọn gói phù hợp</h2>${planCards()}
+      <div class="alert info" style="margin-top:16px">Thanh toán bằng chuyển khoản qua mã VietQR. Bản quyền được cấp ngay sau khi xác nhận thanh toán.</div></div>`),
+    download: () => publicShell('download', `<div class="sec"><div class="acard" style="max-width:760px;margin:0 auto">
+      <div class="row" style="align-items:center"><div style="flex:1"><h2>E-Tax 1.4.0</h2><div class="muted">Phát hành 10/11/2026 · Windows 10/11 64-bit</div></div><button class="btn pri lg">⇣ Tải về</button></div>
+      <h3 style="margin:20px 0 8px">Yêu cầu hệ thống</h3><ul><li>Windows 10/11 64-bit</li><li>.NET 8 Desktop Runtime (<a>tải tại đây</a>)</li><li>Kết nối Internet</li></ul>
+      <h3 style="margin:20px 0 8px">Kích hoạt</h3><ol><li>Cài và mở E-Tax</li><li>Sao chép <b>Mã máy</b> ở màn kích hoạt</li><li>Vào Tài khoản → Bản quyền → <b>Thêm máy</b>, dán mã máy</li><li>Sao chép key và dán vào ứng dụng</li></ol></div></div>`),
+    login: () => `<div class="authwrap"><div class="acard"><div class="logo" style="text-align:center;margin-bottom:4px">E-Tax</div>
+      <h2 style="text-align:center;font-size:20px;margin-bottom:20px">Đăng nhập</h2>
+      <div class="field"><label>Email</label><input value="khach@etax.vn"></div>
+      <div class="field"><label>Mật khẩu</label><input type="password" value="Khach@123"></div>
+      <div class="row" style="justify-content:space-between;margin-bottom:16px"><label><input type="checkbox" style="width:auto;height:auto" checked> Ghi nhớ</label><a data-go="forgot">Quên mật khẩu?</a></div>
+      <button class="btn pri" style="width:100%;justify-content:center" data-go="c-dash">Đăng nhập</button>
+      <p style="text-align:center" class="muted">Chưa có tài khoản? <a data-go="register">Đăng ký</a></p></div></div>`,
+    register: () => `<div class="authwrap"><div class="acard"><h2 style="text-align:center;font-size:20px;margin-bottom:20px">Tạo tài khoản</h2>
+      <div class="field"><label>Họ tên *</label><input></div><div class="field"><label>Email *</label><input></div>
+      <div class="field"><label>Số điện thoại *</label><input class="err" value="09123"><div class="msg">Số điện thoại gồm 10 số, bắt đầu bằng 0</div></div>
+      <div class="field"><label>Công ty</label><input></div><div class="field"><label>Mã số thuế</label><input placeholder="0101234567 hoặc 0101234567-001"></div>
+      <div class="field"><label>Mật khẩu *</label><input type="password"><div class="help">Tối thiểu 8 ký tự</div></div>
+      <div class="field"><label>Nhập lại mật khẩu *</label><input type="password"></div>
+      <button class="btn pri" style="width:100%;justify-content:center" data-go="c-dash">Đăng ký</button>
+      <p style="text-align:center" class="muted">Đã có tài khoản? <a data-go="login">Đăng nhập</a></p></div></div>`,
+    forgot: () => `<div class="authwrap"><div class="acard"><h2 style="text-align:center;font-size:20px;margin-bottom:20px">Quên mật khẩu</h2>
+      <div class="field"><label>Email</label><input></div><button class="btn pri" style="width:100%;justify-content:center" data-toast="ok:Nếu email tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu">Gửi hướng dẫn</button>
+      <p style="text-align:center"><a data-go="login">← Quay lại đăng nhập</a></p></div></div>`,
+
+    'c-dash': () => appShell('cust', 'c-dash', `<div class="pagehead"><h2>Xin chào, Nguyễn Văn An</h2></div>
+      ${S.orders.some(o => o.email === 'khach@etax.vn' && o.status === 'pending') ? `<div class="alert warn">Bạn có đơn <b>ET482915</b> chờ thanh toán. <a data-pay="o1">Thanh toán ngay</a></div>` : ''}
+      <div class="acard"><div class="row"><div class="stat"><div class="lbl">Bản quyền còn hạn</div><div class="val">1</div></div>
+      <div class="stat"><div class="lbl">Hạn gần nhất</div><div class="val">02/03/2027</div></div>
+      <div class="stat"><div class="lbl">Đơn chờ thanh toán</div><div class="val">${S.orders.filter(o => o.email === 'khach@etax.vn' && o.status === 'pending').length}</div></div>
+      <div class="stat" style="align-self:center"><button class="btn pri" data-go="c-license">+ Thêm máy / lấy key</button></div></div></div>
+      <div class="acard"><div class="ttl">Đơn hàng gần đây</div>${custOrdersTable()}</div>`),
+    'c-buy': () => appShell('cust', 'c-buy', `<div class="pagehead"><h2>Mua gói</h2></div><div class="row">
+      <div style="flex:2 1 320px;display:grid;gap:12px">${S.plans.map(p => `<label class="acard" style="display:flex;gap:12px;align-items:center;cursor:pointer;${p.id === (S.buy || 'p6') ? 'border-color:var(--pri);background:var(--pri-bg)' : ''}">
+        <input type="radio" name="pl" style="width:auto;height:auto" ${p.id === (S.buy || 'p6') ? 'checked' : ''} data-pick="${p.id}"><div style="flex:1"><b>${p.name}</b><div class="muted">${p.machines} máy · đổi máy ${p.changes} lần</div></div><b>${vnd(p.price)}</b></label>`).join('')}</div>
+      <div class="acard" style="flex:1 1 240px;align-self:start"><div class="ttl">Tóm tắt</div>${(() => { const p = S.plans.find(x => x.id === (S.buy || 'p6')); return `
+        <div class="copy"><span class="k">Gói</span><span class="v">${p.name}</span></div><div class="copy"><span class="k">Thời hạn</span><span class="v">${p.months ? p.months + ' tháng' : 'Trọn đời'}</span></div>
+        <div class="copy"><span class="k">Số máy</span><span class="v">${p.machines}</span></div><div class="copy"><span class="k">Tổng tiền</span><span class="v" style="color:var(--pri);font-size:18px">${vnd(p.price)}</span></div>
+        <button class="btn pri" style="width:100%;justify-content:center;margin-top:16px" data-act="create-order">Tạo đơn &amp; thanh toán</button>`; })()}</div></div>`),
+    'c-pay': () => { const o = S.orders.find(x => x.id === (S.payOrder || 'o1'));
+      return appShell('cust', 'c-orders', `<div class="pagehead"><h2>Đơn ${o.code}</h2>${tag(o.status)}<span class="muted">Tạo lúc ${o.created}</span></div>
+      ${o.status === 'pending' ? `<div class="acard"><div class="row" style="gap:32px"><div><div class="qr"></div><div class="muted" style="text-align:center;margin-top:8px">Quét bằng ứng dụng ngân hàng</div></div>
+        <div style="flex:1;min-width:240px"><div class="alert warn">Ghi <b>đúng nội dung chuyển khoản</b> để được xác nhận nhanh.</div>
+        ${[['Ngân hàng', 'Vietcombank'], ['Số tài khoản', '0071000123456'], ['Chủ tài khoản', 'CONG TY TNHH ETAX'], ['Số tiền', vnd(o.amount)], ['Nội dung CK', `<b style="color:var(--pri)">${o.code}</b>`]]
+          .map(([k, v]) => `<div class="copy"><span class="k">${k}</span><span class="v">${v}</span><button class="btn sm" data-toast="ok:Đã sao chép">Sao chép</button></div>`).join('')}
+        <div class="row" style="margin-top:16px;align-items:center"><span class="muted">Đơn hết hạn sau <b>71:48:12</b> · tự cập nhật mỗi 10 giây</span><span style="flex:1"></span><button class="btn danger" data-act="cancel-order">Huỷ đơn</button></div></div></div></div>`
+      : o.status === 'paid' ? `<div class="acard result"><div class="ic" style="color:#52c41a">✔</div><h2>Đã nhận thanh toán</h2><p class="muted">Bản quyền ${o.plan} đã được kích hoạt.</p><button class="btn pri" data-go="c-license">Đến bản quyền</button></div>`
+      : `<div class="acard result"><div class="ic" style="color:#faad14">!</div><h2>${ST[o.status][1]}</h2><button class="btn pri" data-go="c-buy">Mua lại</button></div>`}`); },
+    'c-orders': () => appShell('cust', 'c-orders', `<div class="pagehead"><h2>Đơn hàng</h2><button class="btn pri" data-go="c-buy">+ Mua gói</button></div><div class="acard">${custOrdersTable()}</div>`),
+    'c-licenses': () => appShell('cust', 'c-licenses', `<div class="pagehead"><h2>Bản quyền</h2></div><div class="lic">
+      <div class="acard"><div class="row" style="justify-content:space-between"><b>Gói 12 tháng</b><span class="tag green">Còn hạn</span></div><div class="muted">Hiệu lực: 02/03/2026 – 02/03/2027</div>
+        <div class="progress"><div style="width:${S.machines.length * 50}%"></div></div><div>${S.machines.length}/2 máy · còn 3 lần đổi máy</div><button class="btn pri" style="margin-top:12px" data-go="c-license">Quản lý máy</button></div>
+      <div class="acard"><div class="row" style="justify-content:space-between"><b>Gói 3 tháng</b><span class="tag red">Hết hạn</span></div><div class="muted">Hiệu lực: 01/06/2025 – 01/09/2025</div>
+        <div class="progress"><div style="width:100%;background:#d9d9d9"></div></div><div>1/1 máy · còn 1 lần đổi máy</div><button class="btn" style="margin-top:12px" data-go="c-buy">Gia hạn bằng gói mới</button></div></div>`),
+    'c-license': () => appShell('cust', 'c-licenses', `<div class="pagehead"><a data-go="c-licenses">← Bản quyền</a><h2>Gói 12 tháng</h2>
+      <button class="btn pri" data-act="add-machine" ${S.machines.length >= 2 ? 'disabled title="Đã dùng hết số máy của gói"' : ''}>+ Thêm máy</button></div>
+      <div class="desc"><div><div class="dk">Trạng thái</div><span class="tag green">Còn hạn</span></div><div><div class="dk">Hiệu lực</div>02/03/2026 – 02/03/2027</div><div><div class="dk">Số máy</div>${S.machines.length} / 2</div>
+        <div><div class="dk">Đổi máy còn lại</div>3 / 3</div><div><div class="dk">Đơn</div>ET903311</div><div><div class="dk">Ngày mua</div>02/03/2026</div></div>
+      <div class="acard"><div class="ttl">Máy đang dùng</div><div class="tablewrap"><table><thead><tr><th>Tên máy</th><th>Mã máy</th><th>Key</th><th>Kích hoạt</th><th></th></tr></thead><tbody>
+        ${S.machines.map(m => `<tr><td>${m.name}</td><td><code>${m.id}</code></td><td><code>${m.key.slice(0, 22)}…</code> <button class="btn sm" data-toast="ok:Đã sao chép key">Sao chép</button></td><td>${m.at}</td><td><button class="btn sm danger" data-toast="ok:Đã gỡ máy (còn 2 lần đổi máy)">Gỡ máy</button></td></tr>`).join('')}
+      </tbody></table></div></div>`),
+    'c-profile': () => appShell('cust', 'c-profile', `<div class="pagehead"><h2>Hồ sơ</h2></div><div class="row">
+      <div class="acard" style="flex:1 1 300px"><div class="ttl">Thông tin</div><div class="field"><label>Email</label><input value="khach@etax.vn" disabled></div><div class="field"><label>Họ tên</label><input value="Nguyễn Văn An"></div>
+        <div class="field"><label>Số điện thoại</label><input value="0912345678"></div><div class="field"><label>Công ty</label><input value="Công ty TNHH Kế toán An Phát"></div><div class="field"><label>Mã số thuế</label><input value="0101234567"></div><button class="btn pri" data-toast="ok:Đã lưu thông tin">Lưu</button></div>
+      <div class="acard" style="flex:1 1 300px;align-self:start"><div class="ttl">Đổi mật khẩu</div><div class="field"><label>Mật khẩu hiện tại</label><input type="password"></div><div class="field"><label>Mật khẩu mới</label><input type="password"></div><div class="field"><label>Nhập lại</label><input type="password"></div><button class="btn pri" data-toast="ok:Đã đổi mật khẩu">Đổi mật khẩu</button></div></div>`),
+
+    'a-dash': () => { const p = S.orders.filter(o => o.status === 'pending');
+      return appShell('admin', 'a-dash', `<div class="pagehead"><h2>Bảng điều khiển</h2></div>
+      <div class="acard"><div class="row"><div class="stat"><div class="lbl">Doanh thu tháng 11</div><div class="val">${vnd(S.orders.filter(o => o.status === 'paid' && o.created.includes('/11/')).reduce((s, o) => s + o.amount, 0))}</div></div>
+        <div class="stat"><div class="lbl">Đơn chờ xác nhận</div><div class="val" style="color:#d48806">${p.length}</div></div><div class="stat"><div class="lbl">Bản quyền còn hạn</div><div class="val">128</div></div><div class="stat"><div class="lbl">Khách mới tháng này</div><div class="val">17</div></div></div></div>
+      <div class="acard"><div class="ttl">Đơn chờ xác nhận</div>${adminOrdersTable(p)}</div>`); },
+    'a-orders': () => { const f = S.filter || 'all'; const list = S.orders.filter(o => f === 'all' || o.status === f);
+      return appShell('admin', 'a-orders', `<div class="pagehead"><h2>Đơn hàng</h2></div><div class="acard">
+      <div class="row" style="margin-bottom:16px;align-items:center"><div class="seg">${[['all', 'Tất cả'], ['pending', 'Chờ thanh toán'], ['paid', 'Đã thanh toán'], ['cancelled', 'Đã huỷ'], ['expired', 'Quá hạn']]
+        .map(([k, t]) => `<button class="${k === f ? 'on' : ''}" data-filter="${k}">${t}</button>`).join('')}</div><input placeholder="Mã đơn, email, MST" style="max-width:260px"></div>
+      ${adminOrdersTable(list)}</div>`); },
+    'a-users': () => appShell('admin', 'a-users', `<div class="pagehead"><h2>Khách hàng</h2><input placeholder="Tên, email, SĐT, MST" style="max-width:260px"></div><div class="acard"><div class="tablewrap"><table>
+      <thead><tr><th>Họ tên</th><th>Email</th><th>SĐT</th><th>Công ty / MST</th><th>Đơn</th><th>Bản quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${[['Nguyễn Văn An', 'khach@etax.vn', '0912345678', 'Kế toán An Phát · 0101234567', 3, 2, 1], ['Trần Thị Bình', 'binh.tt@abc.vn', '0987654321', 'ABC · 0312345678', 1, 0, 1], ['Lê Minh Châu', 'chau@ketoanxyz.vn', '0901122334', 'XYZ · 0109876543-001', 2, 1, 1], ['Phạm Quốc Dũng', 'dung.pq@gmail.com', '0933445566', '—', 1, 0, 0]]
+        .map(u => `<tr><td><a>${u[0]}</a></td><td>${u[1]}</td><td>${u[2]}</td><td>${u[3]}</td><td>${u[4]}</td><td>${u[5]}</td><td>${u[6] ? '<span class="tag green">Hoạt động</span>' : '<span class="tag def">Đã khoá</span>'}</td><td><button class="btn sm ${u[6] ? 'danger' : ''}" data-toast="ok:${u[6] ? 'Đã khoá tài khoản' : 'Đã mở khoá'}">${u[6] ? 'Khoá' : 'Mở khoá'}</button></td></tr>`).join('')}
+      </tbody></table></div></div>`),
+    'a-licenses': () => appShell('admin', 'a-licenses', `<div class="pagehead"><h2>Bản quyền</h2><input placeholder="Email, mã đơn, mã máy" style="max-width:260px"></div><div class="acard"><div class="tablewrap"><table>
+      <thead><tr><th>Khách</th><th>Gói</th><th>Hiệu lực</th><th>Máy</th><th>Đổi máy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${[['Nguyễn Văn An', 'Gói 12 tháng', '02/03/2026 – 02/03/2027', '1/2', '0/3', 'green', 'Còn hạn'], ['Lê Minh Châu', 'Trọn đời', '10/11/2026 – Trọn đời', '2/3', '1/5', 'green', 'Còn hạn'], ['Nguyễn Văn An', 'Gói 3 tháng', '01/06/2025 – 01/09/2025', '1/1', '0/1', 'red', 'Hết hạn']]
+        .map(l => `<tr><td>${l[0]}</td><td>${l[1]}</td><td>${l[2]}</td><td>${l[3]}</td><td>${l[4]}</td><td><span class="tag ${l[5]}">${l[6]}</span></td><td><button class="btn sm" data-act="extend">Gia hạn</button> <button class="btn sm danger" data-toast="ok:Đã thu hồi bản quyền">Thu hồi</button></td></tr>`).join('')}
+      </tbody></table></div></div>`),
+    'a-plans': () => appShell('admin', 'a-plans', `<div class="pagehead"><h2>Gói &amp; giá</h2><button class="btn pri" data-act="plan-form">+ Thêm gói</button></div><div class="acard"><div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Tên</th><th>Thời hạn</th><th>Số máy</th><th>Đổi máy</th><th>Giá</th><th>Nổi bật</th><th>Đang bán</th><th></th></tr></thead><tbody>
+      ${S.plans.map((p, i) => `<tr><td>${i + 1}</td><td>${p.name}</td><td>${p.months ? p.months + ' tháng' : 'Trọn đời'}</td><td>${p.machines}</td><td>${p.changes}</td><td>${vnd(p.price)}</td><td>${p.featured ? '★' : ''}</td><td>✅</td><td><button class="btn sm" data-act="plan-form">Sửa</button></td></tr>`).join('')}
+      </tbody></table></div></div>`),
+    'a-settings': () => appShell('admin', 'a-settings', `<div class="pagehead"><h2>Cài đặt</h2></div><div class="row">
+      <div class="acard" style="flex:1 1 320px"><div class="ttl">Tài khoản nhận tiền</div><div class="field"><label>Ngân hàng</label><select><option>Vietcombank (970436)</option><option>VietinBank (970415)</option><option>BIDV (970418)</option><option>Techcombank (970407)</option><option>MB (970422)</option></select></div>
+        <div class="field"><label>Số tài khoản</label><input value="0071000123456"></div><div class="field"><label>Tên chủ tài khoản</label><input value="CONG TY TNHH ETAX"><div class="help">Viết HOA, không dấu</div></div><button class="btn pri" data-toast="ok:Đã lưu">Lưu</button></div>
+      <div class="acard" style="flex:0 1 280px;text-align:center"><div class="ttl">Xem trước QR 10.000 ₫</div><div class="qr" style="margin:0 auto"></div></div>
+      <div class="acard" style="flex:1 1 320px"><div class="ttl">Phiên bản ứng dụng</div><div class="field"><label>Phiên bản</label><input value="1.4.0"></div><div class="field"><label>Link tải</label><input value="https://etax.vn/download/E-Tax-1.4.0.zip"></div><div class="field"><label>Ghi chú phát hành</label><textarea rows="3">Giao diện mới, thanh trạng thái tổng tiền.</textarea></div><button class="btn pri" data-toast="ok:Đã lưu">Lưu</button></div></div>`),
+    forbidden: () => `<div class="result" style="padding:80px 16px"><div class="ic" style="color:#faad14">403</div><h2>Không có quyền truy cập</h2><p class="muted">Trang này chỉ dành cho quản trị viên.</p><button class="btn pri" data-go="c-dash">Về tài khoản</button></div>`,
+  };
+  function custOrdersTable() {
+    return `<div class="tablewrap"><table><thead><tr><th>Mã đơn</th><th>Gói</th><th>Số tiền</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead><tbody>
+      ${S.orders.filter(o => o.email === 'khach@etax.vn').map(o => `<tr><td><a data-pay="${o.id}">${o.code}</a></td><td>${o.plan}</td><td>${vnd(o.amount)}</td><td>${tag(o.status)}</td><td>${o.created}</td><td>${o.status === 'pending' ? `<button class="btn sm pri" data-pay="${o.id}">Thanh toán</button>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>`;
+  }
+  function adminOrdersTable(list) {
+    if (!list.length) return `<div class="result muted">Không có đơn</div>`;
+    return `<div class="tablewrap"><table><thead><tr><th>Mã đơn</th><th>Khách</th><th>Gói</th><th>Số tiền</th><th>Trạng thái</th><th>Ngày tạo</th><th></th></tr></thead><tbody>
+      ${list.map(o => `<tr><td><b>${o.code}</b></td><td><a>${o.user}</a><div class="muted">${o.email}</div></td><td>${o.plan}</td><td>${vnd(o.amount)}</td><td>${tag(o.status)}</td><td>${o.created}</td>
+        <td>${o.status === 'pending' ? `<button class="btn sm pri" data-confirm="${o.id}">Xác nhận</button> <button class="btn sm" data-cancel="${o.id}">Huỷ</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  /* ---------- Modal ---------- */
+  function modal(html) { closeModal(); const m = document.createElement('div'); m.className = 'mask'; m.innerHTML = `<div class="modal">${html}</div>`; app.appendChild(m); m.addEventListener('click', e => { if (e.target === m) closeModal(); }); }
+  function closeModal() { app.querySelectorAll('.mask').forEach(m => m.remove()); }
+  function toast(kind, text) { const t = document.createElement('div'); t.className = 'toast ' + kind; t.textContent = text; app.appendChild(t); setTimeout(() => t.remove(), 1800); }
+
+  function addMachineModal() {
+    modal(`<h3>Thêm máy</h3><div class="field"><label>Mã máy *</label><input id="mid" maxlength="16" placeholder="VD: 3FA2C91B7E0D4A55" style="text-transform:uppercase;font-family:Consolas,monospace">
+      <div class="help">Lấy ở màn kích hoạt của ứng dụng E-Tax (16 ký tự 0-9, A-F)</div><div class="msg" id="midErr"></div></div>
+      <div class="field"><label>Tên máy *</label><input id="mname" placeholder="VD: Máy kế toán 2"></div>
+      <div class="foot"><button class="btn" data-act="close">Huỷ</button><button class="btn pri" data-act="do-add">Lấy key</button></div>`);
+  }
+  function doAdd() {
+    const id = document.getElementById('mid').value.replace(/\s/g, '').toUpperCase();
+    const name = document.getElementById('mname').value.trim() || 'Máy mới';
+    if (!/^[0-9A-F]{16}$/.test(id)) { document.getElementById('mid').classList.add('err'); document.getElementById('midErr').textContent = 'Mã máy phải gồm 16 ký tự 0-9, A-F'; return; }
+    if (S.machines.length >= 2) { closeModal(); toast('err', 'Đã dùng hết số máy của gói, hãy gỡ một máy trước'); return; }
+    const key = 'eyJtYWNoaW5lIjoi' + btoa(id).replace(/=/g, '') + 'IiwiY3VzdG9tZXIiOiJraGFjaEBldGF4LnZuIn0.MEUCIQD' + Math.random().toString(36).slice(2, 14);
+    S.machines.push({ name, id, key, at: '16/11/2026' });
+    modal(`<h3>Đã tạo key cho "${name}"</h3><div class="alert ok">Sao chép key dưới đây và dán vào màn kích hoạt của ứng dụng E-Tax.</div>
+      <textarea rows="4" readonly style="font-family:Consolas,monospace;font-size:12px">${key}</textarea>
+      <div class="foot"><button class="btn" data-toast="ok:Đã sao chép key">Sao chép</button><button class="btn pri" data-act="close-render">Xong</button></div>`);
+  }
+  function confirmModal(id) {
+    const o = S.orders.find(x => x.id === id);
+    modal(`<h3>Xác nhận đã nhận tiền</h3><div class="alert warn">Đối chiếu sao kê: số tiền và nội dung chuyển khoản phải khớp.</div>
+      <div class="copy"><span class="k">Nội dung CK</span><span class="v"><b>${o.code}</b></span></div><div class="copy"><span class="k">Số tiền cần nhận</span><span class="v">${vnd(o.amount)}</span></div>
+      <div class="copy"><span class="k">Khách</span><span class="v">${o.user} · ${o.email}</span></div><div class="copy"><span class="k">Gói</span><span class="v">${o.plan}</span></div>
+      <div class="field" style="margin-top:12px"><label>Ghi chú</label><input placeholder="VD: VCB 16/11 FT123"></div>
+      <div class="foot"><button class="btn" data-act="close">Đóng</button><button class="btn pri" data-do-confirm="${id}">Đã nhận tiền – cấp bản quyền</button></div>`);
+  }
+
+  /* ---------- Điều hướng ---------- */
+  const SCREENS = [
+    ['Công khai', [['home', 'Trang chủ'], ['pricing', 'Bảng giá'], ['download', 'Tải ứng dụng'], ['login', 'Đăng nhập'], ['register', 'Đăng ký']]],
+    ['Khách hàng', [['c-dash', 'Tổng quan'], ['c-buy', 'Mua gói'], ['c-pay', 'Thanh toán'], ['c-orders', 'Đơn hàng'], ['c-licenses', 'Bản quyền'], ['c-license', 'Chi tiết + thêm máy'], ['c-profile', 'Hồ sơ']]],
+    ['Quản trị', [['a-dash', 'Bảng điều khiển'], ['a-orders', 'Đơn hàng'], ['a-users', 'Khách hàng'], ['a-licenses', 'Bản quyền'], ['a-plans', 'Gói & giá'], ['a-settings', 'Cài đặt'], ['forbidden', '403']]],
+  ];
+  const btns = document.getElementById('screenBtns');
+  btns.innerHTML = SCREENS.map(([g, l]) => `<span class="grp">${g}:</span>` + l.map(([k, t]) => `<button data-screen="${k}" aria-pressed="false">${t}</button>`).join('')).join('')
+    + `<button class="viewport-toggle" id="vp" aria-pressed="false">📱 390px</button>`;
+  const app = document.getElementById('app');
+  let cur = 'home';
+  function go(k) { cur = k; app.innerHTML = V[k](); btns.querySelectorAll('[data-screen]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.screen === k))); app.scrollTop = 0; }
+  btns.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'vp') { const m = document.getElementById('frame').classList.toggle('mobile'); b.setAttribute('aria-pressed', String(m)); return; }
+    if (b.dataset.screen === 'c-pay') S.payOrder = 'o1';
+    go(b.dataset.screen);
+  });
+  app.addEventListener('click', e => {
+    const el = e.target.closest('[data-go],[data-buy],[data-pay],[data-act],[data-toast],[data-confirm],[data-do-confirm],[data-cancel],[data-filter],[data-pick]');
+    if (!el || el.disabled) return;
+    const d = el.dataset;
+    if (d.go) go(d.go);
+    else if (d.buy) { S.buy = d.buy; go('c-buy'); }
+    else if (d.pick) { S.buy = d.pick; go('c-buy'); }
+    else if (d.pay) { S.payOrder = d.pay; go('c-pay'); }
+    else if (d.filter) { S.filter = d.filter; go('a-orders'); }
+    else if (d.confirm) confirmModal(d.confirm);
+    else if (d.doConfirm) { const o = S.orders.find(x => x.id === d.doConfirm); o.status = 'paid'; closeModal(); go(cur); toast('ok', `Đã xác nhận ${o.code}, bản quyền đã được cấp`); }
+    else if (d.cancel) { S.orders.find(x => x.id === d.cancel).status = 'cancelled'; go(cur); toast('ok', 'Đã huỷ đơn'); }
+    else if (d.toast) { const [k, ...t] = d.toast.split(':'); toast(k, t.join(':')); }
+    else if (d.act === 'drawer') document.getElementById('sider').classList.toggle('open');
+    else if (d.act === 'close') closeModal();
+    else if (d.act === 'close-render') { closeModal(); go(cur); }
+    else if (d.act === 'add-machine') addMachineModal();
+    else if (d.act === 'do-add') doAdd();
+    else if (d.act === 'create-order') {
+      const p = S.plans.find(x => x.id === (S.buy || 'p6'));
+      const o = { id: 'o' + (S.orders.length + 1), code: 'ET' + String(Math.floor(100000 + Math.random() * 899999)), user: 'Nguyễn Văn An', email: 'khach@etax.vn', plan: p.name, amount: p.price, status: 'pending', created: '16/11/2026 23:15' };
+      S.orders.unshift(o); S.payOrder = o.id; go('c-pay'); toast('ok', 'Đã tạo đơn ' + o.code);
+    }
+    else if (d.act === 'cancel-order') { S.orders.find(x => x.id === S.payOrder).status = 'cancelled'; go('c-pay'); toast('ok', 'Đã huỷ đơn'); }
+    else if (d.act === 'extend') modal(`<h3>Gia hạn bản quyền</h3><div class="field"><label>Thêm</label><select><option>1 tháng</option><option>3 tháng</option><option>6 tháng</option><option selected>12 tháng</option></select></div><div class="foot"><button class="btn" data-act="close">Huỷ</button><button class="btn pri" data-act="close" data-x>Gia hạn</button></div>`);
+    else if (d.act === 'plan-form') modal(`<h3>Gói</h3><div class="field"><label>Tên *</label><input value="Gói 12 tháng"></div><div class="row"><div class="field" style="flex:1"><label>Thời hạn</label><select><option>12 tháng</option><option>Trọn đời</option></select></div><div class="field" style="flex:1"><label>Giá (₫)</label><input value="900.000"></div></div>
+      <div class="row"><div class="field" style="flex:1"><label>Số máy</label><input value="2"></div><div class="field" style="flex:1"><label>Số lần đổi máy</label><input value="3"></div></div><div class="help muted">Sửa giá không ảnh hưởng đơn đã tạo.</div><div class="foot"><button class="btn" data-act="close">Huỷ</button><button class="btn pri" data-act="close">Lưu</button></div>`);
+  });
+
+  /* Deep link: #ui:<screen> */
+  const h = location.hash.slice(1).split(':');
+  if (h[0] && document.getElementById(h[0])) showTab(h[0]);
+  go(h[1] && V[h[1]] ? h[1] : 'home');
+</script>
+</body>
+</html>

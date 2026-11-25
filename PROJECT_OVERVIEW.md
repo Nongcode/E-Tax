@@ -49,7 +49,10 @@ E-Tax/
 ├── GdtApi.cs                  # Hằng URL/User-Agent; CreateRequest(...) set header chung; BuildDetailUrl(...)
 ├── InvoiceJson.cs             # JSON chi tiết HĐ: Options, DetailExportColumns (20 cột Excel), FindProductArray (hdhhdvu), BuildDetailRows
 ├── ExcelExporter.cs            # ClosedXML: ExportSearchResults (DS 18 cột), ExportDetailSummary (chi tiết tổng hợp), ExportSingleInvoiceDetail (1 HĐ) — chỉ ghi file
-├── GridColumnHelper.cs        # Style + tạo cột text/số cho DataGridView cấu hình bằng code
+├── GridColumnHelper.cs        # Tạo cột text/số cho DataGridView cấu hình bằng code; ApplyDefaultStyle → UiTheme.StyleGrid
+├── UiTheme.cs                 # Bảng màu (Accent #0075D6, ...) + StyleGrid(dgv): tiêu đề xanh 34px, dòng 28px, kẻ ngang
+├── WindowSettings.cs          # Nhớ vị trí/kích thước/phóng to cửa sổ (%AppData%/E-Tax/window.json); Fit() kéo về màn hình
+├── InvoiceSummary.cs          # Số HĐ + tổng thanh toán theo Bán ra/Mua vào → chữ trên thanh trạng thái
 ├── Logger.cs                  # Ghi log ra file theo ngày (%LocalAppData%/E-Tax/logs)
 ├── NotesStore.cs              # Ghi chú theo Id HĐ (%AppData%/E-Tax/notes.json)
 ├── PdfConverter.cs            # HTML → PDF (PuppeteerSharp), 1 trình duyệt cho cả lô
@@ -61,7 +64,7 @@ E-Tax/
 ├── TraCuuForm.cs              # Popup hiển thị mã tra cứu + link tra cứu NCC hóa đơn + thông tin người bán
 └── Properties/Resources.*     # Resource mặc định
 tools/E-Tax.KeyGen/            # Console net8.0 cấp key (init/issue); link E-Tax/LicenseKey.cs
-E-Tax.Tests/                   # xUnit (12 file test): NotesStore, InvoiceDetailService (+ FakeHttpHandler), AppSettings, LicenseKey, ExcelExporter, TaxPeriod, InvoiceFilter, InvoiceSearchResults, PdfMerger, BatchProgress, TaxListing, RiskCheckService
+E-Tax.Tests/                   # xUnit: NotesStore, InvoiceDetailService (+ FakeHttpHandler), AppSettings, LicenseKey, ExcelExporter, TaxPeriod, InvoiceFilter, InvoiceSearchResults, PdfMerger, BatchProgress, TaxListing, RiskCheckService, WindowSettings, UiTheme, InvoiceSummary và test các module V1 (mục 8)
 ```
 
 Các `#region` trong `Form1.cs`: Đăng nhập & bản quyền · Gọi API hóa đơn · Excel & PDF · Tìm kiếm & lọc ·
@@ -133,6 +136,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 3. `dotnet run --project tools/E-Tax.KeyGen -- issue <private.pem> <mã máy> "<tên khách>" [yyyy-MM-dd]` (bỏ ngày = vĩnh viễn) → gửi chuỗi key in ra cho khách dán vào ô **Mã** → "Kích hoạt".
 
 ### 5.2 Đăng nhập
+Khối đăng nhập không có logo: tiêu đề `lblLoginTitle` + `lblLoginSubtitle`; `CenterLoginPanel` đặt chiều cao theo nội dung và căn giữa vùng trên thanh trạng thái (gọi lại khi `Resize`/`Shown`/`panelActivation.VisibleChanged`).
 `btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
 
 ### 5.3 Tìm kiếm (`btnLeftSearch_Click`) — chức năng trung tâm
@@ -184,6 +188,10 @@ Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `c
 - `GetSelectedInvoiceWithKeys(row, msg)` — lấy HĐ từ dòng lưới và kiểm tra đủ khóa, tự hiện thông báo nếu không hợp lệ.
 - `ShowStatusMessage` + `statusTimer` (2s) — thông báo tạm trên `lblStatusMessage`.
 - `DataGridView_DataError` — nuốt lỗi binding của mọi lưới.
+- Cửa sổ co giãn (`Sizable`, tối thiểu = kích thước thiết kế): `RestoreWindowBounds`/`SaveWindowBounds` (`#region Cửa sổ`), `CenterLoginPanel` khi Resize.
+- Thanh trạng thái `statusBar`: `lblStatusInvoices` (`UpdateInvoiceSummary`, gọi trong `BindMainGrid` và khi bắt đầu tìm), `lblStatusUser` (đăng nhập), `lblStatusLicense` + `lblVersion` (`ShowLicenseStatus` trong `CheckForLicense`).
+- `dgvMain` chọn cả dòng (`FullRowSelect`) → In pdf in tất cả dòng đang chọn. Style/định dạng tiền ở `StyleMainGrid`.
+- **Chế độ demo (chỉ Debug):** đặt biến môi trường `ETAX_UI_DEMO=1` (hoặc `progress` để hiện thanh tiến độ; `activation` để hiện khối kích hoạt trên màn hình đăng nhập) → bỏ đăng nhập, nạp 60 HĐ mẫu (`ShowDemoData`), không gọi API. Dùng để chụp màn hình; không có trong Release.
 - Quy ước lỗi: các hàm gọi API trả về **chuỗi bắt đầu bằng `"❌"`** khi lỗi thay vì throw → nơi gọi kiểm `StartsWith("❌")`.
 
 ## 6. Đánh giá
@@ -243,6 +251,8 @@ Các điểm dưới đây dựa trên giả định/test giả lập, chưa ch�
 - Thêm NCC tra cứu: `BuildTraCuuLink` (switch theo `ngcnhat` lowercase).
 - Đổi điều kiện lọc HĐ mua vào: `BuildSearchQuery` (`;ttxly==5`).
 - Gọi API mới: dùng `GdtApi.CreateRequest`; hằng URL đặt trong `GdtApi`.
+- Màu/style giao diện: lấy từ `UiTheme` (không hard-code màu mới). Lưới mới cấu hình bằng code → `GridColumnHelper.ApplyDefaultStyle`; lưới tạo trong Designer → gọi `UiTheme.StyleGrid`.
+- Thêm control vào `panelSearch`: `mainSplitContainer` (Dock Fill) đứng trên cùng z-order — control nổi phải `BringToFront()`.
 - Tác vụ dài: nhận `CancellationToken` từ `ProcessingForm.CancellationToken`, ném lại `OperationCanceledException` khi hủy (đừng đổi thành `"❌"`) và bỏ kết quả dở dang.
 - Bảng kê: HĐ thiếu chi tiết phải trả `null` (không dữ liệu một phần) để `LastFailedCount` chặn xuất; thêm cột/quy tắc thì sửa `TaxListing` + `ExcelExporter.ExportTaxListing` + `TaxListingTests`.
 - Khóa HĐ: dùng `InvoiceSearchResults.KeyOf`, không tự ghép; dedupe luôn kèm loại HĐ.

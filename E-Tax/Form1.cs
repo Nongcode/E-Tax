@@ -100,8 +100,22 @@ namespace E_Tax
                 ? null
                 : new RiskCheckService(_riskHttp, _settings.BlacklistApiToken, AppendLog);
 
+            StyleMainGrid();
+            // mainSplitContainer (Dock Fill) đứng trên cùng nên che thanh tiến độ tải — đưa lên trước
+            downloadProgressBar.BringToFront();
+            lblDownloadStatus.BringToFront();
+
             panelLogin.Visible = true;
             panelSearch.Visible = false;
+
+            // Kích thước thiết kế là kích thước tối thiểu; khôi phục vị trí lần trước trước khi form hiện
+            MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea);
+            RestoreWindowBounds();
+            Resize += (_, _) => CenterLoginPanel();
+            // Khối kích hoạt hiện/ẩn làm đổi chiều cao khối đăng nhập; Shown: lúc này Visible mới phản ánh đúng
+            panelActivation.VisibleChanged += (_, _) => CenterLoginPanel();
+            Shown += (_, _) => CenterLoginPanel();
+            FormClosing += (_, _) => SaveWindowBounds();
         }
 
         protected override void Dispose(bool disposing)
@@ -132,6 +146,22 @@ namespace E_Tax
             _prefs.Load();
             if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
             dgvMain.AutoGenerateColumns = false;
+#if DEBUG
+            string? demo = Environment.GetEnvironmentVariable("ETAX_UI_DEMO");
+            if (demo is "1" or "progress")
+            {
+                ShowDemoData(showProgress: demo == "progress");
+                return;
+            }
+            if (demo == "activation")
+            {
+                // Chụp màn hình trạng thái hết hạn mà không sửa registry bản quyền
+                txtMachineId.Text = MachineId.Get();
+                panelActivation.Visible = true;
+                SetLoginInputsEnabled(false);
+                return;
+            }
+#endif
             _ = CheckForUpdateAsync();
             _ = RunAutoBackupAsync();
             await LoadCaptchaAsync();
@@ -150,6 +180,115 @@ namespace E_Tax
                 if (!IsDisposed) AppendLog($"❌ Sao lưu tự động thất bại: {ex.Message}");
             }
         }
+
+#if DEBUG
+        /// <summary>
+        /// Chỉ bản Debug: bỏ đăng nhập, nạp 60 HĐ mẫu để chụp màn hình chính mà không cần cổng thuế (CR-001).
+        /// </summary>
+        private void ShowDemoData(bool showProgress)
+        {
+            string[] sellers = { "Công ty TNHH Thương mại An Phát", "Công ty CP Công nghệ Minh Long", "Công ty TNHH Dịch vụ Hoàng Gia", "Công ty CP Vận tải Sài Gòn", "Công ty TNHH Văn phòng phẩm Hồng Hà" };
+            var random = new Random(42);
+            _latestResults = Enumerable.Range(0, 60).Select(i =>
+            {
+                decimal beforeTax = random.Next(5, 5000) * 10_000m;
+                decimal tax = beforeTax * (i % 3 == 0 ? 0.08m : 0.1m);
+                return new SearchResult
+                {
+                    Id = $"demo-{i}",
+                    Ma_so_thue = $"03{random.Next(10_000_000, 99_999_999)}",
+                    Ky_hieu_ma_so = 1,
+                    Ky_hieu_hoa_don = i % 2 == 0 ? "C26TAA" : "C26TBB",
+                    So_hoa_don = 1000 + i,
+                    Ngay_lap = new DateTime(2026, 10, 31).AddDays(-i / 2).ToString("yyyy-MM-ddTHH:mm:ss"),
+                    Thong_tin_hoa_don = sellers[i % sellers.Length],
+                    Tong_tien_chua_thue = beforeTax,
+                    Tong_tien_thue = tax,
+                    Tong_tien_thanh_toan = beforeTax + tax,
+                    Loai_hoa_don = i % 2 == 0 ? "Bán ra" : "Mua vào"
+                };
+            }).ToList();
+
+            panelLogin.Visible = false;
+            panelSearch.Visible = true;
+            lblStatusUser.Text = "👤 demo";
+            BindMainGrid(_latestResults);
+            dgvGiamThue.DataSource = _latestResults;
+            // Phím gõ lạc vào cửa sổ demo chỉ di chuyển dòng, không bấm nút gọi API
+            ActiveControl = dgvMain;
+
+            if (showProgress)
+            {
+                downloadProgressBar.Maximum = _latestResults.Count;
+                downloadProgressBar.Value = 24;
+                lblDownloadStatus.Text = $"Đang tải 24/{_latestResults.Count}...";
+                downloadProgressBar.Visible = true;
+                lblDownloadStatus.Visible = true;
+            }
+        }
+#endif
+
+        /// <summary>
+        /// dgvMain cấu hình cột trong Designer nên không đi qua GridColumnHelper — áp theme và định dạng tiền ở đây.
+        /// </summary>
+        private void StyleMainGrid()
+        {
+            UiTheme.StyleGrid(dgvMain);
+            // Chọn cả dòng: nút In pdf vốn đọc SelectedRows để in nhiều hóa đơn
+            dgvMain.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            colDgvThongTinHD.MinimumWidth = 200;
+            colDgvThongTinHD.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            foreach (var column in new[] { colDgvTienChuaThue, colDgvTienThue, colDgvTongTien })
+            {
+                column.DefaultCellStyle.Format = "#,##0";
+                column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            }
+        }
+
+        #region Cửa sổ
+
+        private void RestoreWindowBounds()
+        {
+            var saved = WindowSettings.Load(WindowSettings.DefaultPath);
+            if (saved == null) return;
+
+            var workingAreas = Screen.AllScreens.Select(s => s.WorkingArea).ToList();
+            var bounds = WindowSettings.Fit(saved, workingAreas, MinimumSize);
+            if (bounds == null) return; // vị trí cũ nằm ngoài các màn hình hiện có → giữ CenterScreen
+
+            StartPosition = FormStartPosition.Manual;
+            Bounds = bounds.Value;
+            if (saved.Maximized) WindowState = FormWindowState.Maximized;
+            CenterLoginPanel();
+        }
+
+        private void SaveWindowBounds()
+        {
+            try
+            {
+                var bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                new WindowSettings(bounds.X, bounds.Y, bounds.Width, bounds.Height, WindowState == FormWindowState.Maximized)
+                    .Save(WindowSettings.DefaultPath);
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"⚠️ Không lưu được vị trí cửa sổ: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Khối đăng nhập cao vừa nội dung (tới nút Đăng nhập, hoặc khối kích hoạt khi hiện) và nằm giữa vùng phía trên thanh trạng thái.
+        /// </summary>
+        private void CenterLoginPanel()
+        {
+            if (WindowState == FormWindowState.Minimized) return;
+            panelLogin.Height = (panelActivation.Visible ? panelActivation.Bottom : btnLogin.Bottom) + 6;
+            int availableHeight = ClientSize.Height - statusBar.Height;
+            panelLogin.Left = Math.Max(0, (ClientSize.Width - panelLogin.Width) / 2);
+            panelLogin.Top = Math.Max(lblVersion.Bottom, (availableHeight - panelLogin.Height) / 2);
+        }
+
+        #endregion
 
         #region Đăng nhập & bản quyền
 
@@ -286,6 +425,7 @@ namespace E_Tax
                     // Thay MST của phiên trước; chỉ giữ tên đăng nhập (không bao giờ mật khẩu) và chỉ khi là MST hợp lệ
                     _currentTaxCode = InvoiceGridLogic.CurrentTaxCode(username);
                     MessageBox.Show("✅ Đăng nhập thành công!");
+                    lblStatusUser.Text = $"👤 {username}";
 
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
@@ -409,7 +549,9 @@ namespace E_Tax
 
         private void CheckForLicense()
         {
-            switch (LicenseManager.CheckLicense())
+            var status = LicenseManager.CheckLicense();
+            ShowLicenseStatus(status);
+            switch (status)
             {
                 case LicenseStatus.Activated:
                     this.Text = "E-Tax (Phiên bản đầy đủ)";
@@ -431,6 +573,31 @@ namespace E_Tax
                     MessageBox.Show("Thời gian dùng thử của bạn đã kết thúc. Vui lòng kích hoạt sản phẩm.", "Hết hạn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
             }
+        }
+
+        /// <summary>
+        /// Ô bản quyền trên thanh trạng thái và dòng chữ phiên bản ở góc trên.
+        /// </summary>
+        private void ShowLicenseStatus(LicenseStatus status)
+        {
+            switch (status)
+            {
+                case LicenseStatus.Activated:
+                    lblStatusLicense.Text = "Bản quyền: Đầy đủ";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0x16, 0xA3, 0x4A);
+                    break;
+                case LicenseStatus.ValidTrial:
+                    var expiry = LicenseManager.GetTrialExpiry();
+                    int daysLeft = expiry.HasValue ? Math.Max(0, (int)Math.Ceiling((expiry.Value - DateTime.UtcNow).TotalDays)) : 0;
+                    lblStatusLicense.Text = expiry.HasValue ? $"Dùng thử: còn {daysLeft} ngày" : "Dùng thử";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0xD9, 0x77, 0x06);
+                    break;
+                default:
+                    lblStatusLicense.Text = "Dùng thử: đã hết hạn";
+                    lblStatusLicense.ForeColor = Color.FromArgb(0xDC, 0x26, 0x26);
+                    break;
+            }
+            lblVersion.Text = status == LicenseStatus.Activated ? "Phiên bản đầy đủ" : "Phiên bản dùng thử trong vòng 1 tháng";
         }
 
         private void btnActivate_Click(object sender, EventArgs e)
@@ -889,6 +1056,7 @@ namespace E_Tax
             dgvBan.DataSource = null;
             dgvVatNop.DataSource = null;
             dgvGiamThue.DataSource = null;
+            UpdateInvoiceSummary();
         }
 
         private void btnExportBangKeMua_Click(object sender, EventArgs e) => ExportTaxListing(InvoiceType.Bought);
@@ -1095,6 +1263,15 @@ namespace E_Tax
         }
 
         /// <summary>
+        /// Thanh trạng thái theo danh sách đang hiển thị (mặc định toàn bộ kết quả; khi lọc thì theo kết quả lọc).
+        /// </summary>
+        private void UpdateInvoiceSummary(IReadOnlyCollection<SearchResult>? shown = null)
+        {
+            string text = InvoiceSummary.Compute(shown ?? _latestResults).Format();
+            lblStatusInvoices.Text = shown == null ? text : $"Lọc {shown.Count}/{_latestResults.Count} HĐ — {text}";
+        }
+
+        /// <summary>
         /// Bind danh sách (đã lọc) vào lưới tổng hợp, điền cột loại HĐ và đánh lại STT.
         /// Ngày lập hiển thị qua CellFormatting, Ngay_lap trong model giữ nguyên giá trị gốc.
         /// </summary>
@@ -1104,6 +1281,8 @@ namespace E_Tax
             _invoiceLinks = InvoiceLinker.Link(_latestResults);
             dgvMain.DataSource = null;
             dgvMain.DataSource = items;
+            // Bộ lọc không loại hóa đơn nào thì thanh trạng thái hiện như chưa lọc
+            UpdateInvoiceSummary(items.Count == _latestResults.Count ? null : items);
             UpdateGridRowNumbers();
             dgvMain.SuspendLayout();
             try
@@ -1150,6 +1329,7 @@ namespace E_Tax
             {
                 _visibleResults = new List<SearchResult>();
                 dgvMain.DataSource = null;
+                UpdateInvoiceSummary(filteredResults);
                 MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện lọc.", "Không có kết quả", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
