@@ -24,7 +24,7 @@ namespace E_Tax
         };
 
         public static bool IsNumericColumn(string key) =>
-            key == "sluong" || key == "dgia" || key.Contains("tien") || key == "tthue" || key == "tgtttbso" || key == "stckhau";
+            key == "sluong" || key == "dgia" || key.Contains("tien") || key == "thtcthue" || key == "tthue" || key == "tgtttbso" || key == "stckhau";
 
         /// <summary>
         /// Một số API bọc dữ liệu trong { "data": { ... } }; trả về phần data nếu có.

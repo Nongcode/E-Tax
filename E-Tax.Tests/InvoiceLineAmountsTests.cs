@@ -67,6 +67,40 @@ namespace E_Tax.Tests
             Assert.Null(lines[0].TienThueGTGT);
         }
 
+        // File "Tải chi tiết HĐ" dùng dòng JSON thô: thiếu thtcthue/tthue thì phải được bổ sung như bảng chi tiết
+        [Fact]
+        public void FillRows_AddsMissingBaseAndTax_ToRawRows()
+        {
+            var rows = new List<Dictionary<string, string>>
+            {
+                new() { ["thtien"] = "555555", ["tsuat"] = "0.08", ["thtcthue"] = "", ["tthue"] = "" },
+                new() { ["thtien"] = "777777", ["tsuat"] = "0.08" }
+            };
+
+            Assert.Equal(2, InvoiceLineAmounts.FillRows(rows));
+
+            Assert.Equal("555555", rows[0]["thtcthue"]);
+            Assert.Equal("777777", rows[1]["thtcthue"]);
+            Assert.Equal(106667m, decimal.Parse(rows[0]["tthue"]) + decimal.Parse(rows[1]["tthue"])); // 1.333.332 * 8% = 106.666,56 -> 106.667
+        }
+
+        [Fact]
+        public void FillRows_KeepsExistingValues_AndLeavesUnknownRateEmpty()
+        {
+            var rows = new List<Dictionary<string, string>>
+            {
+                new() { ["thtien"] = "1000", ["tsuat"] = "10%", ["thtcthue"] = "900", ["tthue"] = "90" },
+                new() { ["thtien"] = "500", ["tsuat"] = "KCT" }
+            };
+
+            Assert.Equal(0, InvoiceLineAmounts.FillRows(rows));
+
+            Assert.Equal("900", rows[0]["thtcthue"]);
+            Assert.Equal("90", rows[0]["tthue"]);
+            Assert.Equal("500", rows[1]["thtcthue"]);
+            Assert.False(rows[1].TryGetValue("tthue", out var t) && !string.IsNullOrEmpty(t));
+        }
+
         [Fact]
         public void LineWithTax_IsKept_OnlyMissingLineIsComputed()
         {

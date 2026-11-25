@@ -912,6 +912,8 @@ namespace E_Tax
                 using var doc = JsonDocument.Parse(json);
                 rows.AddRange(InvoiceJson.BuildDetailRows(InvoiceJson.GetDataElement(doc.RootElement)));
             }
+            // Cổng thường thiếu thtcthue/tthue: bổ sung giống bảng chi tiết để file xuất có doanh số và tiền thuế
+            InvoiceLineAmounts.FillRows(rows);
             return rows;
         }
 
