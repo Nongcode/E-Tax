@@ -28,7 +28,21 @@ namespace E_Tax
         private Dictionary<string, RiskResult> _riskResults = new Dictionary<string, RiskResult>();
         private readonly InvoiceDetailService _detailService;
         private readonly DetailGridManager _detailGridManager;
+        private readonly UserPreferences _prefs = new UserPreferences(UserPreferences.DefaultPath);
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
+
+        private readonly LocalInvoiceStore _store = new LocalInvoiceStore(LocalInvoiceStore.DefaultRoot);
+        private readonly DownloadJobStore _jobStore = new DownloadJobStore(DownloadJobStore.DefaultDirectory);
+        /// <summary>MST doanh nghiệp = tên đăng nhập của phiên hiện tại nếu là MST hợp lệ; null thì không đối chiếu bên mua/bán và không ghi kho.</summary>
+        private string? _currentTaxCode;
+        /// <summary>Các tác vụ ghi kho đang chạy nền (chỉ truy cập từ luồng UI); kho chỉ được mở sau khi chúng xong.</summary>
+        private readonly List<Task> _storeTasks = new List<Task>();
+        /// <summary>Đang gắn file vào kho: không cho người dùng đóng form.</summary>
+        private bool _attaching;
+        /// <summary>Cổng bận chung: mỗi lúc chỉ một luồng dài chạy; nút Kho hóa đơn bật/tắt theo cổng này.</summary>
+        private readonly BusyGate _gate = new BusyGate();
+        /// <summary>Liên kết HĐ thay thế/điều chỉnh với HĐ gốc của lần tìm kiếm gần nhất (theo Id HĐ).</summary>
+        private IReadOnlyDictionary<string, InvoiceLink> _invoiceLinks = new Dictionary<string, InvoiceLink>();
 
         private string jwtToken = "";
         private string captchaKey = "";
@@ -40,10 +54,16 @@ namespace E_Tax
         private TaxPeriod _lastSearchPeriod;
         /// <summary>Số trang tìm kiếm bị lỗi của lần tìm kiếm gần nhất.</summary>
         private int _lastFailedSearchPages;
+        /// <summary>Chiều đã tìm của lần tìm kiếm gần nhất; tờ khai cần cả hai chiều.</summary>
+        private SearchScope _lastSearchScope;
+        /// <summary>Cảnh báo thiếu hóa đơn so với tổng cổng thuế báo của lần tìm kiếm gần nhất.</summary>
+        private IReadOnlyList<string> _lastSearchWarnings = Array.Empty<string>();
 
         public Form1()
         {
             InitializeComponent();
+            FormClosing += Form1_FormClosing;
+            _gate.Changed += () => { if (!IsDisposed) { btnKhoHoaDon.Enabled = !_gate.IsBusy; btnKeKhai.Enabled = !_gate.IsBusy; } };
             InitPeriodSelector();
             ConfigureGiamThueGridColumns();
             dgvVatNop.DataError += DataGridView_DataError;
@@ -104,11 +124,55 @@ namespace E_Tax
         {
             CheckForLicense();
             _notes.Load();
+            if (_notes.LoadProblem != null)
+            {
+                AppendLog("❌ " + _notes.LoadProblem);
+                MessageBox.Show(this, _notes.LoadProblem, "Ghi chú bị lỗi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            _prefs.Load();
+            if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
             dgvMain.AutoGenerateColumns = false;
+            _ = CheckForUpdateAsync();
+            _ = RunAutoBackupAsync();
             await LoadCaptchaAsync();
         }
 
+        /// <summary>Sao lưu tự động mỗi ngày ở nền vào %AppData%\E-Tax\backups; lỗi chỉ ghi log.</summary>
+        private async Task RunAutoBackupAsync()
+        {
+            try
+            {
+                string? path = await Task.Run(() => AutoBackup.RunIfDue(_store.Root, NotesStore.DefaultPath, AutoBackup.DefaultDir, DateTime.Now));
+                if (path != null && !IsDisposed) AppendLog($"ℹ️ Đã tự động sao lưu kho hóa đơn: {path}");
+            }
+            catch (Exception ex)
+            {
+                if (!IsDisposed) AppendLog($"❌ Sao lưu tự động thất bại: {ex.Message}");
+            }
+        }
+
         #region Đăng nhập & bản quyền
+
+        /// <summary>Kiểm tra bản cập nhật ở nền; mọi lỗi bị bỏ qua. ManifestUrl rỗng thì không gọi mạng.</summary>
+        private async Task CheckForUpdateAsync()
+        {
+            try
+            {
+                var current = typeof(Form1).Assembly.GetName().Version ?? new Version(1, 0, 0);
+                var info = await UpdateChecker.CheckAsync(_riskHttp, UpdateChecker.ManifestUrl, current, CancellationToken.None);
+                if (info == null || IsDisposed) return;
+
+                AppendLog($"ℹ️ Có phiên bản mới {info.Version}.");
+                string notes = string.IsNullOrWhiteSpace(info.Notes) ? "" : Environment.NewLine + info.Notes;
+                MessageBox.Show(this,
+                    $"Có phiên bản mới {info.Version} (đang dùng {current.ToString(3)}).{notes}{Environment.NewLine}{Environment.NewLine}Tải về tại: {info.DownloadUrl}",
+                    "Cập nhật E-Tax", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception)
+            {
+                // Kiểm tra cập nhật không được ảnh hưởng ứng dụng
+            }
+        }
 
         private async void btnRefreshCaptcha_Click(object sender, EventArgs e)
         {
@@ -155,7 +219,6 @@ namespace E_Tax
 
                 captchaKey = keyEl.GetString();
                 string svgText = contentEl.GetString();
-                AppendLog($"📌 Captcha Key: {captchaKey}");
 
                 if (string.IsNullOrEmpty(svgText))
                     throw new Exception("Trường content rỗng.");
@@ -169,17 +232,16 @@ namespace E_Tax
                 }
                 catch (Exception exSvg)
                 {
-                    // Không render được SVG: lưu ra file tạm và hiển thị ảnh thông báo
-                    string tmp = Path.Combine(Path.GetTempPath(), $"captcha_{DateTime.Now.Ticks}.svg");
-                    File.WriteAllText(tmp, svgText, Encoding.UTF8);
-                    AppendLog("⚠️ Không convert trực tiếp SVG -> Bitmap: " + exSvg.Message);
+                    // Không render được: không ghi captcha ra đĩa, chỉ báo người dùng tải lại
+                    AppendLog("⚠️ Không hiển thị được captcha: " + exSvg.GetType().Name);
 
                     var bmp = new Bitmap(220, 80);
                     using (Graphics g = Graphics.FromImage(bmp))
+                    using (var font = new Font("Segoe UI", 9))
                     {
                         g.Clear(Color.White);
-                        g.DrawString("Captcha (SVG) lưu vào file", new Font("Segoe UI", 9), Brushes.Black, new PointF(6, 10));
-                        g.DrawString(Path.GetFileName(tmp), new Font("Segoe UI", 8), Brushes.Gray, new PointF(6, 30));
+                        g.DrawString("Không hiển thị được captcha.", font, Brushes.Black, new PointF(6, 10));
+                        g.DrawString("Hãy bấm làm mới để tải lại.", font, Brushes.Black, new PointF(6, 30));
                     }
                     SetCaptchaImage(bmp);
                 }
@@ -197,7 +259,9 @@ namespace E_Tax
             old?.Dispose();
         }
 
-        private async void btnLogin_Click(object sender, EventArgs e)
+        private async void btnLogin_Click(object sender, EventArgs e) => await RunFlowAsync("Đăng nhập", () => btnLogin_RunAsync(sender, e));
+
+        private async Task btnLogin_RunAsync(object sender, EventArgs e)
         {
             string username = txtUser.Text.Trim();
             string password = txtPass.Text;
@@ -218,10 +282,18 @@ namespace E_Tax
 
                 if (success)
                 {
+                    SaveLastUsername(username);
+                    // Thay MST của phiên trước; chỉ giữ tên đăng nhập (không bao giờ mật khẩu) và chỉ khi là MST hợp lệ
+                    _currentTaxCode = InvoiceGridLogic.CurrentTaxCode(username);
                     MessageBox.Show("✅ Đăng nhập thành công!");
 
                     panelLogin.Visible = false;
                     panelSearch.Visible = true;
+                    if (_currentTaxCode == null)
+                    {
+                        AppendLog("ℹ️ Tên đăng nhập không phải MST hợp lệ: không đối chiếu bên mua/bán và không ghi kho hóa đơn.");
+                        ShowStatusMessage("Tên đăng nhập không phải MST: sẽ không lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
+                    }
 
                     txtUser.Clear();
                     txtPass.Clear();
@@ -244,8 +316,31 @@ namespace E_Tax
             }
         }
 
+        /// <summary>Chỉ lưu tên đăng nhập, không bao giờ lưu mật khẩu/captcha/JWT. Lỗi ghi không làm hỏng đăng nhập.</summary>
+        private void SaveLastUsername(string username)
+        {
+            try
+            {
+                _prefs.LastUsername = username;
+                _prefs.Save();
+            }
+            catch (Exception ex)
+            {
+                AppendLog("⚠️ Không lưu được tên đăng nhập: " + ex.GetType().Name);
+            }
+        }
+
+        /// <summary>Xóa phiên cũ để đăng nhập lại thất bại không dùng lại token/cookie cũ.</summary>
+        private void ClearStoredSession()
+        {
+            jwtToken = "";
+            client.DefaultRequestHeaders.Authorization = null;
+            GdtApi.ExpireSessionCookies(cookieContainer, new Uri(GdtApi.PortalUrl));
+        }
+
         private async Task<bool> LoginAsync(string username, string password, string captchaValue)
         {
+            ClearStoredSession();
             try
             {
                 AppendLog("👉 Gửi yêu cầu đăng nhập...");
@@ -499,12 +594,13 @@ namespace E_Tax
         /// Tìm hóa đơn trong khoảng ngày: chia thành các lát 30 ngày, mỗi lát lấy hết các trang.
         /// Kết quả đã loại trùng theo Id, sắp theo ngày lập giảm dần; Loai_hoa_don = "Bán ra"/"Mua vào".
         /// </summary>
-        private async Task<(List<SearchResult> Results, List<string> FailedChunks)> SearchInvoicesAsync(
+        private async Task<(List<SearchResult> Results, List<string> FailedChunks, IReadOnlyList<string> CompletenessWarnings)> SearchInvoicesAsync(
             DateTime fromDate, DateTime toDate, bool includeSold, bool includeBought, Action<string> reportStatus,
             CancellationToken ct = default)
         {
             var allResults = new List<SearchResult>();
             var failedChunks = new List<string>();
+            var totals = new SearchTotals();
             DateTime loopStartDate = fromDate;
 
             while (loopStartDate <= toDate)
@@ -525,10 +621,10 @@ namespace E_Tax
                     reportStatus($"Đang tìm [{loopStartDate:dd/MM/yy} - {loopEndDate:dd/MM/yy}], Trang {currentPage + 1}...");
 
                     if (keepFetchingSold)
-                        keepFetchingSold = await FetchSearchPageAsync(InvoiceType.Sold, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, ct);
+                        keepFetchingSold = await FetchSearchPageAsync(InvoiceType.Sold, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, totals, ct);
 
                     if (keepFetchingBought)
-                        keepFetchingBought = await FetchSearchPageAsync(InvoiceType.Bought, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, ct);
+                        keepFetchingBought = await FetchSearchPageAsync(InvoiceType.Bought, loopStartDate, preciseLoopEndDate, currentPage, allResults, failedChunks, totals, ct);
 
                     if (keepFetchingSold || keepFetchingBought)
                     {
@@ -541,14 +637,14 @@ namespace E_Tax
             }
 
             var results = InvoiceSearchResults.Deduplicate(allResults);
-            return (results, failedChunks);
+            return (results, failedChunks, totals.Warnings(results));
         }
 
         /// <summary>
         /// Lấy một trang kết quả. Trả về true nếu có thể còn trang tiếp theo.
         /// </summary>
         private async Task<bool> FetchSearchPageAsync(InvoiceType type, DateTime from, DateTime to, int page,
-            List<SearchResult> results, List<string> failedChunks, CancellationToken ct = default)
+            List<SearchResult> results, List<string> failedChunks, SearchTotals totals, CancellationToken ct = default)
         {
             string endpoint = type == InvoiceType.Sold ? "query/invoices/sold" : "query/invoices/purchase";
             string typeLabel = type == InvoiceType.Sold ? "Bán ra" : "Mua vào";
@@ -568,6 +664,8 @@ namespace E_Tax
                 failedChunks.Add($"{typeLabel} [{from:dd/MM} - {to:dd/MM}], Trang {page + 1} (phản hồi không hợp lệ)");
                 return false;
             }
+            if (InvoiceSearchResults.ParseTotal(response) is int reportedTotal)
+                totals.Record(typeLabel, from.Date, reportedTotal);
             if (items == null)
                 return false;
 
@@ -604,7 +702,7 @@ namespace E_Tax
                 if (!response.IsSuccessStatusCode)
                 {
                     string errorText = await response.Content.ReadAsStringAsync(ct);
-                    AppendLog($"❌ Lỗi khi tải HĐ [{invoice.Ky_hieu_hoa_don} - {invoice.So_hoa_don}]: {(int)response.StatusCode} - {errorText}");
+                    AppendLog($"❌ Lỗi khi tải HĐ [{invoice.Ky_hieu_hoa_don} - {invoice.So_hoa_don}]: {(int)response.StatusCode} - {InvoiceDetailService.Truncate(errorText)}");
                     return null;
                 }
 
@@ -739,22 +837,28 @@ namespace E_Tax
             lblDownloadStatus.Text = "Đang kiểm tra/tải Chromium (chỉ lần đầu)...";
             AppendLog("   -> Đang kiểm tra/tải trình duyệt Chromium...");
 
-            var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
-            var installedBrowser = await browserFetcher.DownloadAsync();
-
-            string? path = null;
-            if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+            try
             {
-                path = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
-            }
-            if (string.IsNullOrEmpty(path))
-            {
-                throw new Exception("Không thể xác định đường dẫn thực thi Chromium. Quá trình convert PDF không thể tiếp tục.");
-            }
+                string path = await ChromiumUnavailableException.RunAsync(async () =>
+                {
+                    var browserFetcher = new BrowserFetcher(new BrowserFetcherOptions());
+                    var installedBrowser = await browserFetcher.DownloadAsync();
 
-            lblDownloadStatus.Text = previousStatus;
-            _chromiumExecutablePath = path;
-            return path;
+                    string? found = null;
+                    if (installedBrowser != null && !string.IsNullOrEmpty(installedBrowser.BuildId))
+                    {
+                        found = browserFetcher.GetExecutablePath(installedBrowser.BuildId);
+                    }
+                    return found;
+                }, CancellationToken.None, ex => AppendLog("❌ Tải Chromium thất bại: " + ex.GetType().Name));
+
+                _chromiumExecutablePath = path;
+                return path;
+            }
+            finally
+            {
+                lblDownloadStatus.Text = previousStatus;
+            }
         }
 
         private static string? FindFirstFile(string directory, string pattern) =>
@@ -777,6 +881,8 @@ namespace E_Tax
             _riskResults = new Dictionary<string, RiskResult>();
             _lastSearchPeriod = default;
             _lastFailedSearchPages = 0;
+            _lastSearchScope = default;
+            _lastSearchWarnings = Array.Empty<string>();
             dgvMain.DataSource = null;
             dgvDetails.DataSource = null;
             dgvMua.DataSource = null;
@@ -803,7 +909,9 @@ namespace E_Tax
                 return;
             }
 
-            string? blockReason = TaxListing.ExportBlockReason(_detailGridManager.LastFailedCount + _lastFailedSearchPages);
+            var selection = TaxableInvoices.Select(items, _latestResults, TaxListing.DirectionLabel(type));
+            string? blockReason = TaxListing.ExportBlockReason(_detailGridManager.LastFailedCount + _lastFailedSearchPages)
+                ?? TaxableInvoices.UnknownBlockReason(selection.Unknown);
             if (blockReason != null)
             {
                 MessageBox.Show(this, blockReason, "Không thể xuất bảng kê", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -813,12 +921,20 @@ namespace E_Tax
             var groups = TaxListing.Build(items, type);
             if (groups.Count == 0)
             {
-                MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string excludedText = string.Concat(selection.ExclusionNotes().Select(n => "\n" + n));
+                MessageBox.Show(this, $"Lần tìm kiếm gần nhất không có hóa đơn {kindText} nào để lập bảng kê.{excludedText}", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất
-            var warnings = TaxListing.ExportWarnings(groups, _detailGridManager.LastNoLineCount, TaxListing.CountNonVnd(_latestResults, type));
+            // Một xác nhận duy nhất cho mọi điểm cần lưu ý; chọn No thì dừng xuất. Các cảnh báo này cũng được ghi vào file.
+            int noLine = type == InvoiceType.Sold
+                ? _detailGridManager.LastNoLineSoldCount
+                : _detailGridManager.LastNoLineCount - _detailGridManager.LastNoLineSoldCount;
+            var warnings = TaxListing.ExportWarnings(groups, noLine,
+                    TaxListing.CountNonVnd(TaxableInvoices.IncludedHeaders(_latestResults), type))
+                .Concat(TaxableInvoices.OutputNotes(items, _latestResults, _lastSearchPeriod, TaxListing.DirectionLabel(type)))
+                .Concat(_lastSearchWarnings.Where(w => w.StartsWith(TaxListing.DirectionLabel(type), StringComparison.Ordinal)))
+                .ToList();
             if (warnings.Count > 0 && MessageBox.Show(this,
                     $"Bảng kê {kindText} có các điểm cần lưu ý:\n\n - {string.Join("\n - ", warnings)}\n\nVẫn xuất bảng kê?",
                     "Cảnh báo trước khi xuất", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
@@ -837,7 +953,7 @@ namespace E_Tax
 
             try
             {
-                ExcelExporter.ExportTaxListing(groups, type, period, sfd.FileName);
+                ExcelExporter.ExportTaxListing(groups, type, period, sfd.FileName, warnings);
                 MessageBox.Show(this, $"Đã xuất bảng kê {kindText} ({period.Label}) vào file:\n{sfd.FileName}", "Xuất thành công", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -851,7 +967,9 @@ namespace E_Tax
 
         #region Tìm kiếm & lọc
 
-        private async void btnLeftSearch_Click(object sender, EventArgs e)
+        private async void btnLeftSearch_Click(object sender, EventArgs e) => await RunFlowAsync("Tìm kiếm", () => btnLeftSearch_RunAsync(sender, e));
+
+        private async Task btnLeftSearch_RunAsync(object sender, EventArgs e)
         {
             if (string.IsNullOrEmpty(jwtToken))
             {
@@ -868,6 +986,8 @@ namespace E_Tax
 
             ClearSearchData();
             _lastSearchPeriod = CaptureSelectedPeriod(globalFromDate, globalToDate);
+            var searchScope = new SearchScope(rbBought.Checked || rbAllInvoices.Checked, rbSold.Checked || rbAllInvoices.Checked);
+            _lastSearchScope = searchScope;
             btnLeftSearch.Enabled = false;
             btnLeftSearch.Text = "Đang tìm...";
             this.Cursor = Cursors.WaitCursor;
@@ -879,19 +999,22 @@ namespace E_Tax
 
             try
             {
-                var (results, failedChunks) = await SearchInvoicesAsync(
+                var (results, failedChunks, completenessWarnings) = await SearchInvoicesAsync(
                     globalFromDate, globalToDate,
-                    includeSold: rbSold.Checked || rbAllInvoices.Checked,
-                    includeBought: rbBought.Checked || rbAllInvoices.Checked,
+                    includeSold: searchScope.Sold,
+                    includeBought: searchScope.Bought,
                     modal.UpdateStatus, ct);
 
                 ct.ThrowIfCancellationRequested();
                 modal.UpdateStatus("Đang tổng hợp kết quả...");
                 _latestResults = results;
                 _lastFailedSearchPages = failedChunks.Count;
+                _lastSearchWarnings = completenessWarnings;
 
                 if (_latestResults.Any())
                 {
+                    // Chỉ lưu những gì đã lấy được; trang lỗi không xóa gì khỏi kho (Upsert không bao giờ xóa)
+                    TrackStoreTask(StoreInvoicesAsync(_latestResults));
                     modal.UpdateStatus($"Đang hiển thị {_latestResults.Count} hóa đơn...");
                     BindMainGrid(_latestResults);
 
@@ -901,7 +1024,7 @@ namespace E_Tax
                     modal.UpdateStatus($"Đang tải chi tiết cho {_latestResults.Count} hóa đơn...");
                     int detailFailed = await _detailGridManager.PopulateDetailGridAsync(_latestResults, ct,
                         done => modal.Report(new BatchProgress("Tải chi tiết HĐ", done, _latestResults.Count, 0)));
-                    showCompleted = !failedChunks.Any() && detailFailed == 0;
+                    showCompleted = !failedChunks.Any() && detailFailed == 0 && !completenessWarnings.Any();
                     if (detailFailed > 0)
                     {
                         MessageBox.Show($"Không lấy được chi tiết hàng hóa của {detailFailed}/{_latestResults.Count} hóa đơn (phiên đăng nhập có thể đã hết hạn hoặc lỗi kết nối).\nCác bảng chi tiết có thể bị thiếu, hãy tìm kiếm lại. Xem log để biết thêm.", "Thiếu dữ liệu chi tiết", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -922,6 +1045,12 @@ namespace E_Tax
                         lblDownloadStatus.Text = "Không tìm thấy hóa đơn nào.";
                         MessageBox.Show("Không tìm thấy hóa đơn nào phù hợp với điều kiện tìm kiếm.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
+                }
+
+                if (_latestResults.Any() && completenessWarnings.Any())
+                {
+                    foreach (string warning in completenessWarnings) AppendLog("⚠️ " + warning);
+                    MessageBox.Show(string.Join("\n", completenessWarnings), "Kết quả tìm kiếm có thể thiếu", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
 
                 if (_latestResults.Any() && failedChunks.Any())
@@ -972,6 +1101,7 @@ namespace E_Tax
         private void BindMainGrid(List<SearchResult> items)
         {
             _visibleResults = items;
+            _invoiceLinks = InvoiceLinker.Link(_latestResults);
             dgvMain.DataSource = null;
             dgvMain.DataSource = items;
             UpdateGridRowNumbers();
@@ -1040,7 +1170,9 @@ namespace E_Tax
 
         #region Thao tác trên hóa đơn
 
-        private async void btnTaiHDGoc_Click(object sender, EventArgs e)
+        private async void btnTaiHDGoc_Click(object sender, EventArgs e) => await RunFlowAsync("Tải HĐ gốc", () => btnTaiHDGoc_RunAsync(sender, e));
+
+        private async Task btnTaiHDGoc_RunAsync(object sender, EventArgs e)
         {
             btnTaiHDGoc.Text = "Đang xử lý...";
             btnTaiHDGoc.Refresh();
@@ -1103,11 +1235,35 @@ namespace E_Tax
                 modal.CloseFromOwner();
             }
 
+            // Mặc định là thư mục tạm riêng của lượt này; có kế hoạch tải rồi thì chuyển sang thư mục làm việc bền vững để tiếp tục được
             string baseTempDirectory = Path.Combine(Path.GetTempPath(), $"E-Tax-Export_{Guid.NewGuid()}");
             string reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
             string zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
             string pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
             string xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+            bool isWorkFolder = false;   // true: baseTempDirectory là thư mục làm việc bền vững
+            bool cancelled = false;
+            bool outputSaved = false;    // ZIP kết quả đã được lưu vào thư mục người dùng chọn
+            int itemsNotDone = 0;        // số HĐ chưa xong trong lượt này (lỗi hoặc chưa xử lý)
+            DownloadJobStore? jobStore = null;
+            string? jobId = null;
+            int sinceFlush = 0;
+            string? storeOwner = _currentTaxCode; // chụp lúc bắt đầu: đổi phiên giữa chừng không làm lẫn doanh nghiệp
+            // HĐ đã xong trong lượt này (hoặc bỏ qua hợp lệ khi tiếp tục) kèm đường dẫn file kết quả, để gắn vào kho trước khi xóa thư mục làm việc
+            var finishedForStore = new List<(SearchResult Invoice, string PdfPath, string XmlPath)>();
+
+            void JobMark(string key, DownloadItemState state, string? error)
+            {
+                if (jobStore == null || jobId == null) return;
+                try { jobStore.Mark(jobId, key, state, error); }
+                catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không ghi được tiến độ tải: {exJob.GetType().Name}"); jobStore = null; }
+            }
+            void JobFlush()
+            {
+                if (jobStore == null || jobId == null) return;
+                try { jobStore.Flush(jobId); }
+                catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không lưu được tiến độ tải: {exJob.GetType().Name}"); jobStore = null; }
+            }
 
             try
             {
@@ -1115,11 +1271,12 @@ namespace E_Tax
                 modal.UpdateStatus("Bước 1: Đang tìm kiếm hóa đơn...");
                 modal.Report(new BatchProgress("Tìm hóa đơn", 0, 0, 0));
 
-                var (invoicesToDownload, failedChunks) = await SearchInvoicesAsync(
+                var (invoicesToDownload, failedChunks, downloadSearchWarnings) = await SearchInvoicesAsync(
                     globalFromDate, globalToDate,
                     includeSold: rbSold.Checked || rbAllInvoices.Checked,
                     includeBought: rbBought.Checked || rbAllInvoices.Checked,
                     status => modal.UpdateStatus("Bước 1: " + status), ct);
+                foreach (string warning in downloadSearchWarnings) AppendLog("⚠️ (Tải gốc) " + warning);
 
                 if (!invoicesToDownload.Any())
                 {
@@ -1134,6 +1291,7 @@ namespace E_Tax
                 }
 
                 ShowStatusMessage($"Tìm thấy {invoicesToDownload.Count} hóa đơn. Bắt đầu tải và xử lý...", Color.Green);
+                TrackStoreTask(StoreInvoicesAsync(invoicesToDownload));
 
                 // Excel giữ đủ theo loại; phần tải chỉ lấy mỗi hóa đơn thật một lần
                 var downloadPlan = InvoiceDownloadPlan.Build(invoicesToDownload);
@@ -1141,6 +1299,68 @@ namespace E_Tax
                 if (duplicateCount > 0)
                     AppendLog($"ℹ️ (Tải gốc) {duplicateCount} dòng là cùng hóa đơn ở cả Bán ra và Mua vào, chỉ tải một lần.");
                 int totalInvoices = downloadPlan.Count;
+
+                // Thư mục làm việc bền vững theo tập HĐ; lỗi thì dùng thư mục tạm cũ và chạy không tiếp tục được
+                var planKeys = downloadPlan.Select(p => p.FileId).ToList();
+                var doneKeys = new HashSet<string>(StringComparer.Ordinal);
+                // Dọn thư mục/job cũ và tìm job có thể chậm: chạy nền, ghi log sau khi xong (không gọi AppendLog từ luồng nền)
+                var workLogs = new List<string>();
+                string? workFolder = null;
+                DownloadJobStore? foundStore = null;
+                string? foundJobId = null;
+                await Task.Run(() =>
+                {
+                    try
+                    {
+                        DownloadWorkFolder.CleanupStale(DownloadWorkFolder.DefaultRoot, DateTime.UtcNow, TimeSpan.FromDays(30));
+                        string wf = DownloadWorkFolder.PathFor(DownloadWorkFolder.DefaultRoot, planKeys);
+                        Directory.CreateDirectory(wf);
+                        foreach (string leftover in Directory.GetDirectories(wf, "_temp_extract_*"))
+                            Directory.Delete(leftover, true); // thư mục giải nén dở của lượt trước không được lọt vào ZIP
+                        workFolder = wf;
+                    }
+                    catch (Exception exWork)
+                    {
+                        workLogs.Add($"⚠️ (Tải gốc) Không tạo được thư mục làm việc, chạy không tiếp tục được: {exWork.GetType().Name}");
+                        return;
+                    }
+
+                    try
+                    {
+                        var store = _jobStore; // dùng chung một instance với màn hình kho để không bị cache cũ
+                        store.DeleteOrphans(DownloadWorkFolder.DefaultRoot); // job của thư mục làm việc đã bị xóa
+                        string? found = store.FindLatest(workFolder!, planKeys);
+                        if (found != null)
+                        {
+                            store.RetryFailed(found);
+                            doneKeys.UnionWith(store.DoneKeys(found));
+                            workLogs.Add($"ℹ️ (Tải gốc) Tiếp tục lượt tải trước: {doneKeys.Count}/{planKeys.Count} HĐ đã xong.");
+                        }
+                        else
+                        {
+                            found = store.Create(workFolder!, planKeys);
+                        }
+                        foundStore = store;
+                        foundJobId = found;
+                    }
+                    catch (Exception exJob)
+                    {
+                        workLogs.Add($"⚠️ (Tải gốc) Không dùng được kho tiến độ tải, chạy không lưu tiến độ: {exJob.GetType().Name}");
+                        doneKeys.Clear();
+                    }
+                });
+                foreach (string line in workLogs) AppendLog(line);
+                if (workFolder != null)
+                {
+                    baseTempDirectory = workFolder;
+                    reportSubFolder = Path.Combine(baseTempDirectory, "0_BaoCaoExcel");
+                    zipSubFolder = Path.Combine(baseTempDirectory, "1_HoaDonGoc_ZIP");
+                    pdfSubFolder = Path.Combine(baseTempDirectory, "2_HoaDonPDF");
+                    xmlSubFolder = Path.Combine(baseTempDirectory, "3_HoaDonXML");
+                    isWorkFolder = true;
+                    jobStore = foundStore;
+                    jobId = foundJobId;
+                }
 
                 Directory.CreateDirectory(reportSubFolder);
                 Directory.CreateDirectory(zipSubFolder);
@@ -1173,6 +1393,26 @@ namespace E_Tax
                     modal.UpdateStatus($"Bước 4: Xử lý HĐ {invoiceIdentifier} ({i + 1}/{totalInvoices})...");
                     modal.Report(new BatchProgress("Xử lý HĐ", i, totalInvoices, failedChunks.Count));
                     string tempExtractPath = Path.Combine(baseTempDirectory, $"_temp_extract_{i}");
+                    string itemZipPath = Path.Combine(zipSubFolder, $"HD_{invoiceIdentifier}.zip");
+                    string itemXmlPath = Path.Combine(xmlSubFolder, $"HD_{invoiceIdentifier}.xml");
+
+                    // Đã xong ở lượt trước và đủ file (ZIP, PDF không rỗng): dùng lại, vẫn tính vào số đếm và file gộp
+                    if (doneKeys.Contains(invoiceIdentifier) &&
+                        DownloadWorkFolder.CanSkipInvoice(itemZipPath, outputPdfPath, itemXmlPath))
+                    {
+                        successCount++;
+                        convertSuccessCount++;
+                        producedPdfs.Add((planItem, outputPdfPath));
+                        finishedForStore.Add((invoice, outputPdfPath, itemXmlPath));
+                        continue;
+                    }
+
+                    // Tải lại: xóa file cũ của HĐ này để bản dở không lọt vào ZIP kết quả
+                    foreach (string stale in new[] { itemZipPath, outputPdfPath, itemXmlPath })
+                    {
+                        try { if (File.Exists(stale)) File.Delete(stale); }
+                        catch (Exception exStale) { AppendLog($"⚠️ Không xóa được file cũ {Path.GetFileName(stale)}: {exStale.Message}"); }
+                    }
 
                     try
                     {
@@ -1180,6 +1420,8 @@ namespace E_Tax
                         if (zipFilePath == null)
                         {
                             failedChunks.Add($"{invoiceIdentifier} (Lỗi tải ZIP)");
+                            JobMark(invoiceIdentifier, DownloadItemState.Failed, "Lỗi tải ZIP");
+                            itemsNotDone++;
                             continue;
                         }
                         successCount++;
@@ -1215,17 +1457,30 @@ namespace E_Tax
 
                         if (xmlFile != null)
                         {
-                            File.Copy(xmlFile, Path.Combine(xmlSubFolder, $"HD_{invoiceIdentifier}.xml"), true);
+                            File.Copy(xmlFile, itemXmlPath, true);
+                        }
+
+                        if (pdfProduced)
+                        {
+                            JobMark(invoiceIdentifier, DownloadItemState.Done, null);
+                            finishedForStore.Add((invoice, outputPdfPath, itemXmlPath));
+                        }
+                        else
+                        {
+                            JobMark(invoiceIdentifier, DownloadItemState.Failed, "Không tìm thấy PDF/HTML");
+                            itemsNotDone++;
                         }
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
                         throw; // Hủy: không tính là lỗi giải nén/convert của HĐ này
                     }
-                    catch (Exception exConvert)
+                    catch (Exception exConvert) when (exConvert is not ChromiumUnavailableException)
                     {
                         AppendLog($"❌ (Tải gốc) Lỗi Giải nén/Convert HĐ {invoiceIdentifier}: {exConvert.Message}");
                         failedChunks.Add($"{invoiceIdentifier} (Lỗi giải nén/convert)");
+                        JobMark(invoiceIdentifier, DownloadItemState.Failed, "Lỗi giải nén/convert: " + exConvert.GetType().Name); // không lưu exConvert.Message
+                        itemsNotDone++;
                         // PDF ghi dở không được nằm trong file kết quả
                         if (!pdfProduced)
                         {
@@ -1237,6 +1492,7 @@ namespace E_Tax
                     {
                         try { if (Directory.Exists(tempExtractPath)) Directory.Delete(tempExtractPath, true); }
                         catch (Exception exCleanTemp) { AppendLog($"⚠️ Lỗi dọn dẹp thư mục tạm {tempExtractPath}: {exCleanTemp.Message}"); }
+                        if (++sinceFlush >= 20) { sinceFlush = 0; JobFlush(); }
                     }
                 }
 
@@ -1244,6 +1500,8 @@ namespace E_Tax
                 modal.Report(new BatchProgress("Xử lý HĐ", totalInvoices, totalInvoices, failedChunks.Count));
 
                 // --- Gộp tất cả PDF thành một file (theo ký hiệu rồi số HĐ) ---
+                // Xóa bản gộp cũ (và file tạm của PdfMerger) trước; không xóa được thì ném lỗi IO, không đóng gói bản cũ
+                DownloadWorkFolder.RemoveMergedOutputs(pdfSubFolder, "_GopTatCa.pdf");
                 try
                 {
                     // Chỉ gộp PDF thực sự tạo được cho từng HĐ trong lượt này
@@ -1290,6 +1548,7 @@ namespace E_Tax
                     lblDownloadStatus.Text = "Bước 5: Đang nén kết quả...";
                     this.Enabled = false; // khóa lại trong lúc nén
                     await Task.Run(() => ZipFile.CreateFromDirectory(baseTempDirectory, finalZipPath));
+                    outputSaved = true;
                     this.Enabled = true; // bật lại trước hộp thoại kết quả để giữ kích hoạt
 
                     string duplicateNote = duplicateCount > 0 ? $" ({duplicateCount} dòng trùng ở cả Bán ra và Mua vào chỉ tải một lần)" : "";
@@ -1309,8 +1568,17 @@ namespace E_Tax
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Hủy: không hộp thoại chọn thư mục, không ZIP, không thông báo thành công; thư mục tạm dọn ở finally
+                cancelled = true;
                 AppendLog("ℹ️ (Tải gốc) Người dùng đã hủy.");
                 ShowStatusMessage("Đã hủy tải HĐ gốc.", Color.OrangeRed);
+            }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                // Dừng cả lô ở lỗi đầu tiên; HĐ chưa xử lý giữ trạng thái Pending, thư mục làm việc được giữ để chạy tiếp
+                itemsNotDone++;
+                AppendLog("❌ (Tải gốc) Không có Chromium, dừng lô: " + exChromium.GetType().Name);
+                CloseModal();
+                MessageBox.Show(this, exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (JsonException jsonEx)
             {
@@ -1333,11 +1601,23 @@ namespace E_Tax
             finally
             {
                 CloseModal();
+                JobFlush();
+                // Gắn file vào kho trước khi thư mục làm việc bị xóa; lỗi chỉ cảnh báo
+                var attachTask = AttachDownloadedFilesAsync(storeOwner, finishedForStore);
+                TrackStoreTask(attachTask);
+                await attachTask;
                 try
                 {
-                    if (Directory.Exists(baseTempDirectory))
+                    // Thư mục làm việc chỉ xóa khi không hủy, mọi HĐ đã xong và kết quả đã lưu; còn lại giữ để tiếp tục
+                    bool keepWork = isWorkFolder && (cancelled || !outputSaved || itemsNotDone > 0);
+                    if (!keepWork && Directory.Exists(baseTempDirectory))
                     {
                         Directory.Delete(baseTempDirectory, true);
+                        if (isWorkFolder && jobStore != null && jobId != null)
+                        {
+                            try { jobStore.Delete(jobId); }
+                            catch (Exception exJob) { AppendLog($"⚠️ (Tải gốc) Không xóa được job đã xong: {exJob.GetType().Name}"); }
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -1353,14 +1633,164 @@ namespace E_Tax
             }
         }
 
-        private void ShowStatusMessage(string message, Color color)
+        private void ShowStatusMessage(string message, Color color, int durationMs = 2000)
         {
             lblStatusMessage.Text = message;
             lblStatusMessage.ForeColor = color;
             lblStatusMessage.Visible = true;
 
             statusTimer.Stop();
+            statusTimer.Interval = durationMs;
             statusTimer.Start();
+        }
+
+        /// <summary>Lưu HĐ đã lấy được vào kho cục bộ ở luồng nền; lỗi chỉ ghi log và cảnh báo, không làm hỏng tìm kiếm/tải.</summary>
+        private async Task StoreInvoicesAsync(IReadOnlyCollection<SearchResult> invoices)
+        {
+            string? own = _currentTaxCode;
+            if (own == null || invoices.Count == 0) return;
+            var snapshot = invoices.ToList();
+            try
+            {
+                var result = await Task.Run(() => _store.Upsert(own, snapshot));
+                AppendLog($"ℹ️ Kho hóa đơn: thêm {result.Added}, cập nhật {result.Updated}, không đổi {result.Unchanged}.");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"⚠️ Không ghi được kho hóa đơn: {ex.GetType().Name}: {ex.Message}");
+                ShowStatusMessage("Cảnh báo: không lưu được vào kho hóa đơn cục bộ (xem log).", Color.OrangeRed, 6000);
+            }
+        }
+
+        /// <summary>Chép PDF/XML đã tải xong vào kho (luồng nền). Chỉ file có thật và không rỗng; lỗi từng HĐ không dừng các HĐ khác.</summary>
+        private async Task AttachDownloadedFilesAsync(string? own, IReadOnlyList<(SearchResult Invoice, string PdfPath, string XmlPath)> items)
+        {
+            if (own == null || items.Count == 0) return;
+            _attaching = true;
+            try
+            {
+                var (attached, failed) = await Task.Run(() =>
+                {
+                    int ok = 0, bad = 0;
+                    foreach (var (invoice, pdfPath, xmlPath) in items)
+                    {
+                        try
+                        {
+                            foreach (string file in InvoiceGridLogic.ExistingNonEmptyFiles(pdfPath, xmlPath))
+                                _store.AttachFile(own, invoice, file);
+                            ok++;
+                        }
+                        catch (Exception) { bad++; }
+                    }
+                    return (ok, bad);
+                });
+                AppendLog($"ℹ️ Kho hóa đơn: đã gắn file cho {attached} HĐ" + (failed > 0 ? $", lỗi {failed} HĐ." : "."));
+                if (failed > 0)
+                    ShowStatusMessage($"Cảnh báo: không gắn được file vào kho cho {failed} hóa đơn.", Color.OrangeRed, 6000);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"⚠️ Không gắn được file vào kho hóa đơn: {ex.GetType().Name}");
+                ShowStatusMessage("Cảnh báo: không gắn được file vào kho hóa đơn (xem log).", Color.OrangeRed, 6000);
+            }
+            finally
+            {
+                _attaching = false;
+            }
+        }
+
+        private void TrackStoreTask(Task task)
+        {
+            _storeTasks.RemoveAll(t => t.IsCompleted);
+            _storeTasks.Add(task);
+        }
+
+        private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            // Chỉ chặn người dùng tự đóng; tắt máy/Windows không bị chặn
+            if (_attaching && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                ShowStatusMessage("Đang lưu file vào kho hóa đơn, vui lòng đợi rồi đóng lại.", Color.OrangeRed, 5000);
+            }
+        }
+
+        private async void btnKhoHoaDon_Click(object? sender, EventArgs e)
+        {
+            // Mở được cả khi chưa đăng nhập (xem dữ liệu offline), lúc đó _currentTaxCode có thể null.
+            // Giữ cổng bận suốt lúc đợi ghi kho và lúc kho mở, nên không luồng nào khác bắt đầu được.
+            await RunFlowAsync("Kho hóa đơn", async () =>
+            {
+                const string waitMessage = "Đang ghi dữ liệu vào kho, vui lòng đợi...";
+                bool waited = false;
+                // Đợi đến khi không còn tác vụ ghi kho nào (snapshot mới mỗi vòng); tác vụ lỗi không chặn
+                while (true)
+                {
+                    var pending = _storeTasks.Where(t => !t.IsCompleted).ToList();
+                    if (pending.Count == 0) break;
+                    if (!waited)
+                    {
+                        waited = true;
+                        ShowStatusMessage(waitMessage, Color.OrangeRed, 60000);
+                    }
+                    foreach (var t in pending)
+                    {
+                        try { await t; }
+                        catch (Exception ex) { AppendLog($"⚠️ Tác vụ ghi kho lỗi, vẫn mở kho: {ex.GetType().Name}"); }
+                    }
+                }
+                // Chỉ xóa thông báo chờ nếu nó vẫn đang hiện (không che cảnh báo ghi kho vừa hiện)
+                if (waited && lblStatusMessage.Visible && lblStatusMessage.Text == waitMessage)
+                {
+                    lblStatusMessage.Visible = false;
+                    statusTimer.Stop();
+                }
+                if (IsDisposed) return;
+                using var form = new KhoHoaDonForm(_store, _jobStore, _notes, _currentTaxCode);
+                form.ShowDialog(this);
+            });
+        }
+
+        /// <summary>Mở màn hình kê khai từ dữ liệu chi tiết của lần tìm kiếm gần nhất; giữ cổng bận suốt lúc form mở.</summary>
+        private async void btnKeKhai_Click(object? sender, EventArgs e)
+        {
+            await RunFlowAsync("Kê khai", () =>
+            {
+                var items = _detailGridManager.LatestItems;
+                if (items.Count == 0)
+                {
+                    MessageBox.Show(this, "Chưa có dữ liệu chi tiết hóa đơn. Hãy tìm kiếm trước khi lập tờ khai.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return Task.CompletedTask;
+                }
+                var included = TaxableInvoices.IncludedHeaders(_latestResults).ToList();
+                int nonVnd = TaxListing.CountNonVnd(included, InvoiceType.Bought) + TaxListing.CountNonVnd(included, InvoiceType.Sold);
+                using var form = new KeKhaiForm(items, _lastSearchPeriod, _currentTaxCode,
+                    _detailGridManager.LastFailedCount + _lastFailedSearchPages, _detailGridManager.LastNoLineCount, nonVnd,
+                    _latestResults, _lastSearchScope, _lastSearchWarnings, _detailGridManager.LastNoLineSoldCount);
+                form.ShowDialog(this);
+                return Task.CompletedTask;
+            });
+        }
+
+        /// <summary>
+        /// Chạy một luồng dài qua cổng bận chung: vào cổng trước khi đụng giao diện; bị từ chối thì báo tên luồng đang chạy.
+        /// Exit luôn nằm trong finally. Chỉ gọi ở handler ngoài cùng (handler lồng nhau không được vào cổng lần nữa).
+        /// </summary>
+        private async Task RunFlowAsync(string flowName, Func<Task> body)
+        {
+            if (!_gate.TryEnter(flowName))
+            {
+                ShowStatusMessage($"Đang chạy \"{_gate.CurrentFlow}\". Vui lòng đợi xong rồi thử lại.", Color.OrangeRed, 4000);
+                return;
+            }
+            try
+            {
+                await body();
+            }
+            finally
+            {
+                _gate.Exit();
+            }
         }
 
         private void statusTimer_Tick(object sender, EventArgs e)
@@ -1387,7 +1817,9 @@ namespace E_Tax
             return invoice;
         }
 
-        private async void btnXemHD_Click(object sender, EventArgs e)
+        private async void btnXemHD_Click(object sender, EventArgs e) => await RunFlowAsync("Xem hóa đơn", () => btnXemHD_RunAsync(sender, e));
+
+        private async Task btnXemHD_RunAsync(object sender, EventArgs e)
         {
             if (dgvMain.CurrentRow == null)
             {
@@ -1458,7 +1890,9 @@ namespace E_Tax
             }
         }
 
-        private async void btnExportDS_Click(object sender, EventArgs e)
+        private async void btnExportDS_Click(object sender, EventArgs e) => await RunFlowAsync("Xuất danh sách", () => btnExportDS_RunAsync(sender, e));
+
+        private async Task btnExportDS_RunAsync(object sender, EventArgs e)
         {
             if (_visibleResults == null || !_visibleResults.Any())
             {
@@ -1506,7 +1940,9 @@ namespace E_Tax
         /// <summary>
         /// Xuất Excel chi tiết hàng hóa của một hóa đơn đang chọn.
         /// </summary>
-        private async void btnExportChiTiet_Click(object sender, EventArgs e)
+        private async void btnExportChiTiet_Click(object sender, EventArgs e) => await RunFlowAsync("Xuất chi tiết", () => btnExportChiTiet_RunAsync(sender, e));
+
+        private async Task btnExportChiTiet_RunAsync(object sender, EventArgs e)
         {
             if (dgvMain.SelectedRows.Count != 1 && dgvMain.CurrentRow == null)
             {
@@ -1573,7 +2009,9 @@ namespace E_Tax
         /// <summary>
         /// In (hoặc lưu PDF nếu không có máy in) các hóa đơn đang chọn.
         /// </summary>
-        private async void btnCnKoPdf_Click(object sender, EventArgs e)
+        private async void btnCnKoPdf_Click(object sender, EventArgs e) => await RunFlowAsync("In hóa đơn", () => btnCnKoPdf_RunAsync(sender, e));
+
+        private async Task btnCnKoPdf_RunAsync(object sender, EventArgs e)
         {
             List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
 
@@ -1645,6 +2083,12 @@ namespace E_Tax
                     SavePdfFilesToFolder(finalPdfPaths, failedInvoicesInfo);
                 }
             }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                AppendLog("❌ Không có Chromium (in HĐ): " + exChromium.GetType().Name);
+                MessageBox.Show(exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                downloadProgressBar.Value = downloadProgressBar.Maximum;
+            }
             catch (Exception ex)
             {
                 AppendLog($"❌ Lỗi nghiêm trọng trong btnCnKoPdf_Click: {ex}");
@@ -1706,7 +2150,9 @@ namespace E_Tax
         /// <summary>
         /// Gộp các hóa đơn đang chọn thành một file PDF duy nhất.
         /// </summary>
-        private async void btnGopPdf_Click(object sender, EventArgs e)
+        private async void btnGopPdf_Click(object sender, EventArgs e) => await RunFlowAsync("Gộp PDF", () => btnGopPdf_RunAsync(sender, e));
+
+        private async Task btnGopPdf_RunAsync(object sender, EventArgs e)
         {
             List<SearchResult> validInvoices = GetSelectedInvoicesForPdf();
             if (!validInvoices.Any())
@@ -1778,6 +2224,11 @@ namespace E_Tax
                                 problems.Count > 0 ? "Gộp PDF (Có lỗi)" : "Gộp PDF",
                                 MessageBoxButtons.OK,
                                 problems.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+            catch (ChromiumUnavailableException exChromium)
+            {
+                AppendLog("❌ Không có Chromium (gộp PDF): " + exChromium.GetType().Name);
+                MessageBox.Show(exChromium.Message, "Không chuyển được PDF", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
@@ -1860,7 +2311,7 @@ namespace E_Tax
                             await converter.ConvertAsync(htmlFile, outputPdfPath);
                             paths.Add(outputPdfPath);
                         }
-                        catch (Exception exConvert)
+                        catch (Exception exConvert) when (exConvert is not ChromiumUnavailableException)
                         {
                             AppendLog($"  -> Lỗi convert HTML->PDF HĐ {invoiceIdentifier}: {exConvert}");
                             failed.Add($"{invoiceIdentifier} (Lỗi convert HTML sang PDF)");
@@ -1871,7 +2322,7 @@ namespace E_Tax
                         failed.Add($"{invoiceIdentifier} (Không tìm thấy file PDF/HTML)");
                     }
                 }
-                catch (Exception exInvoice)
+                catch (Exception exInvoice) when (exInvoice is not ChromiumUnavailableException)
                 {
                     AppendLog($"❌ Lỗi xử lý HĐ {invoiceIdentifier}: {exInvoice}");
                     failed.Add($"{invoiceIdentifier} (Lỗi chung: {exInvoice.Message})");
@@ -1984,6 +2435,12 @@ namespace E_Tax
         #region Tra cứu hóa đơn
 
         private async void dgvMain_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex != dgvMain.Columns["colDgvTraCuu"].Index) return;
+            await RunFlowAsync("Tra cứu hóa đơn", () => dgvMain_CellContentClick_RunAsync(sender, e));
+        }
+
+        private async Task dgvMain_CellContentClick_RunAsync(object sender, DataGridViewCellEventArgs e)
         {
             // Chỉ xử lý click vào cột nút "Tra cứu"
             if (e.RowIndex < 0 || e.ColumnIndex != dgvMain.Columns["colDgvTraCuu"].Index) return;
@@ -2236,29 +2693,36 @@ namespace E_Tax
                 e.Value = InvoiceDate.ToDisplay(ngayLap);
                 e.FormattingApplied = true;
             }
-            var risk = RiskFor(dgvMain.Rows[e.RowIndex].DataBoundItem as SearchResult, _riskResults);
-            if (risk == null) return;
+            if (dgvMain.Rows[e.RowIndex].DataBoundItem is not SearchResult item) return;
 
-            if (e.ColumnIndex == dgvMain.Columns["colDgvRuiRo"]?.Index)
+            // Cột "Phân loại" chỉ để hiển thị (không bind, nằm cuối lưới)
+            if (e.ColumnIndex == dgvMain.Columns["colDgvPhanLoai"]?.Index)
+            {
+                InvoiceLink? link = null;
+                if (!string.IsNullOrEmpty(item.Id)) _invoiceLinks.TryGetValue(item.Id, out link);
+                e.Value = InvoiceGridLogic.ClassificationText(item, link);
+                e.FormattingApplied = true;
+            }
+
+            var risk = RiskFor(item, _riskResults);
+            if (risk != null && e.ColumnIndex == dgvMain.Columns["colDgvRuiRo"]?.Index)
             {
                 e.Value = RiskCheckService.Label(risk.Status);
                 e.FormattingApplied = true;
             }
-            if (risk.Status == RiskStatus.Risky) e.CellStyle.BackColor = RiskyRowColor;
-            else if (risk.Status == RiskStatus.Unknown) e.CellStyle.BackColor = UnknownRowColor;
+
+            // Thứ tự ưu tiên: rủi ro, chưa kiểm tra được, rồi màu phân loại. Chỉ đặt BackColor nên dòng đang chọn vẫn dùng SelectionBackColor.
+            var color = InvoiceGridLogic.RowColor(risk?.Status, InvoiceClassifier.RelationOf(item.Trang_thai_hoa_don), RiskyRowColor, UnknownRowColor);
+            if (color.HasValue && e.CellStyle != null) e.CellStyle.BackColor = color.Value;
         }
 
         /// <summary>
         /// Kiểm tra hàng loạt MST người bán của các HĐ "Mua vào" đang hiển thị. Hủy thì bỏ toàn bộ kết quả lần này.
         /// </summary>
-        private async void btnKiemTraNCC_Click(object? sender, EventArgs e)
-        {
-            if (_riskService == null)
-            {
-                MessageBox.Show(this, RiskNotConfiguredText, "Chưa cấu hình", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+        private async void btnKiemTraNCC_Click(object? sender, EventArgs e) => await RunFlowAsync("Kiểm tra NCC", () => btnKiemTraNCC_RunAsync(sender, e));
 
+        private async Task btnKiemTraNCC_RunAsync(object? sender, EventArgs e)
+        {
             var codes = _visibleResults
                 .Where(r => r.Loai_hoa_don == BoughtLabel)
                 .Select(r => (r.Ma_so_thue ?? "").Trim())
@@ -2268,6 +2732,12 @@ namespace E_Tax
             if (codes.Count == 0)
             {
                 MessageBox.Show(this, "Không có hóa đơn mua vào nào đang hiển thị để kiểm tra nhà cung cấp.", "Chưa có dữ liệu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_riskService == null)
+            {
+                CheckSuppliersWithLocalList(codes);
                 return;
             }
 
@@ -2330,7 +2800,65 @@ namespace E_Tax
             MessageBox.Show(this, summary, "Kết quả kiểm tra NCC", MessageBoxButtons.OK, unknown > 0 || risky > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }
 
-        private async void btnKtraDNMuaLe_Click(object sender, EventArgs e)
+        private LocalRiskList? _localRiskList;
+
+        /// <summary>
+        /// Không có token: đối chiếu với danh sách rủi ro nhập từ file. Chỉ có "Rủi ro" hoặc "Không kiểm tra được",
+        /// không có trong danh sách KHÔNG có nghĩa là an toàn. Danh sách rỗng thì mời nhập file.
+        /// </summary>
+        private void CheckSuppliersWithLocalList(List<string> codes)
+        {
+            _localRiskList ??= new LocalRiskList(LocalRiskList.DefaultPath, AppendLog);
+            if (_localRiskList.Count == 0)
+            {
+                var ask = MessageBox.Show(this,
+                    "Chưa cấu hình kiểm tra trực tuyến và chưa có danh sách nhà cung cấp rủi ro cục bộ.\n\nBạn có muốn nhập danh sách từ file CSV/XLSX (có cột MST) ngay bây giờ không?",
+                    "Chưa có danh sách rủi ro", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ask != DialogResult.Yes || !ImportLocalRiskList()) return;
+            }
+
+            var merged = new Dictionary<string, RiskResult>(_riskResults);
+            foreach (var code in codes) merged[code] = _localRiskList.Check(code);
+            _riskResults = merged;
+            dgvMain.Invalidate();
+
+            int risky = codes.Count(c => merged[c].Status == RiskStatus.Risky);
+            int unknown = codes.Count - risky;
+            string summary = $"Đối chiếu {codes.Count} nhà cung cấp với danh sách cục bộ ({_localRiskList.Count} MST):\n - {RiskCheckService.Label(RiskStatus.Risky)}: {risky}\n - {RiskCheckService.Label(RiskStatus.Unknown)}: {unknown}" +
+                "\n\nNhà cung cấp không có trong danh sách KHÔNG có nghĩa là an toàn.\n\nBạn có muốn nhập lại danh sách từ file khác (thay thế danh sách hiện tại) không?";
+            var again = MessageBox.Show(this, summary, "Kết quả đối chiếu NCC", MessageBoxButtons.YesNo,
+                risky > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            if (again == DialogResult.Yes && ImportLocalRiskList())
+                CheckSuppliersWithLocalList(codes);
+        }
+
+        /// <summary>Chọn file và nhập danh sách; trả true nếu nhập thành công.</summary>
+        private bool ImportLocalRiskList()
+        {
+            using var dlg = new OpenFileDialog
+            {
+                Title = "Chọn file danh sách nhà cung cấp rủi ro",
+                Filter = "Danh sách MST (*.csv;*.xlsx)|*.csv;*.xlsx"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return false;
+            try
+            {
+                int n = _localRiskList!.Import(dlg.FileName);
+                AppendLog($"ℹ️ Đã nhập {n} MST vào danh sách NCC rủi ro cục bộ.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"❌ Nhập danh sách NCC rủi ro thất bại: {ex.GetType().Name}");
+                MessageBox.Show(this, ex is InvalidDataException ? ex.Message : "Không đọc hoặc ghi được file. Danh sách hiện tại được giữ nguyên.",
+                    "Không nhập được", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+        }
+
+        private async void btnKtraDNMuaLe_Click(object sender, EventArgs e) => await RunFlowAsync("Kiểm tra doanh nghiệp", () => btnKtraDNMuaLe_RunAsync(sender, e));
+
+        private async Task btnKtraDNMuaLe_RunAsync(object sender, EventArgs e)
         {
             string taxCode = txtKtraMaDoanhNghiep.Text.Trim();
             if (string.IsNullOrEmpty(taxCode))

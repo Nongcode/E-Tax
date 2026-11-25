@@ -29,7 +29,10 @@ namespace E_Tax
         private DataGridViewTextBoxColumn colDgvSTT;
         private DataGridViewTextBoxColumn colDgvLoaiHD;
         private DataGridViewTextBoxColumn colDgvRuiRo;
+        private DataGridViewTextBoxColumn colDgvPhanLoai;
+        private Button btnKhoHoaDon;
         private Button btnKiemTraNCC;
+        private Button btnKeKhai;
         private DataGridViewTextBoxColumn colDgvMST;
         private DataGridViewTextBoxColumn colDgvKHMauSo;
         private DataGridViewTextBoxColumn colDgvKHHoaDon;
@@ -131,7 +134,10 @@ namespace E_Tax
             pictureBox2 = new PictureBox();
             colDgvLoaiHD = new DataGridViewTextBoxColumn();
             colDgvRuiRo = new DataGridViewTextBoxColumn();
+            colDgvPhanLoai = new DataGridViewTextBoxColumn();
+            btnKhoHoaDon = new Button();
             btnKiemTraNCC = new Button();
+            btnKeKhai = new Button();
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
@@ -426,6 +432,7 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeMua);
             mainSplitContainer.Panel1.Controls.Add(btnExportBangKeBan);
             mainSplitContainer.Panel1.Controls.Add(btnKiemTraNCC);
+            mainSplitContainer.Panel1.Controls.Add(btnKeKhai);
             mainSplitContainer.Panel1.Controls.Add(tabControlMain);
             mainSplitContainer.Panel1.Controls.Add(gbNguoiBan);
             mainSplitContainer.Panel1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -709,7 +716,7 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien, colDgvRuiRo });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien, colDgvRuiRo, colDgvPhanLoai });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
@@ -1098,6 +1105,26 @@ namespace E_Tax
             colDgvRuiRo.SortMode = DataGridViewColumnSortMode.NotSortable;
             colDgvRuiRo.Width = 130;
             //
+            // colDgvPhanLoai (cột không bind, đặt cuối lưới: nhãn tính trong CellFormatting)
+            //
+            colDgvPhanLoai.HeaderText = "Phân loại";
+            colDgvPhanLoai.Name = "colDgvPhanLoai";
+            colDgvPhanLoai.ReadOnly = true;
+            colDgvPhanLoai.SortMode = DataGridViewColumnSortMode.NotSortable;
+            colDgvPhanLoai.Width = 170;
+            //
+            // btnKhoHoaDon
+            //
+            btnKhoHoaDon.BackColor = SystemColors.GradientActiveCaption;
+            btnKhoHoaDon.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKhoHoaDon.Location = new Point(860, 1);
+            btnKhoHoaDon.Name = "btnKhoHoaDon";
+            btnKhoHoaDon.Size = new Size(115, 24);
+            btnKhoHoaDon.TabIndex = 43;
+            btnKhoHoaDon.Text = "Kho hóa đơn";
+            btnKhoHoaDon.UseVisualStyleBackColor = false;
+            btnKhoHoaDon.Click += btnKhoHoaDon_Click;
+            //
             // btnKiemTraNCC
             //
             btnKiemTraNCC.BackColor = SystemColors.GradientActiveCaption;
@@ -1109,6 +1136,18 @@ namespace E_Tax
             btnKiemTraNCC.Text = "Kiểm tra NCC";
             btnKiemTraNCC.UseVisualStyleBackColor = false;
             btnKiemTraNCC.Click += btnKiemTraNCC_Click;
+            //
+            // btnKeKhai
+            //
+            btnKeKhai.BackColor = SystemColors.GradientActiveCaption;
+            btnKeKhai.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKeKhai.Location = new Point(448, 220);
+            btnKeKhai.Name = "btnKeKhai";
+            btnKeKhai.Size = new Size(140, 30);
+            btnKeKhai.TabIndex = 44;
+            btnKeKhai.Text = "Lập tờ khai / Kế toán";
+            btnKeKhai.UseVisualStyleBackColor = false;
+            btnKeKhai.Click += btnKeKhai_Click;
             // 
             // lblVersion
             // 
@@ -1124,9 +1163,10 @@ namespace E_Tax
             // lblStatusMessage
             // 
             lblStatusMessage.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblStatusMessage.Location = new Point(54, 359);
+            lblStatusMessage.AutoEllipsis = true;
+            lblStatusMessage.Location = new Point(300, 5);
             lblStatusMessage.Name = "lblStatusMessage";
-            lblStatusMessage.Size = new Size(350, 21);
+            lblStatusMessage.Size = new Size(555, 21);
             lblStatusMessage.TabIndex = 30;
             lblStatusMessage.Text = "Status message here";
             lblStatusMessage.TextAlign = ContentAlignment.MiddleCenter;
@@ -1141,6 +1181,8 @@ namespace E_Tax
             // 
             BackColor = Color.White;
             ClientSize = new Size(984, 686);
+            Controls.Add(btnKhoHoaDon);
+            Controls.Add(lblStatusMessage);
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);

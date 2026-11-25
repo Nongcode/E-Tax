@@ -114,11 +114,8 @@ namespace E_Tax.Tests
         }
 
         [Fact]
-        public void Build_NullStatusIsKept()
-        {
-            var row = TaxListing.Build(new[] { Line("A", 1, "10%", 1, 0, tt: null) }, InvoiceType.Bought)[0].Rows[0];
-            Assert.Null(row.TrangThai);
-        }
+        public void Build_NullStatusIsNotCounted() =>
+            Assert.Empty(TaxListing.Build(new[] { Line("A", 1, "10%", 1, 0, tt: null) }, InvoiceType.Bought));
 
         [Theory]
         [InlineData("10%")]
@@ -181,10 +178,10 @@ namespace E_Tax.Tests
             Assert.Empty(TaxListing.ExportWarnings(GroupsOf((1, false), (1, false)), 0, 0));
 
         [Fact]
-        public void ExportWarnings_StatusOtherThanOne_CountsNullStatus()
+        public void ExportWarnings_StatusOtherThanOne_CountsOnlyIncludedInvoices()
         {
             var w = Assert.Single(TaxListing.ExportWarnings(GroupsOf((1, false), (3, false), (null, false)), 0, 0));
-            Assert.Contains("2 dòng", w);
+            Assert.Contains("1 hóa đơn", w);
             Assert.Contains("trạng thái khác 1", w);
             Assert.Contains("đã bao gồm", w);
         }

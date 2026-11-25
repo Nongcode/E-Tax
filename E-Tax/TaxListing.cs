@@ -6,7 +6,11 @@ namespace E_Tax
 {
     /// <summary>Một dòng bảng kê: một hóa đơn với một thuế suất.</summary>
     internal sealed record TaxListingRow(string KyHieu, int? SoHD, string NgayHD, string TenDoiTac, string MstDoiTac,
-        string ThueSuat, decimal DoanhSo, decimal TienThue, int? TrangThai, bool ThieuSoTien);
+        string ThueSuat, decimal DoanhSo, decimal TienThue, int? TrangThai, bool ThieuSoTien, string InvoiceKey = "")
+    {
+        /// <summary>Khóa đếm hóa đơn: một hóa đơn nhiều thuế suất là nhiều dòng nhưng chỉ một hóa đơn.</summary>
+        public string CountKey => InvoiceKey.Length > 0 ? InvoiceKey : $"{MstDoiTac}|{KyHieu}|{SoHD}";
+    }
 
     /// <summary>Nhóm các dòng bảng kê cùng thuế suất, kèm tổng.</summary>
     internal sealed record TaxListingGroup(string ThueSuat, IReadOnlyList<TaxListingRow> Rows, decimal TongDoanhSo, decimal TongThue);
@@ -17,6 +21,9 @@ namespace E_Tax
         public const string UnknownRate = "Không rõ";
         private const string Bought = "Mua vào";
         private const string Sold = "Bán ra";
+
+        /// <summary>Nhãn chiều hóa đơn dùng trong dữ liệu.</summary>
+        public static string DirectionLabel(InvoiceType type) => type == InvoiceType.Bought ? Bought : Sold;
 
         /// <summary>
         /// Chuẩn hóa thuế suất: có dấu % thì lấy giá trị là phần trăm; số trần 0 &lt; x &lt; 1 là tỷ lệ (x*100%),
@@ -66,15 +73,14 @@ namespace E_Tax
         };
 
         /// <summary>
-        /// Gộp theo (InvoiceKey, thuế suất) rồi nhóm theo thuế suất. Số tiền null tính là 0 khi cộng
-        /// nhưng dòng đó được đánh dấu ThieuSoTien.
+        /// Chỉ lấy HĐ được tính thuế (TaxableInvoices), gộp theo (InvoiceKey, thuế suất) rồi nhóm theo thuế suất.
+        /// Số tiền null tính là 0 khi cộng nhưng dòng đó được đánh dấu ThieuSoTien.
         /// </summary>
         public static IReadOnlyList<TaxListingGroup> Build(IEnumerable<InvoiceDetailItem> items, InvoiceType type)
         {
             string loai = type == InvoiceType.Bought ? Bought : Sold;
 
-            var rows = items
-                .Where(i => i != null && i.LoaiHoaDon == loai)
+            var rows = TaxableInvoices.Select(items, null, loai).Items
                 .GroupBy(i => (Key: i.InvoiceKey ?? "", Rate: NormalizeRate(i.ThueSuat)))
                 .Select(g => BuildRow(g.ToList(), g.Key.Rate, type))
                 .ToList();
@@ -104,18 +110,23 @@ namespace E_Tax
             string ten = (type == InvoiceType.Bought ? first.TenNguoiBan : first.TenNguoiMua) ?? "";
             string mst = (type == InvoiceType.Bought ? first.MSTNguoiBan : first.MSTNguoiMua) ?? "";
             var row = new TaxListingRow(first.KyHieuHD ?? "", first.SoHD, first.NgayHD ?? "", ten, mst, rate,
-                lines.Sum(l => l.DoanhSoChuaThue ?? 0m), lines.Sum(l => l.TienThueGTGT ?? 0m), first.TrangThaiHD, thieu);
+                lines.Sum(l => l.DoanhSoChuaThue ?? 0m), lines.Sum(l => l.TienThueGTGT ?? 0m), first.TrangThaiHD, thieu,
+                string.IsNullOrEmpty(first.InvoiceKey) ? "" : $"{first.LoaiHoaDon}|{first.InvoiceKey}");
             return (row, InvoiceDate.ToVietnamDate(first.NgayHD));
         }
 
-        /// <summary>Ghi chú ghi vào file bảng kê: dòng có trạng thái khác 1 (null tính là khác 1) và dòng thiếu số tiền.</summary>
+        /// <summary>Số hóa đơn thay thế/điều chỉnh/bị điều chỉnh thực sự có trong các dòng (đếm hóa đơn, không đếm dòng).</summary>
+        public static int CountAdjustmentInvoices(IEnumerable<TaxListingRow> rows) =>
+            rows.Where(r => TaxableInvoices.IsAdjustment(r.TrangThai)).Select(r => r.CountKey).Distinct().Count();
+
+        /// <summary>Ghi chú ghi vào file bảng kê: hóa đơn thay thế/điều chỉnh đã tính vào tổng và dòng thiếu số tiền.</summary>
         public static IReadOnlyList<string> ExportNotes(IReadOnlyList<TaxListingGroup> groups)
         {
             var rows = groups.SelectMany(g => g.Rows).ToList();
             var notes = new List<string>();
-            int otherStatus = rows.Count(r => r.TrangThai != 1);
-            if (otherStatus > 0)
-                notes.Add($"Có {otherStatus} dòng thuộc hóa đơn có trạng thái khác 1 hoặc không rõ (tô vàng; nếu đồng thời thiếu số tiền thì tô đỏ). Các tổng trong bảng kê đã bao gồm những dòng này.");
+            int adjustments = CountAdjustmentInvoices(rows);
+            if (adjustments > 0)
+                notes.Add(TaxableInvoices.AdjustmentWarning(adjustments));
             int missing = rows.Count(r => r.ThieuSoTien);
             if (missing > 0)
                 notes.Add($"Có {missing} dòng thiếu số tiền (tô đỏ). Số tiền thiếu được tính là 0 trong các tổng nên tổng có thể sai lệch.");
