@@ -64,6 +64,64 @@ namespace E_Tax
         }
 
         /// <summary>
+        /// Trang chi tiết hợp lệ khi có mảng "hdhhdvu" toàn phần tử object, hoặc có "shdon" khớp số HĐ (HĐ không có dòng hàng).
+        /// "shdon" có mà không khớp, "hdhhdvu" sai kiểu, hoặc không có cả hai đều là trang lỗi (thân lỗi kèm HTTP 200).
+        /// </summary>
+        public static bool IsValidDetailPage(JsonElement root, int? expectedNumber)
+        {
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            var data = GetDataElement(root);
+
+            var number = FindValue(data, "shdon");
+            if (number.HasValue && !NumberMatches(number.Value, expectedNumber)) return false;
+
+            var products = FindProductArray(data);
+            if (products.HasValue)
+            {
+                foreach (var product in products.Value.EnumerateArray())
+                    if (product.ValueKind != JsonValueKind.Object) return false;
+                return true;
+            }
+            return number.HasValue && !FindValue(data, "hdhhdvu").HasValue;
+        }
+
+        // Giá trị khác null đầu tiên theo tên, ưu tiên cấp ngoài; không đi vào các dòng hàng.
+        private static JsonElement? FindValue(JsonElement element, string name)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                if (element.TryGetProperty(name, out var value) && value.ValueKind != JsonValueKind.Null)
+                    return value;
+                foreach (var prop in element.EnumerateObject())
+                {
+                    if (prop.NameEquals("hdhhdvu")) continue;
+                    var found = FindValue(prop.Value, name);
+                    if (found.HasValue) return found;
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var found = FindValue(item, name);
+                    if (found.HasValue) return found;
+                }
+            }
+            return null;
+        }
+
+        private static bool NumberMatches(JsonElement value, int? expected)
+        {
+            if (!expected.HasValue) return false;
+            if (value.ValueKind == JsonValueKind.Number)
+                return value.TryGetDecimal(out decimal number) && number == expected.Value;
+            if (value.ValueKind == JsonValueKind.String)
+                return int.TryParse((value.GetString() ?? "").Trim(), System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out int parsed) && parsed == expected.Value;
+            return false;
+        }
+
+        /// <summary>
         /// Mỗi sản phẩm thành một dòng: thông tin chung của hóa đơn (các trường đơn) ghép với các trường của sản phẩm.
         /// Trả về danh sách rỗng nếu hóa đơn không có hàng hóa.
         /// </summary>

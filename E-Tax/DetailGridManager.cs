@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -52,6 +53,20 @@ namespace E_Tax
         public string HanSuDung { get; set; }
         [DisplayName("Ghi chú SP")]
         public string GhiChuSanPham { get; set; }
+
+        /// <summary>Định danh hóa đơn: Id của cổng thuế, hoặc MST người bán + ký hiệu + số khi thiếu Id.</summary>
+        [Browsable(false)]
+        public string? InvoiceKey { get; set; }
+        /// <summary>"Mua vào" hoặc "Bán ra" (theo kết quả tìm kiếm).</summary>
+        [Browsable(false)]
+        public string? LoaiHoaDon { get; set; }
+        [Browsable(false)]
+        public string? TenNguoiMua { get; set; }
+        [Browsable(false)]
+        public string? MSTNguoiMua { get; set; }
+        /// <summary>Trạng thái hóa đơn từ kết quả tìm kiếm (1 = hợp lệ).</summary>
+        [Browsable(false)]
+        public int? TrangThaiHD { get; set; }
     }
 
     /// <summary>
@@ -67,6 +82,32 @@ namespace E_Tax
         private readonly ProgressBar _progressBar;
         private readonly Label _statusLabel;
         private readonly Action<string> _logAction;
+
+        private List<InvoiceDetailItem> _latestItems = new List<InvoiceDetailItem>();
+
+        /// <summary>
+        /// Các dòng hàng của lần tải gần nhất (cả Mua vào và Bán ra). Chỉ chứa HĐ lấy chi tiết đầy đủ;
+        /// được xóa khi bắt đầu tải, khi không có HĐ và khi hủy.
+        /// </summary>
+        public IReadOnlyList<InvoiceDetailItem> LatestItems => _latestItems;
+
+        /// <summary>Số HĐ không có chi tiết đầy đủ trong lần tải gần nhất (lỗi chi tiết/JSON, hoặc thiếu khóa tra cứu).</summary>
+        public int LastFailedCount { get; private set; }
+
+        /// <summary>Số HĐ lấy chi tiết thành công nhưng không có dòng hàng nào, nên không có trong bảng kê.</summary>
+        public int LastNoLineCount { get; private set; }
+
+        /// <summary>Số HĐ Bán ra không có dòng hàng trong lần nạp gần nhất (phần của LastNoLineCount).</summary>
+        public int LastNoLineSoldCount { get; private set; }
+
+        /// <summary>Xóa dữ liệu lần tải trước để bảng kê không xuất số liệu cũ.</summary>
+        public void ClearLatest()
+        {
+            _latestItems = new List<InvoiceDetailItem>();
+            LastFailedCount = 0;
+            LastNoLineCount = 0;
+            LastNoLineSoldCount = 0;
+        }
 
         internal DetailGridManager(InvoiceDetailService detailService, DataGridView dgvDetails, DataGridView dgvMua,
             DataGridView dgvBan, DataGridView dgvVatNop, ProgressBar progressBar, Label statusLabel,
@@ -138,12 +179,13 @@ namespace E_Tax
         /// Dòng hàng được dựng theo đúng thứ tự danh sách để STT ổn định. Phải được gọi từ UI thread.
         /// </summary>
         /// <returns>Số hóa đơn không lấy được chi tiết.</returns>
-        public async Task<int> PopulateDetailGridAsync(List<SearchResult> invoiceHeaders)
+        public async Task<int> PopulateDetailGridAsync(List<SearchResult> invoiceHeaders, CancellationToken ct = default, Action<int>? onProgress = null)
         {
             _dgvDetails.DataSource = null;
             _dgvMua.DataSource = null;
             _dgvBan.DataSource = null;
             _dgvVatNop.DataSource = null;
+            ClearLatest();
             _statusLabel.Text = "Đang chuẩn bị tải chi tiết...";
             _statusLabel.Visible = true;
             _progressBar.Style = ProgressBarStyle.Blocks;
@@ -161,17 +203,35 @@ namespace E_Tax
 
             int total = invoiceHeaders.Count;
             _logAction($"⚙️ (Detail Mgr) Bắt đầu lấy chi tiết cho {total} hóa đơn (tối đa {InvoiceDetailService.MaxConcurrency} request đồng thời)...");
-            var allPages = await _detailService.PrefetchAsync(invoiceHeaders, done =>
+            IReadOnlyList<IReadOnlyList<string>?> allPages;
+            try
             {
-                _progressBar.Value = Math.Min(done, _progressBar.Maximum);
-                _statusLabel.Text = $"Đang tải chi tiết HĐ ({done}/{total})...";
-            });
+                allPages = await _detailService.PrefetchAsync(invoiceHeaders, done =>
+                {
+                    // Callback có thể đến trễ sau khi hủy/hoàn tất: bỏ qua để không ghi đè trạng thái
+                    if (ct.IsCancellationRequested) return;
+                    _progressBar.Value = Math.Min(done, _progressBar.Maximum);
+                    _statusLabel.Text = $"Đang tải chi tiết HĐ ({done}/{total})...";
+                    onProgress?.Invoke(done);
+                }, ct);
+                // PrefetchAsync trả null cho HĐ bị hủy: không dựng/gán dữ liệu thiếu
+                ct.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                _statusLabel.Visible = false;
+                _progressBar.Visible = false;
+                throw;
+            }
 
             var allDetailItems = new List<InvoiceDetailItem>();
             var boughtDetailItems = new List<InvoiceDetailItem>();
             var soldDetailItems = new List<InvoiceDetailItem>();
             int globalStt = 1;
             int failedCount = 0;
+            int skippedCount = 0;
+            int noLineCount = 0;
+            int noLineSoldCount = 0;
 
             for (int i = 0; i < total; i++)
             {
@@ -179,6 +239,7 @@ namespace E_Tax
                 if (invoiceHeader == null || !invoiceHeader.HasLookupKeys())
                 {
                     _logAction($"⚠️ (Detail Mgr) Bỏ qua HĐ {invoiceHeader?.Id} do thiếu thông tin.");
+                    skippedCount++;
                     continue;
                 }
 
@@ -192,6 +253,9 @@ namespace E_Tax
 
                 try
                 {
+                    // Dựng riêng từng HĐ, chỉ ghi vào danh sách chung khi mọi trang đều đọc được:
+                    // HĐ lỗi giữa chừng không được để lại dữ liệu một phần.
+                    var invoiceItems = new List<InvoiceDetailItem>();
                     foreach (string jsonDetail in pages)
                     {
                         using JsonDocument doc = JsonDocument.Parse(jsonDetail);
@@ -206,16 +270,26 @@ namespace E_Tax
 
                         foreach (var product in productArray.Value.EnumerateArray())
                         {
-                            if (product.ValueKind != JsonValueKind.Object) continue;
-
-                            var detailItem = CreateDetailItem(root, product, invoiceHeader);
-                            detailItem.STT = globalStt++;
-                            allDetailItems.Add(detailItem);
-                            if (invoiceHeader.Loai_hoa_don == "Mua vào")
-                                boughtDetailItems.Add(detailItem);
-                            else
-                                soldDetailItems.Add(detailItem);
+                            // Dòng hàng sai kiểu: cả HĐ bị tính là lỗi, không ghi một phần
+                            if (product.ValueKind != JsonValueKind.Object)
+                                throw new JsonException("Phần tử hdhhdvu không phải object.");
+                            invoiceItems.Add(CreateDetailItem(root, product, invoiceHeader));
                         }
+                    }
+
+                    if (invoiceItems.Count == 0)
+                    {
+                        noLineCount++;
+                        if (invoiceHeader.Loai_hoa_don == "Bán ra") noLineSoldCount++;
+                    }
+                    foreach (var detailItem in invoiceItems)
+                    {
+                        detailItem.STT = globalStt++;
+                        allDetailItems.Add(detailItem);
+                        if (invoiceHeader.Loai_hoa_don == "Mua vào")
+                            boughtDetailItems.Add(detailItem);
+                        else
+                            soldDetailItems.Add(detailItem);
                     }
                 }
                 catch (JsonException jsonEx)
@@ -229,6 +303,11 @@ namespace E_Tax
                     failedCount++;
                 }
             }
+
+            _latestItems = allDetailItems;
+            LastFailedCount = failedCount + skippedCount;
+            LastNoLineCount = noLineCount;
+            LastNoLineSoldCount = noLineSoldCount;
 
             try
             {
@@ -261,13 +340,23 @@ namespace E_Tax
 
         private InvoiceDetailItem CreateDetailItem(JsonElement invoice, JsonElement product, SearchResult header)
         {
+            string kyHieu = GetString(invoice, "khhdon") ?? header.Ky_hieu_hoa_don;
+            int? soHd = GetInt(invoice, "shdon") ?? header.So_hoa_don;
+            string mstNb = GetString(invoice, "nbmst") ?? header.Ma_so_thue;
+            string invoiceKey = InvoiceSearchResults.KeyOf(header);
+            string ngayLap = GetString(invoice, "tdlap");
             return new InvoiceDetailItem
             {
-                KyHieuHD = GetString(invoice, "khhdon") ?? header.Ky_hieu_hoa_don,
-                SoHD = GetInt(invoice, "shdon") ?? header.So_hoa_don,
-                NgayHD = FormatNgayLap(GetString(invoice, "tdlap")) ?? header.Ngay_lap,
+                InvoiceKey = invoiceKey,
+                LoaiHoaDon = header.Loai_hoa_don,
+                TenNguoiMua = GetString(invoice, "nmten"),
+                MSTNguoiMua = GetString(invoice, "nmmst"),
+                TrangThaiHD = header.Trang_thai_hoa_don,
+                KyHieuHD = kyHieu,
+                SoHD = soHd,
+                NgayHD = InvoiceDate.ToDisplay(string.IsNullOrWhiteSpace(ngayLap) ? header.Ngay_lap : ngayLap)!,
                 TenNguoiBan = GetString(invoice, "nbten") ?? header.Thong_tin_hoa_don,
-                MSTNguoiBan = GetString(invoice, "nbmst") ?? header.Ma_so_thue,
+                MSTNguoiBan = mstNb,
                 TongTienThanhToan_HD = GetDecimal(invoice, "tgtttbso") ?? header.Tong_tien_thanh_toan,
                 TenSanPham = GetString(product, "ten"),
                 DonViTinh = GetString(product, "dvtinh"),
@@ -311,15 +400,6 @@ namespace E_Tax
                 if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out int intValFromString)) return intValFromString;
             }
             return null;
-        }
-
-        private static string FormatNgayLap(string ngayLapJson)
-        {
-            if (DateTime.TryParse(ngayLapJson, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTime dt))
-                return dt.ToString("dd/MM/yyyy");
-            if (DateTime.TryParseExact(ngayLapJson, "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt))
-                return dt.ToString("dd/MM/yyyy");
-            return ngayLapJson;
         }
     }
 }

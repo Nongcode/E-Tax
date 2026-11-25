@@ -50,6 +50,40 @@ namespace E_Tax.Tests
         }
 
         [Fact]
+        public void SearchResults_NoteColumn()
+        {
+            var results = new List<SearchResult> { new SearchResult { Id = "1", Ma_so_thue = "0101234567" } };
+            string path = NewFile("ds-note.xlsx");
+
+            ExcelExporter.ExportSearchResults(results, path, getNote: _ => "ghi chú A");
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("DanhSachHoaDon");
+            Assert.Equal("GHI CHÚ", ws.Cell("Q4").GetString());
+            Assert.Equal("ghi chú A", ws.Cell("Q5").GetString());
+        }
+
+        [Fact]
+        public void SearchResults_RiskColumn_R()
+        {
+            var results = new List<SearchResult>
+            {
+                new SearchResult { Id = "1", Ma_so_thue = "A" },
+                new SearchResult { Id = "2", Ma_so_thue = "B" }
+            };
+            string path = NewFile("ds-risk.xlsx");
+
+            ExcelExporter.ExportSearchResults(results, path, getNote: _ => "n", getRisk: r => r.Id == "1" ? "Rủi ro" : "");
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("DanhSachHoaDon");
+            Assert.Equal("GHI CHÚ", ws.Cell("Q4").GetString());
+            Assert.Equal("RỦI RO NCC", ws.Cell("R4").GetString());
+            Assert.Equal("Rủi ro", ws.Cell("R5").GetString());
+            Assert.Equal("", ws.Cell("R6").GetString());
+        }
+
+        [Fact]
         public void DetailSummary_NumericCells()
         {
             var rows = new List<Dictionary<string, string>>
@@ -86,6 +120,172 @@ namespace E_Tax.Tests
             Assert.Single(wb.Worksheets);
             var ws = wb.Worksheet("Lỗi");
             Assert.Equal("Không tìm thấy chi tiết hàng hóa/dịch vụ nào từ các hóa đơn đã tìm.", ws.Cell("A1").GetString());
+        }
+
+        private static TaxListingRow ListingRow(string kyHieu, int so, string rate, decimal ds, decimal thue, int? tt = 1, bool thieu = false) =>
+            new TaxListingRow(kyHieu, so, "01/05/2026", "Đối tác", "0101234567", rate, ds, thue, tt, thieu);
+
+        [Fact]
+        public void TaxListing_GroupsSubtotalsAndGrandTotal()
+        {
+            var groups = new List<TaxListingGroup>
+            {
+                new("8%", new[] { ListingRow("A", 1, "8%", 100m, 8m) }, 100m, 8m),
+                new("10%", new[] { ListingRow("A", 2, "10%", 200m, 20m, tt: 3), ListingRow("A", 3, "10%", 300m, 30m, thieu: true) }, 500m, 50m)
+            };
+            var period = TaxPeriod.Month(2026, 5);
+            string path = NewFile("bangke.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, period, path);
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet(1);
+            Assert.Contains(period.Label, ws.Cell("A1").GetString());
+            Assert.Contains("MUA VÀO", ws.Cell("A1").GetString().ToUpperInvariant());
+            Assert.Equal("STT", ws.Cell("A4").GetString());
+            Assert.Equal("Trạng thái HĐ", ws.Cell("J4").GetString());
+            // Dòng dữ liệu: 5 (8%), cộng 6, 7-8 (10%), cộng 9, tổng 10
+            Assert.Equal(100d, ws.Cell("G5").GetDouble());
+            Assert.Equal(XLDataType.Number, ws.Cell("G5").DataType);
+            Assert.Equal("#,##0", ws.Cell("G5").Style.NumberFormat.Format);
+            Assert.Equal(100d, ws.Cell("G6").GetDouble());
+            Assert.Equal(8d, ws.Cell("I6").GetDouble());
+            Assert.Equal(500d, ws.Cell("G9").GetDouble());
+            Assert.Equal(50d, ws.Cell("I9").GetDouble());
+            Assert.Equal(600d, ws.Cell("G10").GetDouble());
+            Assert.Equal(58d, ws.Cell("I10").GetDouble());
+            Assert.Contains("TỔNG CỘNG", ws.Cell("A10").GetString().ToUpperInvariant());
+            // Tô màu: trạng thái khác 1 vàng, thiếu số tiền đỏ
+            Assert.Equal(XLColor.Yellow, ws.Cell("A7").Style.Fill.BackgroundColor);
+            Assert.Equal(XLColor.Red, ws.Cell("A8").Style.Fill.BackgroundColor);
+            Assert.NotEqual(XLColor.Yellow, ws.Cell("A5").Style.Fill.BackgroundColor);
+        }
+
+        [Fact]
+        public void TaxListing_WritesNoteForStatusAndMissingAmounts()
+        {
+            var groups = new List<TaxListingGroup>
+            {
+                new("10%", new[] { ListingRow("A", 1, "10%", 100m, 10m, tt: 3), ListingRow("A", 2, "10%", 100m, 0m, thieu: true) }, 200m, 10m)
+            };
+            string path = NewFile("bangke-note.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, TaxPeriod.Month(2026, 5), path);
+
+            using var wb = new XLWorkbook(path);
+            string note = wb.Worksheet(1).Cell("A3").GetString();
+            Assert.Contains("trạng thái khác 1", note);
+            Assert.Contains("đã bao gồm", note);
+            Assert.Contains("thiếu số tiền", note);
+            Assert.True(wb.Worksheet(1).Cell("A3").IsMerged());
+            Assert.True(wb.Worksheet(1).Column(1).Width < 60, "Ghi chú không được làm giãn cột A");
+        }
+
+        [Fact]
+        public void TaxListing_CleanData_HasNoNote()
+        {
+            var groups = new List<TaxListingGroup> { new("10%", new[] { ListingRow("A", 1, "10%", 100m, 10m) }, 100m, 10m) };
+            string path = NewFile("bangke-clean.xlsx");
+
+            ExcelExporter.ExportTaxListing(groups, InvoiceType.Bought, TaxPeriod.Month(2026, 5), path);
+
+            using var wb = new XLWorkbook(path);
+            Assert.Equal("", wb.Worksheet(1).Cell("A3").GetString());
+        }
+
+        [Theory]
+        [InlineData("2026-01-31T17:30:00Z", "01/02/2026")]
+        [InlineData("khong-phai-ngay", "khong-phai-ngay")]
+        public void SearchResults_DateColumn_UsesVietnamDate(string raw, string expected)
+        {
+            var invoice = new SearchResult { Ma_so_thue = "0101234567", Ngay_lap = raw };
+            string path = NewFile("ds-date.xlsx");
+
+            ExcelExporter.ExportSearchResults(new List<SearchResult> { invoice }, path);
+
+            using var wb = new XLWorkbook(path);
+            Assert.Equal(expected, wb.Worksheet("DanhSachHoaDon").Cell("E5").GetString());
+            Assert.Equal(raw, invoice.Ngay_lap); // không đổi model
+        }
+
+        private static SearchResult Inv(string seller, int so, int? tthai = 1) =>
+            new SearchResult { Ma_so_thue = seller, So_hoa_don = so, Trang_thai_hoa_don = tthai, Tong_tien_chua_thue = 1000m };
+
+        [Fact]
+        public void Companies_OneSheetPerTaxCode_WithRowsAndClassification()
+        {
+            var companies = new List<(string TaxCode, IReadOnlyList<SearchResult> Invoices)>
+            {
+                ("0101234567", new List<SearchResult> { Inv("A", 1), Inv("B", 2, 6), Inv("C", 3) }),
+                ("0309999999", new List<SearchResult> { Inv("D", 4, 3) })
+            };
+            string path = NewFile("nhieu-dn.xlsx");
+
+            ExcelExporter.ExportCompanies(companies, path);
+
+            using var wb = new XLWorkbook(path);
+            Assert.Equal(2, wb.Worksheets.Count);
+            var ws1 = wb.Worksheet("0101234567");
+            var ws2 = wb.Worksheet("0309999999");
+            Assert.Equal("PHÂN LOẠI", ws1.Cell("S4").GetString());
+            Assert.Equal("MÃ SỐ THUẾ", ws1.Cell("A4").GetString());
+            Assert.Equal(3, ws1.LastRowUsed()!.RowNumber() - 4);
+            Assert.Equal("Hóa đơn gốc", ws1.Cell("S5").GetString());
+            Assert.Equal("Đã hủy", ws1.Cell("S6").GetString());
+            Assert.Equal(1000d, ws1.Cell("G5").GetDouble());
+            Assert.Equal(1, ws2.LastRowUsed()!.RowNumber() - 4);
+            Assert.Equal("Hóa đơn điều chỉnh", ws2.Cell("S5").GetString());
+        }
+
+        [Fact]
+        public void Companies_Empty_Throws()
+        {
+            Assert.Throws<ArgumentException>(() =>
+                ExcelExporter.ExportCompanies(new List<(string, IReadOnlyList<SearchResult>)>(), NewFile("x.xlsx")));
+        }
+
+        [Fact]
+        public void Companies_DuplicateAndInvalidNames_GetUniqueValidSheetNames()
+        {
+            var none = new List<SearchResult>();
+            var companies = new List<(string TaxCode, IReadOnlyList<SearchResult> Invoices)>
+            {
+                ("0101234567", none), ("0101234567", none), ("0101234567", none),
+                ("a/b:c*d?e[f]g\\h", none),
+                (new string('9', 40), none), (new string('9', 40), none)
+            };
+            string path = NewFile("trung.xlsx");
+
+            ExcelExporter.ExportCompanies(companies, path);
+
+            using var wb = new XLWorkbook(path);
+            var names = wb.Worksheets.Select(w => w.Name).ToList();
+            Assert.Equal(6, names.Count);
+            Assert.Equal("0101234567", names[0]);
+            Assert.Equal("0101234567 (2)", names[1]);
+            Assert.Equal("0101234567 (3)", names[2]);
+            Assert.Equal("a_b_c_d_e_f_g_h", names[3]);
+            Assert.All(names, n => Assert.True(n.Length <= 31));
+            Assert.Equal(6, names.Select(n => n.ToLowerInvariant()).Distinct().Count());
+            Assert.EndsWith(" (2)", names[5]);
+        }
+
+        [Fact]
+        public void Companies_NoInvoices_StillWritesHeaderRow()
+        {
+            var companies = new List<(string TaxCode, IReadOnlyList<SearchResult> Invoices)>
+            {
+                ("0101234567", new List<SearchResult>())
+            };
+            string path = NewFile("rong.xlsx");
+
+            ExcelExporter.ExportCompanies(companies, path);
+
+            using var wb = new XLWorkbook(path);
+            var ws = wb.Worksheet("0101234567");
+            Assert.Equal("MÃ SỐ THUẾ", ws.Cell("A4").GetString());
+            Assert.Equal("PHÂN LOẠI", ws.Cell("S4").GetString());
+            Assert.Equal(4, ws.LastRowUsed()!.RowNumber());
         }
 
         [Fact]

@@ -56,10 +56,31 @@ namespace E_Tax
         public string Ket_qua_kiem_tra_hoa_don { get; set; }
 
         [JsonPropertyName("shdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
         public string Hoa_don_lien_quan { get; set; }
 
         [JsonPropertyName("nmdchi")]
         public string Thong_tin_lien_quan { get; set; }
+
+        [JsonPropertyName("nmmst")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ma_so_thue_nguoi_mua { get; set; }
+
+        [JsonPropertyName("nmten")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ten_nguoi_mua { get; set; }
+
+        [JsonPropertyName("khmshdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ky_hieu_ma_so_goc { get; set; }
+
+        [JsonPropertyName("khhdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ky_hieu_hoa_don_goc { get; set; }
+
+        [JsonPropertyName("tdlhdgoc")]
+        [JsonConverter(typeof(FlexibleStringConverter))]
+        public string? Ngay_lap_goc { get; set; }
 
         /// <summary>
         /// "Bán ra" / "Mua vào" — gán sau khi tìm kiếm theo endpoint đã gọi, không có trong JSON.
@@ -77,10 +98,19 @@ namespace E_Tax
             Ky_hieu_ma_so.HasValue;
 
         /// <summary>
-        /// Chuỗi định danh an toàn cho tên file: {KHHĐ}_{Số HĐ}.
+        /// Chuỗi định danh an toàn cho tên file: {MST người bán}_{KH mẫu số}_{KHHĐ}_{Số HĐ}.
+        /// Ký tự không hợp lệ thành "_", phần thiếu thành *_NA.
         /// </summary>
         public string FileIdentifier =>
-            $"{Ky_hieu_hoa_don?.Replace('/', '_') ?? "KH_NA"}_{So_hoa_don?.ToString() ?? "SHD_NA"}";
+            $"{SafeFilePart(Ma_so_thue, "MST_NA")}_{Ky_hieu_ma_so?.ToString() ?? "KHMS_NA"}_{SafeFilePart(Ky_hieu_hoa_don, "KH_NA")}_{So_hoa_don?.ToString() ?? "SHD_NA"}";
+
+        private static string SafeFilePart(string? value, string missing)
+        {
+            string text = (value ?? "").Trim();
+            if (text.Length == 0) return missing;
+            var invalid = System.IO.Path.GetInvalidFileNameChars();
+            return string.Concat(text.Select(c => Array.IndexOf(invalid, c) >= 0 ? '_' : c));
+        }
     }
 
     public class SearchResponse

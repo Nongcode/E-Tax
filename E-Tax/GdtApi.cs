@@ -1,4 +1,5 @@
-﻿using System.Net.Http;
+﻿using System.Net;
+using System.Net.Http;
 using System.Net.Http.Headers;
 
 namespace E_Tax
@@ -34,6 +35,27 @@ namespace E_Tax
                 req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
             }
             return req;
+        }
+
+        /// <summary>
+        /// Hết hạn mọi cookie phiên cũ ("jwt", "jwtToken") thuộc host của cổng, bất kể path.
+        /// Không đụng cookie cùng tên của domain khác hoặc cookie khác. Trả về số cookie đã hết hạn; không log giá trị cookie.
+        /// </summary>
+        public static int ExpireSessionCookies(CookieContainer container, Uri portalUri)
+        {
+            string host = portalUri.Host;
+            int count = 0;
+            foreach (Cookie cookie in container.GetAllCookies().ToList())
+            {
+                if (cookie.Name != "jwt" && cookie.Name != "jwtToken") continue;
+                string domain = cookie.Domain.TrimStart('.');
+                if (!host.Equals(domain, StringComparison.OrdinalIgnoreCase) &&
+                    !host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase)) continue;
+                // Cookie từ GetAllCookies có thể là bản sao: ghi đè bằng cookie hết hạn cùng tên/domain/path
+                container.Add(new Cookie(cookie.Name, "", cookie.Path, cookie.Domain) { Expires = DateTime.UtcNow.AddDays(-1) });
+                count++;
+            }
+            return count;
         }
 
         public static string BuildDetailUrl(string nbmst, string khhdon, int shdon, int khmshdon, int? page = null, int? size = null)

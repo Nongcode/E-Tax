@@ -28,6 +28,11 @@ namespace E_Tax
 
         private DataGridViewTextBoxColumn colDgvSTT;
         private DataGridViewTextBoxColumn colDgvLoaiHD;
+        private DataGridViewTextBoxColumn colDgvRuiRo;
+        private DataGridViewTextBoxColumn colDgvPhanLoai;
+        private Button btnKhoHoaDon;
+        private Button btnKiemTraNCC;
+        private Button btnKeKhai;
         private DataGridViewTextBoxColumn colDgvMST;
         private DataGridViewTextBoxColumn colDgvKHMauSo;
         private DataGridViewTextBoxColumn colDgvKHHoaDon;
@@ -71,8 +76,13 @@ namespace E_Tax
             dtpFromDate = new DateTimePicker();
             label2 = new Label();
             dtpToDate = new DateTimePicker();
+            lblPeriod = new Label();
+            cbPeriodKind = new ComboBox();
+            cbPeriodNumber = new ComboBox();
+            nudPeriodYear = new NumericUpDown();
             btnTaiHDGoc = new Button();
             btnCnKoPdf = new Button();
+            btnGopPdf = new Button();
             btnXemHD = new Button();
             gbInvoiceType = new GroupBox();
             rbAllInvoices = new RadioButton();
@@ -81,6 +91,8 @@ namespace E_Tax
             btnLeftSearch = new Button();
             btnExportChiTiet = new Button();
             btnExportDS = new Button();
+            btnExportBangKeMua = new Button();
+            btnExportBangKeBan = new Button();
             tabControlMain = new TabControl();
             tabTongHop = new TabPage();
             dgvMain = new DataGridView();
@@ -111,14 +123,21 @@ namespace E_Tax
             lblGhiChu = new Label();
             txtGhiChu = new TextBox();
             btnMoGhiChu = new Button();
-            lblTimMST = new Label();
-            txtTimMST = new TextBox();
+            txtLocSoHD = new TextBox();
+            txtLocNCC = new TextBox();
+            cboLocLoai = new ComboBox();
+            chkChiCoGhiChu = new CheckBox();
             btnRightSearch = new Button();
             downloadProgressBar = new ProgressBar();
             lblDownloadStatus = new Label();
             lblLoginTitle = new Label();
             lblLoginSubtitle = new Label();
             colDgvLoaiHD = new DataGridViewTextBoxColumn();
+            colDgvRuiRo = new DataGridViewTextBoxColumn();
+            colDgvPhanLoai = new DataGridViewTextBoxColumn();
+            btnKhoHoaDon = new Button();
+            btnKiemTraNCC = new Button();
+            btnKeKhai = new Button();
             lblVersion = new Label();
             lblStatusMessage = new Label();
             statusTimer = new System.Windows.Forms.Timer(components);
@@ -414,13 +433,22 @@ namespace E_Tax
             mainSplitContainer.Panel1.Controls.Add(dtpFromDate);
             mainSplitContainer.Panel1.Controls.Add(label2);
             mainSplitContainer.Panel1.Controls.Add(dtpToDate);
+            mainSplitContainer.Panel1.Controls.Add(lblPeriod);
+            mainSplitContainer.Panel1.Controls.Add(cbPeriodKind);
+            mainSplitContainer.Panel1.Controls.Add(cbPeriodNumber);
+            mainSplitContainer.Panel1.Controls.Add(nudPeriodYear);
             mainSplitContainer.Panel1.Controls.Add(btnTaiHDGoc);
             mainSplitContainer.Panel1.Controls.Add(btnCnKoPdf);
+            mainSplitContainer.Panel1.Controls.Add(btnGopPdf);
             mainSplitContainer.Panel1.Controls.Add(btnXemHD);
             mainSplitContainer.Panel1.Controls.Add(gbInvoiceType);
             mainSplitContainer.Panel1.Controls.Add(btnLeftSearch);
             mainSplitContainer.Panel1.Controls.Add(btnExportChiTiet);
             mainSplitContainer.Panel1.Controls.Add(btnExportDS);
+            mainSplitContainer.Panel1.Controls.Add(btnExportBangKeMua);
+            mainSplitContainer.Panel1.Controls.Add(btnExportBangKeBan);
+            mainSplitContainer.Panel1.Controls.Add(btnKiemTraNCC);
+            mainSplitContainer.Panel1.Controls.Add(btnKeKhai);
             mainSplitContainer.Panel1.Controls.Add(tabControlMain);
             mainSplitContainer.Panel1.Controls.Add(gbNguoiBan);
             mainSplitContainer.Panel1.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -472,11 +500,57 @@ namespace E_Tax
             dtpToDate.Size = new Size(156, 23);
             dtpToDate.TabIndex = 25;
             // 
+            // lblPeriod
+            // 
+            lblPeriod.AutoSize = true;
+            lblPeriod.Font = new Font("Segoe UI", 11.25F, FontStyle.Italic, GraphicsUnit.Point, 0);
+            lblPeriod.ForeColor = Color.FromArgb(0, 117, 214);
+            lblPeriod.Location = new Point(400, 27);
+            lblPeriod.Name = "lblPeriod";
+            lblPeriod.Size = new Size(54, 20);
+            lblPeriod.TabIndex = 26;
+            lblPeriod.Text = "Kỳ thuế";
+            // 
+            // cbPeriodKind
+            // 
+            cbPeriodKind.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbPeriodKind.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cbPeriodKind.Items.AddRange(new object[] { "Tùy chọn", "Tháng", "Quý", "Năm" });
+            cbPeriodKind.Location = new Point(400, 62);
+            cbPeriodKind.Name = "cbPeriodKind";
+            cbPeriodKind.Size = new Size(82, 23);
+            cbPeriodKind.TabIndex = 27;
+            cbPeriodKind.SelectedIndexChanged += cbPeriodKind_SelectedIndexChanged;
+            // 
+            // cbPeriodNumber
+            // 
+            cbPeriodNumber.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbPeriodNumber.Enabled = false;
+            cbPeriodNumber.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cbPeriodNumber.Location = new Point(488, 62);
+            cbPeriodNumber.Name = "cbPeriodNumber";
+            cbPeriodNumber.Size = new Size(46, 23);
+            cbPeriodNumber.TabIndex = 28;
+            cbPeriodNumber.SelectedIndexChanged += PeriodValue_Changed;
+            // 
+            // nudPeriodYear
+            // 
+            nudPeriodYear.Enabled = false;
+            nudPeriodYear.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            nudPeriodYear.Location = new Point(540, 62);
+            nudPeriodYear.Maximum = new decimal(new int[] { 2100, 0, 0, 0 });
+            nudPeriodYear.Minimum = new decimal(new int[] { 2000, 0, 0, 0 });
+            nudPeriodYear.Name = "nudPeriodYear";
+            nudPeriodYear.Size = new Size(62, 23);
+            nudPeriodYear.TabIndex = 29;
+            nudPeriodYear.Value = new decimal(new int[] { 2026, 0, 0, 0 });
+            nudPeriodYear.ValueChanged += PeriodValue_Changed;
+            // 
             // btnTaiHDGoc
             // 
             btnTaiHDGoc.BackColor = SystemColors.GradientActiveCaption;
             btnTaiHDGoc.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnTaiHDGoc.Location = new Point(506, 180);
+            btnTaiHDGoc.Location = new Point(505, 180);
             btnTaiHDGoc.Name = "btnTaiHDGoc";
             btnTaiHDGoc.Size = new Size(130, 30);
             btnTaiHDGoc.TabIndex = 10;
@@ -488,13 +562,25 @@ namespace E_Tax
             // 
             btnCnKoPdf.BackColor = SystemColors.GradientActiveCaption;
             btnCnKoPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnCnKoPdf.Location = new Point(126, 181);
+            btnCnKoPdf.Location = new Point(113, 181);
             btnCnKoPdf.Name = "btnCnKoPdf";
             btnCnKoPdf.Size = new Size(76, 30);
             btnCnKoPdf.TabIndex = 8;
             btnCnKoPdf.Text = "In pdf";
             btnCnKoPdf.UseVisualStyleBackColor = false;
             btnCnKoPdf.Click += btnCnKoPdf_Click;
+            //
+            // btnGopPdf
+            //
+            btnGopPdf.BackColor = SystemColors.GradientActiveCaption;
+            btnGopPdf.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnGopPdf.Location = new Point(195, 181);
+            btnGopPdf.Name = "btnGopPdf";
+            btnGopPdf.Size = new Size(76, 30);
+            btnGopPdf.TabIndex = 39;
+            btnGopPdf.Text = "Gộp PDF";
+            btnGopPdf.UseVisualStyleBackColor = false;
+            btnGopPdf.Click += btnGopPdf_Click;
             // 
             // btnXemHD
             // 
@@ -570,7 +656,7 @@ namespace E_Tax
             // btnExportChiTiet
             // 
             btnExportChiTiet.BackColor = SystemColors.GradientActiveCaption;
-            btnExportChiTiet.Location = new Point(231, 180);
+            btnExportChiTiet.Location = new Point(277, 180);
             btnExportChiTiet.Name = "btnExportChiTiet";
             btnExportChiTiet.Size = new Size(102, 30);
             btnExportChiTiet.TabIndex = 36;
@@ -581,13 +667,37 @@ namespace E_Tax
             // btnExportDS
             // 
             btnExportDS.BackColor = SystemColors.GradientActiveCaption;
-            btnExportDS.Location = new Point(359, 180);
+            btnExportDS.Location = new Point(385, 180);
             btnExportDS.Name = "btnExportDS";
             btnExportDS.Size = new Size(114, 30);
             btnExportDS.TabIndex = 37;
             btnExportDS.Text = "Tải danh sách HĐ";
             btnExportDS.UseVisualStyleBackColor = false;
             btnExportDS.Click += btnExportDS_Click;
+            //
+            // btnExportBangKeMua
+            //
+            btnExportBangKeMua.BackColor = SystemColors.GradientActiveCaption;
+            btnExportBangKeMua.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnExportBangKeMua.Location = new Point(10, 220);
+            btnExportBangKeMua.Name = "btnExportBangKeMua";
+            btnExportBangKeMua.Size = new Size(140, 30);
+            btnExportBangKeMua.TabIndex = 40;
+            btnExportBangKeMua.Text = "Xuất bảng kê mua";
+            btnExportBangKeMua.UseVisualStyleBackColor = false;
+            btnExportBangKeMua.Click += btnExportBangKeMua_Click;
+            //
+            // btnExportBangKeBan
+            //
+            btnExportBangKeBan.BackColor = SystemColors.GradientActiveCaption;
+            btnExportBangKeBan.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnExportBangKeBan.Location = new Point(156, 220);
+            btnExportBangKeBan.Name = "btnExportBangKeBan";
+            btnExportBangKeBan.Size = new Size(140, 30);
+            btnExportBangKeBan.TabIndex = 41;
+            btnExportBangKeBan.Text = "Xuất bảng kê bán";
+            btnExportBangKeBan.UseVisualStyleBackColor = false;
+            btnExportBangKeBan.Click += btnExportBangKeBan_Click;
             // 
             // tabControlMain
             // 
@@ -599,10 +709,10 @@ namespace E_Tax
             tabControlMain.Controls.Add(tabVATNop);
             tabControlMain.Controls.Add(tabGiamThue);
             tabControlMain.ItemSize = new Size(300, 30);
-            tabControlMain.Location = new Point(10, 231);
+            tabControlMain.Location = new Point(10, 262);
             tabControlMain.Name = "tabControlMain";
             tabControlMain.SelectedIndex = 0;
-            tabControlMain.Size = new Size(943, 412);
+            tabControlMain.Size = new Size(943, 381);
             tabControlMain.TabIndex = 38;
             // 
             // tabTongHop
@@ -622,7 +732,7 @@ namespace E_Tax
             dgvMain.AllowUserToDeleteRows = false;
             dgvMain.BackgroundColor = SystemColors.ButtonHighlight;
             dgvMain.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien });
+            dgvMain.Columns.AddRange(new DataGridViewColumn[] { colDgvSTT, colDgvTraCuu, colDgvMST, colDgvKHMauSo, colDgvKHHoaDon, colDgvSoHoaDon, colDgvNgayLap, colDgvThongTinHD, colDgvTienChuaThue, colDgvTienThue, colDgvTongTien, colDgvRuiRo, colDgvPhanLoai });
             dgvMain.Dock = DockStyle.Fill;
             dgvMain.Location = new Point(3, 3);
             dgvMain.Name = "dgvMain";
@@ -848,8 +958,10 @@ namespace E_Tax
             gbNguoiBan.Controls.Add(lblGhiChu);
             gbNguoiBan.Controls.Add(txtGhiChu);
             gbNguoiBan.Controls.Add(btnMoGhiChu);
-            gbNguoiBan.Controls.Add(lblTimMST);
-            gbNguoiBan.Controls.Add(txtTimMST);
+            gbNguoiBan.Controls.Add(txtLocSoHD);
+            gbNguoiBan.Controls.Add(txtLocNCC);
+            gbNguoiBan.Controls.Add(cboLocLoai);
+            gbNguoiBan.Controls.Add(chkChiCoGhiChu);
             gbNguoiBan.Controls.Add(btnRightSearch);
             gbNguoiBan.Font = new Font("Segoe UI", 9.75F, FontStyle.Bold, GraphicsUnit.Point, 0);
             gbNguoiBan.Location = new Point(642, 10);
@@ -915,33 +1027,55 @@ namespace E_Tax
             btnMoGhiChu.UseVisualStyleBackColor = false;
             btnMoGhiChu.Click += btnMoGhiChu_Click;
             // 
-            // lblTimMST
-            // 
-            lblTimMST.AutoSize = true;
-            lblTimMST.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblTimMST.Location = new Point(14, 170);
-            lblTimMST.Name = "lblTimMST";
-            lblTimMST.Size = new Size(124, 15);
-            lblTimMST.TabIndex = 4;
-            lblTimMST.Text = "Tìm kiếm MST ng bán";
-            // 
-            // txtTimMST
-            // 
-            txtTimMST.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            txtTimMST.Location = new Point(14, 192);
-            txtTimMST.Name = "txtTimMST";
-            txtTimMST.Size = new Size(170, 23);
-            txtTimMST.TabIndex = 5;
-            // 
+            // txtLocSoHD
+            //
+            txtLocSoHD.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            txtLocSoHD.Location = new Point(14, 165);
+            txtLocSoHD.Name = "txtLocSoHD";
+            txtLocSoHD.PlaceholderText = "Số HĐ";
+            txtLocSoHD.Size = new Size(80, 23);
+            txtLocSoHD.TabIndex = 4;
+            //
+            // txtLocNCC
+            //
+            txtLocNCC.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            txtLocNCC.Location = new Point(100, 165);
+            txtLocNCC.Name = "txtLocNCC";
+            txtLocNCC.PlaceholderText = "NCC (tên/MST)";
+            txtLocNCC.Size = new Size(174, 23);
+            txtLocNCC.TabIndex = 5;
+            //
+            // cboLocLoai
+            //
+            cboLocLoai.DropDownStyle = ComboBoxStyle.DropDownList;
+            cboLocLoai.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            cboLocLoai.Items.AddRange(new object[] { "Tất cả", "Mua vào", "Bán ra" });
+            cboLocLoai.Location = new Point(14, 193);
+            cboLocLoai.Name = "cboLocLoai";
+            cboLocLoai.SelectedIndex = 0;
+            cboLocLoai.Size = new Size(95, 23);
+            cboLocLoai.TabIndex = 8;
+            //
+            // chkChiCoGhiChu
+            //
+            chkChiCoGhiChu.AutoSize = true;
+            chkChiCoGhiChu.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            chkChiCoGhiChu.Location = new Point(118, 195);
+            chkChiCoGhiChu.Name = "chkChiCoGhiChu";
+            chkChiCoGhiChu.Size = new Size(120, 19);
+            chkChiCoGhiChu.TabIndex = 9;
+            chkChiCoGhiChu.Text = "Chỉ HĐ có ghi chú";
+            chkChiCoGhiChu.UseVisualStyleBackColor = true;
+            //
             // btnRightSearch
             // 
             btnRightSearch.BackColor = Color.LightGray;
             btnRightSearch.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            btnRightSearch.Location = new Point(199, 188);
+            btnRightSearch.Location = new Point(14, 219);
             btnRightSearch.Name = "btnRightSearch";
-            btnRightSearch.Size = new Size(85, 27);
+            btnRightSearch.Size = new Size(260, 27);
             btnRightSearch.TabIndex = 6;
-            btnRightSearch.Text = "Tìm kiếm";
+            btnRightSearch.Text = "Lọc";
             btnRightSearch.UseVisualStyleBackColor = false;
             btnRightSearch.Click += btnRightSearch_Click;
             // 
@@ -967,6 +1101,58 @@ namespace E_Tax
             // colDgvLoaiHD
             // 
             colDgvLoaiHD.Name = "colDgvLoaiHD";
+            //
+            // colDgvRuiRo (cột không bind: nhãn và màu tính trong CellFormatting)
+            //
+            colDgvRuiRo.HeaderText = "Rủi ro NCC";
+            colDgvRuiRo.Name = "colDgvRuiRo";
+            colDgvRuiRo.ReadOnly = true;
+            colDgvRuiRo.SortMode = DataGridViewColumnSortMode.NotSortable;
+            colDgvRuiRo.Width = 130;
+            //
+            // colDgvPhanLoai (cột không bind, đặt cuối lưới: nhãn tính trong CellFormatting)
+            //
+            colDgvPhanLoai.HeaderText = "Phân loại";
+            colDgvPhanLoai.Name = "colDgvPhanLoai";
+            colDgvPhanLoai.ReadOnly = true;
+            colDgvPhanLoai.SortMode = DataGridViewColumnSortMode.NotSortable;
+            colDgvPhanLoai.Width = 170;
+            //
+            // btnKhoHoaDon
+            //
+            btnKhoHoaDon.BackColor = SystemColors.GradientActiveCaption;
+            btnKhoHoaDon.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKhoHoaDon.Location = new Point(860, 1);
+            btnKhoHoaDon.Name = "btnKhoHoaDon";
+            btnKhoHoaDon.Size = new Size(115, 24);
+            btnKhoHoaDon.TabIndex = 43;
+            btnKhoHoaDon.Text = "Kho hóa đơn";
+            btnKhoHoaDon.UseVisualStyleBackColor = false;
+            btnKhoHoaDon.Click += btnKhoHoaDon_Click;
+            //
+            // btnKiemTraNCC
+            //
+            btnKiemTraNCC.BackColor = SystemColors.GradientActiveCaption;
+            btnKiemTraNCC.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKiemTraNCC.Location = new Point(302, 220);
+            btnKiemTraNCC.Name = "btnKiemTraNCC";
+            btnKiemTraNCC.Size = new Size(140, 30);
+            btnKiemTraNCC.TabIndex = 42;
+            btnKiemTraNCC.Text = "Kiểm tra NCC";
+            btnKiemTraNCC.UseVisualStyleBackColor = false;
+            btnKiemTraNCC.Click += btnKiemTraNCC_Click;
+            //
+            // btnKeKhai
+            //
+            btnKeKhai.BackColor = SystemColors.GradientActiveCaption;
+            btnKeKhai.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            btnKeKhai.Location = new Point(448, 220);
+            btnKeKhai.Name = "btnKeKhai";
+            btnKeKhai.Size = new Size(140, 30);
+            btnKeKhai.TabIndex = 44;
+            btnKeKhai.Text = "Lập tờ khai / Kế toán";
+            btnKeKhai.UseVisualStyleBackColor = false;
+            btnKeKhai.Click += btnKeKhai_Click;
             // 
             // lblVersion
             // 
@@ -982,9 +1168,10 @@ namespace E_Tax
             // lblStatusMessage
             // 
             lblStatusMessage.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            lblStatusMessage.Location = new Point(54, 359);
+            lblStatusMessage.AutoEllipsis = true;
+            lblStatusMessage.Location = new Point(300, 5);
             lblStatusMessage.Name = "lblStatusMessage";
-            lblStatusMessage.Size = new Size(350, 21);
+            lblStatusMessage.Size = new Size(555, 21);
             lblStatusMessage.TabIndex = 30;
             lblStatusMessage.Text = "Status message here";
             lblStatusMessage.TextAlign = ContentAlignment.MiddleCenter;
@@ -1029,6 +1216,8 @@ namespace E_Tax
             BackColor = Color.White;
             ClientSize = new Size(984, 686);
             Controls.Add(statusBar);
+            Controls.Add(btnKhoHoaDon);
+            Controls.Add(lblStatusMessage);
             Controls.Add(lblVersion);
             Controls.Add(panelSearch);
             Controls.Add(panelLogin);
@@ -1089,6 +1278,10 @@ namespace E_Tax
         private Label label2;
         private DateTimePicker dtpToDate;
         private DateTimePicker dtpFromDate;
+        private Label lblPeriod;
+        private ComboBox cbPeriodKind;
+        private ComboBox cbPeriodNumber;
+        private NumericUpDown nudPeriodYear;
         private System.Windows.Forms.ProgressBar downloadProgressBar;
         private System.Windows.Forms.Label lblDownloadStatus;
         private GroupBox gbInvoiceType;
@@ -1103,16 +1296,21 @@ namespace E_Tax
         private System.Windows.Forms.Button btnLeftSearch;
         private System.Windows.Forms.Button btnExportChiTiet;
         private System.Windows.Forms.Button btnExportDS;
+        private System.Windows.Forms.Button btnExportBangKeMua;
+        private System.Windows.Forms.Button btnExportBangKeBan;
         private System.Windows.Forms.GroupBox gbNguoiBan;
         private System.Windows.Forms.Button btnKtraDNMuaLe;
         private System.Windows.Forms.Label lblGhiChu;
         private System.Windows.Forms.TextBox txtGhiChu;
         private System.Windows.Forms.Button btnMoGhiChu;
-        private System.Windows.Forms.Label lblTimMST;
-        private System.Windows.Forms.TextBox txtTimMST;
+        private System.Windows.Forms.TextBox txtLocSoHD;
+        private System.Windows.Forms.TextBox txtLocNCC;
+        private System.Windows.Forms.ComboBox cboLocLoai;
+        private System.Windows.Forms.CheckBox chkChiCoGhiChu;
         private System.Windows.Forms.Button btnRightSearch;
         private System.Windows.Forms.Button btnXemHD;
         private System.Windows.Forms.Button btnCnKoPdf;
+        private System.Windows.Forms.Button btnGopPdf;
         private System.Windows.Forms.Button btnTaiHDGoc;
         private TabControl tabControlMain;
         private TabPage tabTongHop;
