@@ -119,7 +119,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 ## 5. Luồng chức năng (UI → hàm xử lý)
 
 ### 5.1 Khởi động & bản quyền
-`Form1()` → tạo `HttpClient` (CookieContainer), `InvoiceDetailService` (token lấy qua `() => jwtToken`), `DetailGridManager`, cấu hình lưới giảm thuế.
+`Form1()` → `InitializeComponent` rồi `InitLayouts` (`Form1.Layouts.cs`: bỏ khung Designer, `ApplyLayout(LayoutKind)` dựng 1 trong 4 kiểu Chuẩn / Menu trái / Ribbon (`Form1.Ribbon.cs`) / Gọn bằng cách chuyển control Designer sang khung mới — Designer vẫn hiện bố cục cũ; kiểu + cột hiển thị lưu ở `preferences.json`, áp trong `Form1_Load`; DEBUG: `ETAX_UI_LAYOUT=Classic|SideMenu|Ribbon|Compact` cùng `ETAX_UI_DEMO`) và `ApplyLoginLayout` (`Form1.Login.cs`: thẻ đăng nhập) → tạo `HttpClient` (CookieContainer), `InvoiceDetailService` (token lấy qua `() => jwtToken`), `DetailGridManager`, cấu hình lưới giảm thuế.
 `Form1_Load` → `CheckForLicense()` → `LoadNotesFromFile()` → `LoadCaptchaAsync()`.
 
 `LicenseManager` (Registry `HKCU\Software\ETaxDemoApp`):

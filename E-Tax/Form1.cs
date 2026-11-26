@@ -65,6 +65,8 @@ namespace E_Tax
         public Form1()
         {
             InitializeComponent();
+            InitLayouts();
+            ApplyLoginLayout();
             FormClosing += Form1_FormClosing;
             _gate.Changed += () => { if (!IsDisposed) { btnKhoHoaDon.Enabled = !_gate.IsBusy; btnKeKhai.Enabled = !_gate.IsBusy; } };
             InitPeriodSelector();
@@ -104,21 +106,22 @@ namespace E_Tax
                 : new RiskCheckService(_riskHttp, _settings.BlacklistApiToken, AppendLog);
 
             StyleMainGrid();
-            // mainSplitContainer (Dock Fill) đứng trên cùng nên che thanh tiến độ tải — đưa lên trước
-            downloadProgressBar.BringToFront();
-            lblDownloadStatus.BringToFront();
 
             panelLogin.Visible = true;
             panelSearch.Visible = false;
 
             // Kích thước thiết kế là kích thước tối thiểu; khôi phục vị trí lần trước trước khi form hiện
             MinimumSize = WindowSettings.ClampMinimum(Size, Screen.FromControl(this).WorkingArea);
+            // Ribbon cần ~1.200px mới hiện đủ các nhóm: lần đầu mở (chưa lưu vị trí) dùng 1280×800 nếu màn hình đủ chỗ
+            var startArea = Screen.FromControl(this).WorkingArea;
+            Size = new Size(Math.Max(MinimumSize.Width, Math.Min(1280, startArea.Width)), Math.Max(MinimumSize.Height, Math.Min(800, startArea.Height)));
             RestoreWindowBounds();
             Resize += (_, _) => CenterLoginPanel();
             // Khối kích hoạt hiện/ẩn làm đổi chiều cao khối đăng nhập; Shown: lúc này Visible mới phản ánh đúng
             panelActivation.VisibleChanged += (_, _) => CenterLoginPanel();
             Shown += (_, _) => CenterLoginPanel();
             FormClosing += (_, _) => SaveWindowBounds();
+            CaptureColumnDefaults();
         }
 
         protected override void Dispose(bool disposing)
@@ -148,9 +151,12 @@ namespace E_Tax
             }
             _prefs.Load();
             if (!string.IsNullOrEmpty(_prefs.LastUsername)) txtUser.Text = _prefs.LastUsername;
+            ApplySavedUiPreferences();
             dgvMain.AutoGenerateColumns = false;
 #if DEBUG
             string? demo = Environment.GetEnvironmentVariable("ETAX_UI_DEMO");
+            // Chụp màn hình từng kiểu giao diện mà không sửa preferences.json của người dùng
+            if (demo != null && Enum.TryParse(Environment.GetEnvironmentVariable("ETAX_UI_LAYOUT"), out LayoutKind demoLayout)) ApplyLayout(demoLayout);
             if (demo is "1" or "progress")
             {
                 ShowDemoData(showProgress: demo == "progress");
@@ -277,7 +283,9 @@ namespace E_Tax
                     Tong_tien_chua_thue = beforeTax,
                     Tong_tien_thue = tax,
                     Tong_tien_thanh_toan = beforeTax + tax,
-                    Loai_hoa_don = i % 2 == 0 ? "Bán ra" : "Mua vào"
+                    Loai_hoa_don = i % 2 == 0 ? "Bán ra" : "Mua vào",
+                    // Phần lớn là HĐ gốc như dữ liệu thật; vài HĐ thay thế/điều chỉnh/hủy để thấy đủ màu nhãn
+                    Trang_thai_hoa_don = i % 17 == 5 ? 3 : i % 23 == 7 ? 2 : i % 29 == 11 ? 6 : 1
                 };
             }).ToList();
 
@@ -354,7 +362,7 @@ namespace E_Tax
         private void CenterLoginPanel()
         {
             if (WindowState == FormWindowState.Minimized) return;
-            panelLogin.Height = (panelActivation.Visible ? panelActivation.Bottom : btnLogin.Bottom) + 6;
+            panelLogin.Height = LoginCardHeight();
             int availableHeight = ClientSize.Height - statusBar.Height;
             panelLogin.Left = Math.Max(0, (ClientSize.Width - panelLogin.Width) / 2);
             panelLogin.Top = Math.Max(lblVersion.Bottom, (availableHeight - panelLogin.Height) / 2);
@@ -730,14 +738,15 @@ namespace E_Tax
         /// Bật/tắt các ô đăng nhập. Không tắt cả panelLogin vì panelActivation nằm bên trong,
         /// tắt panel cha sẽ làm khóa luôn ô nhập mã kích hoạt.
         /// </summary>
+        /// <summary>
+        /// Khóa/mở các ô đăng nhập. Liệt kê đích danh (không duyệt panelLogin.Controls) vì khối kích hoạt
+        /// nằm chung thẻ đăng nhập và phải luôn dùng được khi hết hạn dùng thử.
+        /// </summary>
         private void SetLoginInputsEnabled(bool enabled)
         {
             panelLogin.Enabled = true;
-            foreach (Control c in panelLogin.Controls)
-            {
-                if (c != panelActivation)
-                    c.Enabled = enabled;
-            }
+            foreach (Control c in new Control[] { txtUser, txtPass, txtCaptcha, picCaptcha, btnRefreshCaptcha, chkKeepLogin, btnLogin })
+                c.Enabled = enabled;
         }
 
         #endregion
@@ -1342,7 +1351,7 @@ namespace E_Tax
                 modal.CloseFromOwner();
 
                 btnLeftSearch.Enabled = true;
-                btnLeftSearch.Text = "Tìm kiếm";
+                btnLeftSearch.Text = LabelOf(btnLeftSearch);
                 this.Cursor = Cursors.Default;
             }
 
@@ -1367,6 +1376,7 @@ namespace E_Tax
         {
             string text = InvoiceSummary.Compute(shown ?? _latestResults).Format();
             lblStatusInvoices.Text = shown == null ? text : $"Lọc {shown.Count}/{_latestResults.Count} HĐ — {text}";
+            UpdateKpis(shown ?? _latestResults);
         }
 
         /// <summary>
@@ -1471,7 +1481,7 @@ namespace E_Tax
             {
                 this.Enabled = true;
                 this.Cursor = Cursors.Default;
-                btnTaiHDGoc.Text = "Tải tất cả HĐ Gốc";
+                btnTaiHDGoc.Text = LabelOf(btnTaiHDGoc);
             }
         }
 
@@ -2164,7 +2174,7 @@ namespace E_Tax
             finally
             {
                 btnXemHD.Enabled = true;
-                btnXemHD.Text = "Xem HĐ";
+                btnXemHD.Text = LabelOf(btnXemHD);
             }
         }
 
@@ -2208,7 +2218,7 @@ namespace E_Tax
             finally
             {
                 btnExportDS.Enabled = true;
-                btnExportDS.Text = "Tải danh sách HĐ";
+                btnExportDS.Text = LabelOf(btnExportDS);
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
@@ -2277,7 +2287,7 @@ namespace E_Tax
             finally
             {
                 btnExportChiTiet.Enabled = true;
-                btnExportChiTiet.Text = "Tải chi tiết HĐ";
+                btnExportChiTiet.Text = LabelOf(btnExportChiTiet);
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
@@ -2377,7 +2387,7 @@ namespace E_Tax
             {
                 btnCnKoPdf.Enabled = true;
                 btnGopPdf.Enabled = true;
-                btnCnKoPdf.Text = "In HĐ";
+                btnCnKoPdf.Text = LabelOf(btnCnKoPdf);
                 downloadProgressBar.Visible = false;
                 lblDownloadStatus.Visible = false;
                 lblDownloadStatus.Text = "";
@@ -3188,7 +3198,7 @@ namespace E_Tax
             finally
             {
                 btnKtraDNMuaLe.Enabled = true;
-                btnKtraDNMuaLe.Text = "Ktra DN Mua Lẻ";
+                btnKtraDNMuaLe.Text = LabelOf(btnKtraDNMuaLe);
                 this.Cursor = Cursors.Default;
             }
         }

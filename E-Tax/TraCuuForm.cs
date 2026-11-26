@@ -28,6 +28,7 @@ namespace E_Tax // Đảm bảo đúng namespace
             llLinkTraCuu.LinkClicked += LlLinkTraCuu_LinkClicked;
             // Gắn sự kiện click cho nút Đóng
             btnDong.Click += BtnDong_Click;
+            UiTheme.ApplyTo(this);
         }
 
         // Sự kiện khi click vào LinkLabel

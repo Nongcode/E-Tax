@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thiết kế lại giao diện</title>
+<style>body{font-family:"Segoe UI",Arial,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#1f1f1f;background:#fff}
+h1{font-size:22px}h2{font-size:16px;margin-top:24px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #e1e1e1;padding:6px 8px;text-align:left;font-size:14px}
+.ok{color:#0e6b0e}.wip{color:#7a4f00}img{max-width:100%;border:1px solid #d1d1d1;margin:8px 0}</style></head>
+<body>
+<h1>Thiết kế lại giao diện — Ribbon kiểu Office</h1>
+<p>Người dùng chọn Phương án 3 trong <a href="prototypes/5-phuong-an.html">5 phương án mẫu</a>. Chỉ đổi bố cục và màu, không đổi nghiệp vụ.</p>
+<table>
+<tr><th>Task</th><th>Trạng thái</th></tr>
+<tr><td>T-001.1 Lưới an toàn control/handler</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.2 Bộ màu UiTheme (tương phản ≥ 4.5:1)</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.3 Icon SVG</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.4 Ribbon + thanh lọc</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.5 Tab phẳng + nhãn trạng thái</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.6 Thẻ đăng nhập + kích hoạt</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.7 Form phụ</td><td class="ok">Xong</td></tr>
+<tr><td>T-001.8 Kiểm tra cuối trên app thật</td><td class="wip">Chờ</td></tr>
+<tr><td>CR-002: 4 kiểu giao diện, popup bộ lọc, chọn cột, chọn giao diện</td><td class="ok">Xong — đã chạy trên repo thật</td></tr>
+<tr><td>CR-003: sát mẫu HTML (màu theo kiểu, ô nhập viền bo, nút ghép, khung bảng, menu thả)</td><td class="wip">Code xong — chờ chạy trên repo thật</td></tr>
+</table>
+<h2>CR-004 — thêm màu (demo, 1280px)</h2>
+<p>Chuẩn</p><img src="screenshots/T-004-Classic.png" alt="Kiểu Chuẩn có thanh tiêu đề navy">
+<p>Menu trái</p><img src="screenshots/T-004-SideMenu.png" alt="Kiểu Menu trái, menu xanh ngọc">
+<p>Ribbon</p><img src="screenshots/T-004-Ribbon.png" alt="Kiểu Ribbon có thanh tiêu đề xanh">
+<p>Gọn</p><img src="screenshots/T-004-Compact.png" alt="Kiểu Gọn có thanh tiêu đề xanh">
+<h2>CR-003 — sau khi sửa cho sát mẫu (demo, 1280px)</h2>
+<p>Chuẩn (mẫu PA1)</p><img src="screenshots/T-003-Classic.png" alt="Kiểu Chuẩn sau CR-003">
+<p>Menu trái (mẫu PA2), menu Xuất Excel và Bộ lọc mở bằng bấm thật</p><img src="screenshots/T-003-SideMenu.png" alt="Kiểu Menu trái sau CR-003"><img src="screenshots/T-003-SideMenu-excel.png" alt="Menu Xuất Excel"><img src="screenshots/T-003-SideMenu-filter.png" alt="Popup Bộ lọc">
+<p>Gọn (mẫu PA5 nền sáng)</p><img src="screenshots/T-003-Compact.png" alt="Kiểu Gọn sau CR-003">
+<p>Ribbon (không đổi)</p><img src="screenshots/T-003-Ribbon.png" alt="Kiểu Ribbon">
+<h2>CR-002 — 4 kiểu giao diện (trước CR-003)</h2>
+<p>Chuẩn</p><img src="screenshots/T-002-Classic-1280.png" alt="Kiểu Chuẩn">
+<p>Menu trái (bộ lọc mở popup)</p><img src="screenshots/T-002-SideMenu-1280.png" alt="Kiểu Menu trái"><img src="screenshots/T-002-SideMenu-popup.png" alt="Popup bộ lọc">
+<p>Gọn</p><img src="screenshots/T-002-Compact-1280.png" alt="Kiểu Gọn">
+<p>Chọn cột (bánh răng "Cột" ở dải tab)</p><img src="screenshots/T-002-cot.png" alt="Hộp thoại chọn cột">
+<h2>Ribbon (demo, 1280px)</h2>
+<img src="screenshots/T-001.4-demo-1280.png" alt="Ribbon ở cửa sổ 1280px">
+<h2>Cửa sổ hẹp (1000px)</h2>
+<img src="screenshots/T-001.4-demo-1000.png" alt="Ribbon cuộn ngang, thanh lọc xuống dòng">
+<h2>Nhãn trạng thái</h2>
+<img src="screenshots/T-001.5-chip.png" alt="Cột phân loại dạng nhãn màu">
+</body></html>

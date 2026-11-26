@@ -247,6 +247,7 @@ namespace E_Tax
             FormClosing += (_, e) => { if (_exporting) e.Cancel = true; };
 
             Recalculate();
+            UiTheme.ApplyTo(this);
         }
 
         private sealed class ProfileItem
