@@ -29,6 +29,9 @@ namespace E_Tax
         private readonly InvoiceDetailService _detailService;
         private readonly DetailGridManager _detailGridManager;
         private readonly UserPreferences _prefs = new UserPreferences(UserPreferences.DefaultPath);
+        private readonly SessionStore _savedSession = new SessionStore(SessionStore.DefaultPath);
+        /// <summary>Lần tìm kiếm gần nhất bị cổng trả 401.</summary>
+        private bool _sessionRejected;
         private readonly NotesStore _notes = new NotesStore(NotesStore.DefaultPath, Path.Combine(Application.StartupPath, "notes.json"));
 
         private readonly LocalInvoiceStore _store = new LocalInvoiceStore(LocalInvoiceStore.DefaultRoot);
@@ -164,6 +167,75 @@ namespace E_Tax
 #endif
             _ = CheckForUpdateAsync();
             _ = RunAutoBackupAsync();
+            if (TryRestoreSession()) return;
+            await LoadCaptchaAsync();
+        }
+
+        /// <summary>
+        /// Vào thẳng màn hình tìm kiếm nếu có phiên "Duy trì đăng nhập" còn hạn. Không gọi cổng thuế:
+        /// token bị cổng thu hồi sớm sẽ lộ ra ở lần tra cứu đầu (401) và phiên lưu bị xóa.
+        /// </summary>
+        private bool TryRestoreSession()
+        {
+            if (panelActivation.Visible) return false; // hết hạn dùng thử: không cho dùng phiên cũ
+            var saved = _savedSession.Load();
+            if (saved == null) return false;
+            ClearStoredSession();
+            ApplySessionToken(saved.Token);
+            EnterSearchScreen(saved.Username);
+            chkKeepLogin.Checked = true;
+            AppendLog($"ℹ️ Khôi phục phiên đăng nhập đã lưu, hết hạn lúc {saved.ExpiresUtc.ToLocalTime():HH:mm dd/MM/yyyy}.");
+            ShowStatusMessage($"Đã khôi phục phiên đăng nhập (hết hạn {saved.ExpiresUtc.ToLocalTime():HH:mm dd/MM}).", Color.SeaGreen, 6000);
+            return true;
+        }
+
+        /// <summary>Lưu hoặc xóa phiên theo ô "Duy trì đăng nhập". Lỗi ghi không làm hỏng đăng nhập.</summary>
+        private void RememberSession(string username)
+        {
+            var expires = JwtExpiry.ReadUtc(jwtToken);
+            AppendLog(expires is DateTime e
+                ? $"ℹ️ Phiên đăng nhập hết hạn lúc {e.ToLocalTime():HH:mm dd/MM/yyyy}."
+                : "ℹ️ Token đăng nhập không có thời hạn (exp).");
+            if (!chkKeepLogin.Checked)
+            {
+                _savedSession.Clear();
+                return;
+            }
+            try
+            {
+                if (!_savedSession.Save(username, jwtToken))
+                    ShowStatusMessage("Không duy trì được đăng nhập: cổng thuế không cho biết hạn phiên hoặc phiên sắp hết hạn.", Color.OrangeRed, 8000);
+            }
+            catch (Exception ex)
+            {
+                AppendLog("⚠️ Không lưu được phiên đăng nhập: " + ex.GetType().Name);
+            }
+        }
+
+        private void lblLogout_Click(object? sender, EventArgs e)
+        {
+            if (_gate.IsBusy)
+            {
+                MessageBox.Show(this, "Đang có tác vụ chạy, hãy chờ xong rồi đăng xuất.", "Đăng xuất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            _ = LogoutAsync();
+        }
+
+        /// <summary>Bỏ phiên hiện tại và phiên đã lưu, quay về màn hình đăng nhập.</summary>
+        private async Task LogoutAsync()
+        {
+            _savedSession.Clear();
+            ClearStoredSession();
+            ClearSearchData();
+            _currentTaxCode = null;
+            _sessionRejected = false;
+            lblStatusUser.Text = "";
+            lblLogout.Visible = false;
+            panelSearch.Visible = false;
+            panelLogin.Visible = true;
+            CenterLoginPanel();
+            AppendLog("ℹ️ Đã đăng xuất.");
             await LoadCaptchaAsync();
         }
 
@@ -422,18 +494,9 @@ namespace E_Tax
                 if (success)
                 {
                     SaveLastUsername(username);
-                    // Thay MST của phiên trước; chỉ giữ tên đăng nhập (không bao giờ mật khẩu) và chỉ khi là MST hợp lệ
-                    _currentTaxCode = InvoiceGridLogic.CurrentTaxCode(username);
                     MessageBox.Show("✅ Đăng nhập thành công!");
-                    lblStatusUser.Text = $"👤 {username}";
-
-                    panelLogin.Visible = false;
-                    panelSearch.Visible = true;
-                    if (_currentTaxCode == null)
-                    {
-                        AppendLog("ℹ️ Tên đăng nhập không phải MST hợp lệ: không đối chiếu bên mua/bán và không ghi kho hóa đơn.");
-                        ShowStatusMessage("Tên đăng nhập không phải MST: sẽ không lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
-                    }
+                    EnterSearchScreen(username);
+                    RememberSession(username);
 
                     txtUser.Clear();
                     txtPass.Clear();
@@ -468,6 +531,33 @@ namespace E_Tax
             {
                 AppendLog("⚠️ Không lưu được tên đăng nhập: " + ex.GetType().Name);
             }
+        }
+
+        /// <summary>Chuyển sang màn hình tìm kiếm cho tài khoản vừa đăng nhập hoặc vừa khôi phục phiên.</summary>
+        private void EnterSearchScreen(string username)
+        {
+            // Thay MST của phiên trước; chỉ giữ tên đăng nhập (không bao giờ mật khẩu) và chỉ khi là MST hợp lệ
+            _currentTaxCode = InvoiceGridLogic.CurrentTaxCode(username);
+            lblStatusUser.Text = $"👤 {username}";
+            lblLogout.Visible = true;
+
+            panelLogin.Visible = false;
+            panelSearch.Visible = true;
+            if (_currentTaxCode == null)
+            {
+                AppendLog("ℹ️ Tên đăng nhập không phải MST hợp lệ: không đối chiếu bên mua/bán và không ghi kho hóa đơn.");
+                ShowStatusMessage("Tên đăng nhập không phải MST: sẽ không lưu vào kho hóa đơn.", Color.OrangeRed, 8000);
+            }
+        }
+
+        /// <summary>Gắn token vào cookie "jwt" và header Bearer cho mọi request tiếp theo.</summary>
+        private void ApplySessionToken(string token)
+        {
+            jwtToken = token;
+            var portalUri = new Uri(GdtApi.PortalUrl);
+            if (cookieContainer.GetCookies(portalUri)["jwt"] == null)
+                cookieContainer.Add(portalUri, new Cookie("jwt", token));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
         /// <summary>Xóa phiên cũ để đăng nhập lại thất bại không dùng lại token/cookie cũ.</summary>
@@ -531,11 +621,7 @@ namespace E_Tax
                 if (string.IsNullOrEmpty(jwtToken))
                     return false;
 
-                if (cookies["jwt"] == null)
-                {
-                    cookieContainer.Add(portalUri, new Cookie("jwt", jwtToken));
-                }
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jwtToken);
+                ApplySessionToken(jwtToken);
                 // Có thể đăng nhập lại bằng MST khác: bỏ dữ liệu của phiên trước
                 ClearSearchData();
                 return true;
@@ -728,6 +814,14 @@ namespace E_Tax
                 string text = await response.Content.ReadAsStringAsync(ct);
                 AppendLog($"HTTP Status: {(int)response.StatusCode} {response.ReasonPhrase}");
 
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    // Token hết hạn/bị thu hồi: không khôi phục phiên này lần sau
+                    _savedSession.Clear();
+                    _sessionRejected = true;
+                    AppendLog("❌ Tra cứu bị từ chối 401: phiên đăng nhập không còn hiệu lực.");
+                    return "❌ Phiên đăng nhập đã hết hạn. Bấm \"Đăng xuất\" ở thanh trạng thái rồi đăng nhập lại.";
+                }
                 if (!response.IsSuccessStatusCode)
                 {
                     AppendLog("❌ Tra cứu trả lỗi: " + (text.Length > 300 ? text[..300] : text));
@@ -753,6 +847,7 @@ namespace E_Tax
             DateTime fromDate, DateTime toDate, bool includeSold, bool includeBought, Action<string> reportStatus,
             CancellationToken ct = default)
         {
+            _sessionRejected = false;
             var allResults = new List<SearchResult>();
             var failedChunks = new List<string>();
             var totals = new SearchTotals();
@@ -1170,7 +1265,8 @@ namespace E_Tax
                 _lastFailedSearchPages = failedChunks.Count;
                 _lastSearchWarnings = completenessWarnings;
 
-                if (_latestResults.Any())
+                // Phiên bị cổng từ chối giữa chừng: bỏ kết quả dở, báo và đăng xuất ở dưới
+                if (_latestResults.Any() && !_sessionRejected)
                 {
                     // Chỉ lưu những gì đã lấy được; trang lỗi không xóa gì khỏi kho (Upsert không bao giờ xóa)
                     TrackStoreTask(StoreInvoicesAsync(_latestResults));
@@ -1194,7 +1290,11 @@ namespace E_Tax
                     ClearSearchData();
                     // Có trang lỗi thì chưa thể nói là không có hóa đơn
                     string? loadError = InvoiceSearchResults.LoadFailureMessage(failedChunks);
-                    if (loadError != null)
+                    if (_sessionRejected)
+                    {
+                        lblDownloadStatus.Text = "Phiên đăng nhập đã hết hạn.";
+                    }
+                    else if (loadError != null)
                     {
                         lblDownloadStatus.Text = "Không tải được danh sách hóa đơn.";
                         MessageBox.Show(loadError, "Lỗi tải danh sách", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1244,6 +1344,13 @@ namespace E_Tax
                 btnLeftSearch.Enabled = true;
                 btnLeftSearch.Text = "Tìm kiếm";
                 this.Cursor = Cursors.Default;
+            }
+
+            if (_sessionRejected)
+            {
+                MessageBox.Show(this, "Phiên đăng nhập đã hết hạn hoặc bị cổng thuế từ chối. Vui lòng đăng nhập lại.", "Hết phiên đăng nhập", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                await LogoutAsync();
+                return;
             }
 
             // Chỉ báo hoàn tất khi có kết quả và không có lỗi (các trường hợp khác đã có thông báo riêng)

@@ -137,7 +137,7 @@ Trường hàng hóa (trong `hdhhdvu`): `ten, dvtinh, sluong, dgia, thtien, stck
 
 ### 5.2 Đăng nhập
 Khối đăng nhập không có logo: tiêu đề `lblLoginTitle` + `lblLoginSubtitle`; `CenterLoginPanel` đặt chiều cao theo nội dung và căn giữa vùng trên thanh trạng thái (gọi lại khi `Resize`/`Shown`/`panelActivation.VisibleChanged`).
-`btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
+`btnLogin_Click` → `LoginAsync` → lưu `jwtToken`, set header Bearer. Có tick `chkKeepLogin` thì lưu phiên (`RememberSession`); `Form1_Load` gọi `TryRestoreSession` trước khi tải captcha. Link `lblLogout` ở thanh trạng thái → `LogoutAsync`. Ẩn `panelLogin`, hiện `panelSearch`. Nút `btnRefreshCaptcha` tải lại captcha.
 
 ### 5.3 Tìm kiếm (`btnLeftSearch_Click`) — chức năng trung tâm
 Input: bộ chọn kỳ thuế (`cbPeriodKind` Tùy chọn/Tháng/Quý/Năm + `cbPeriodNumber` + `nudPeriodYear`; `ApplyPeriod` gán `dtpFromDate`/`dtpToDate`), `dtpFromDate`, `dtpToDate`, radio `rbSold` / `rbBought` / `rbAllInvoices`. Lúc tìm, `CaptureSelectedPeriod` lưu kỳ vào `_lastSearchPeriod` (giữ kỳ đã chọn chỉ khi khoảng ngày còn khớp, nếu không dùng `TaxPeriod.Custom`) để đặt tên/nhãn file bảng kê.
@@ -273,7 +273,7 @@ Các điểm dưới đây dựa trên giả định/test giả lập, chưa ch�
 - `TaxableInvoices.cs`: bộ chọn HĐ được tính thuế và các cảnh báo (HĐ bị loại, HĐ gốc khác kỳ, lệch tổng). Kỳ vẫn tính theo ngày lập; quy tắc kỳ của HĐ điều chỉnh chờ chủ dự án quyết định.
 - An toàn dữ liệu: mỗi người dùng chỉ chạy một bản (`SingleInstance`, mutex); kho và ghi chú ghi nguyên tử có `Flush(true)`; file tháng hỏng có thể cách ly thành `.corrupt`; `notes.json` hỏng được giữ bản `.corrupt` và `Save` bị từ chối đến khi xử lý xong.
 - `AccountingExport.cs`: xuất dữ liệu cho phần mềm kế toán theo mẫu cột chung; file xuất có dòng `CHƯA ĐỐI CHIẾU VỚI MẪU GỐC`.
-- `UserPreferences.cs` (nhớ tên đăng nhập gần nhất, không lưu mật khẩu), `AppErrorHandler.cs` (bắt lỗi toàn cục), `UpdateChecker.cs` (`ManifestUrl` rỗng thì không kiểm tra, không gọi mạng), `FlexibleStringConverter.cs`, `ChromiumUnavailableException.cs`.
+- `UserPreferences.cs` (nhớ tên đăng nhập gần nhất, không lưu mật khẩu), `SessionStore.cs` ("Duy trì đăng nhập": JWT + tên đăng nhập mã hóa DPAPI ở `%LocalAppData%\E-Tax\session.dat`, khôi phục khi `exp` còn ≥ 5 phút, không gọi cổng; 401 khi tra cứu → xóa và đăng xuất), `AppErrorHandler.cs` (bắt lỗi toàn cục), `UpdateChecker.cs` (`ManifestUrl` rỗng thì không kiểm tra, không gọi mạng), `FlexibleStringConverter.cs`, `ChromiumUnavailableException.cs`.
 
 ### 8.2 Nơi lưu dữ liệu
 | Vị trí | Nội dung |

@@ -17,6 +17,7 @@ namespace E_Tax
         private System.Windows.Forms.PictureBox picCaptcha;
         private System.Windows.Forms.Button btnRefreshCaptcha;
         private System.Windows.Forms.Button btnLogin;
+        private System.Windows.Forms.CheckBox chkKeepLogin;
         private System.Windows.Forms.Panel panelLogin;
         private System.Windows.Forms.Panel panelSearch;
         private System.Windows.Forms.Label lblVersion;
@@ -56,6 +57,7 @@ namespace E_Tax
             txtCaptcha = new TextBox();
             btnRefreshCaptcha = new Button();
             btnLogin = new Button();
+            chkKeepLogin = new CheckBox();
             panelLogin = new Panel();
             panel3 = new Panel();
             panelActivation = new Panel();
@@ -144,6 +146,7 @@ namespace E_Tax
             statusBar = new StatusStrip();
             lblStatusInvoices = new ToolStripStatusLabel();
             lblStatusUser = new ToolStripStatusLabel();
+            lblLogout = new ToolStripStatusLabel();
             lblStatusLicense = new ToolStripStatusLabel();
             panelLogin.SuspendLayout();
             statusBar.SuspendLayout();
@@ -219,7 +222,18 @@ namespace E_Tax
             btnRefreshCaptcha.Text = "↻";
             btnRefreshCaptcha.UseVisualStyleBackColor = false;
             btnRefreshCaptcha.Click += btnRefreshCaptcha_Click;
-            // 
+            //
+            // chkKeepLogin
+            //
+            chkKeepLogin.AutoSize = true;
+            chkKeepLogin.Font = new Font("Segoe UI", 9.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            chkKeepLogin.ForeColor = Color.FromArgb(55, 65, 81);
+            chkKeepLogin.Location = new Point(60, 328);
+            chkKeepLogin.Name = "chkKeepLogin";
+            chkKeepLogin.TabIndex = 9;
+            chkKeepLogin.Text = "Duy trì đăng nhập trên máy này";
+            chkKeepLogin.UseVisualStyleBackColor = true;
+            //
             // btnLogin
             // 
             btnLogin.BackColor = Color.FromArgb(0, 117, 214);
@@ -227,7 +241,7 @@ namespace E_Tax
             btnLogin.FlatStyle = FlatStyle.Flat;
             btnLogin.Font = new Font("Segoe UI Emoji", 14.25F, FontStyle.Bold, GraphicsUnit.Point, 0);
             btnLogin.ForeColor = Color.White;
-            btnLogin.Location = new Point(60, 340);
+            btnLogin.Location = new Point(60, 360);
             btnLogin.Name = "btnLogin";
             btnLogin.Size = new Size(350, 54);
             btnLogin.TabIndex = 8;
@@ -249,6 +263,7 @@ namespace E_Tax
             panelLogin.Controls.Add(picCaptcha);
             panelLogin.Controls.Add(btnRefreshCaptcha);
             panelLogin.Controls.Add(btnLogin);
+            panelLogin.Controls.Add(chkKeepLogin);
             panelLogin.Location = new Point(289, 26);
             panelLogin.Name = "panelLogin";
             panelLogin.Size = new Size(471, 394);
@@ -295,7 +310,7 @@ namespace E_Tax
             panelActivation.Controls.Add(txtMachineId);
             panelActivation.Controls.Add(btnCopyMachineId);
             panelActivation.Font = new Font("Segoe UI", 9.75F, FontStyle.Italic, GraphicsUnit.Point, 0);
-            panelActivation.Location = new Point(16, 410);
+            panelActivation.Location = new Point(16, 430);
             panelActivation.Name = "panelActivation";
             panelActivation.Size = new Size(439, 142);
             panelActivation.TabIndex = 17;
@@ -1186,7 +1201,7 @@ namespace E_Tax
             // 
             statusBar.BackColor = Color.FromArgb(243, 244, 246);
             statusBar.Font = new Font("Segoe UI", 9F);
-            statusBar.Items.AddRange(new ToolStripItem[] { lblStatusInvoices, lblStatusUser, lblStatusLicense });
+            statusBar.Items.AddRange(new ToolStripItem[] { lblStatusInvoices, lblStatusUser, lblLogout, lblStatusLicense });
             statusBar.Location = new Point(0, 664);
             statusBar.Name = "statusBar";
             statusBar.Size = new Size(984, 22);
@@ -1205,7 +1220,15 @@ namespace E_Tax
             // 
             lblStatusUser.ForeColor = Color.FromArgb(55, 65, 81);
             lblStatusUser.Name = "lblStatusUser";
-            // 
+            //
+            // lblLogout
+            //
+            lblLogout.IsLink = true;
+            lblLogout.Name = "lblLogout";
+            lblLogout.Text = "Đăng xuất";
+            lblLogout.Visible = false;
+            lblLogout.Click += lblLogout_Click;
+            //
             // lblStatusLicense
             // 
             lblStatusLicense.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
@@ -1325,6 +1348,7 @@ namespace E_Tax
         private StatusStrip statusBar;
         private ToolStripStatusLabel lblStatusInvoices;
         private ToolStripStatusLabel lblStatusUser;
+        private ToolStripStatusLabel lblLogout;
         private ToolStripStatusLabel lblStatusLicense;
     }
 }
