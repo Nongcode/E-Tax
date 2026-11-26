@@ -112,12 +112,45 @@ namespace E_Tax.Tests
         }
 
         [Fact]
-        public void OutputNotes_CrossPeriod_SaysAccountantDecides()
+        public void OutputNotes_CrossPeriod_FollowsAccountantRule()
         {
             var notes = TaxableInvoices.OutputNotes(new InvoiceDetailItem[0], new[] { Header("a", null, null, status: 3, originalDate: "2026-04-15T00:00:00") }, May);
             var n = Assert.Single(notes);
             Assert.Contains("1 hóa đơn", n);
-            Assert.Contains("kế toán", n);
+            Assert.Contains("[37]", n);
+        }
+
+        // Mua vào ghi nhận theo ngày ký: ngày ký ngoài kỳ thì cảnh báo
+        [Fact]
+        public void OutputNotes_PurchaseSignedOutsidePeriod_IsReported()
+        {
+            var h = Header("a", 100m, 10m);
+            h.Ngay_ky = "2026-06-01T09:00:00";
+            var notes = TaxableInvoices.OutputNotes(new[] { Line("a", 100m, 10m) }, new[] { h }, May);
+            Assert.Contains(notes, n => n.Contains("ngày ký") && n.Contains("1 hóa đơn"));
+        }
+
+        [Fact]
+        public void OutputNotes_SalesSignedOutsidePeriod_IsNotReported()
+        {
+            var h = Header("a", 100m, 10m, loai: Ban);
+            h.Ngay_ky = "2026-06-01T09:00:00";
+            var notes = TaxableInvoices.OutputNotes(new[] { Line("a", 100m, 10m, loai: Ban) }, new[] { h }, May);
+            Assert.DoesNotContain(notes, n => n.Contains("ngày ký"));
+        }
+
+        // Mua vào từ 5 triệu cần chứng từ không dùng tiền mặt: chỉ cảnh báo phía mua vào
+        [Fact]
+        public void OutputNotes_PurchaseFromFiveMillion_WarnsNonCash_OnlyForPurchases()
+        {
+            var mua = Header("a", 5_000_000m, 500_000m);
+            mua.Tong_tien_thanh_toan = 5_500_000m;
+            var ban = Header("b", 5_000_000m, 500_000m, loai: Ban);
+            ban.Tong_tien_thanh_toan = 5_500_000m;
+            var headers = new[] { mua, ban };
+
+            Assert.Contains(TaxableInvoices.OutputNotes(new InvoiceDetailItem[0], headers, May, Mua), n => n.Contains("không dùng tiền mặt"));
+            Assert.DoesNotContain(TaxableInvoices.OutputNotes(new InvoiceDetailItem[0], headers, May, Ban), n => n.Contains("không dùng tiền mặt"));
         }
 
         // I2

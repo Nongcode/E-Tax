@@ -28,6 +28,7 @@ namespace E_Tax // Đảm bảo đây là namespace của bạn
                 _timer.Dispose();
                 _cts.Dispose();
             };
+            UiTheme.ApplyTo(this);
         }
 
         /// <summary>Token bị hủy khi người dùng bấm "Hủy".</summary>

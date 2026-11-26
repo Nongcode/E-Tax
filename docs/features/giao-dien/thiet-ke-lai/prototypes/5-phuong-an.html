@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>E-Tax — 5 phương án giao diện</title>
+<style>
+/* Font Segoe UI: font mặc định Windows, WinForms dùng trực tiếp được */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,sans-serif;background:#e9edf2;color:#0f172a;font-size:13px}
+.picker{position:sticky;top:0;z-index:10;background:#0f172a;color:#fff;display:flex;gap:8px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+.picker b{margin-right:8px;font-size:14px}
+.picker button{font:inherit;border:1px solid #334155;background:#1e293b;color:#cbd5e1;padding:6px 12px;border-radius:4px;cursor:pointer}
+.picker button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+.picker .sep{width:1px;height:24px;background:#334155;margin:0 6px}
+.note{max-width:1280px;margin:14px auto 0;padding:0 16px;color:#334155;line-height:1.5}
+.note h2{font-size:16px;margin-bottom:4px}
+.stage{max-width:1280px;margin:12px auto 40px;padding:0 16px}
+/* Khung cửa sổ Windows */
+.win{color:var(--fg);border:1px solid #9aa4b2;box-shadow:0 8px 30px rgba(15,23,42,.18);background:#fff;height:760px;display:flex;flex-direction:column;overflow:hidden}
+.titlebar{height:32px;display:flex;align-items:center;padding:0 0 0 12px;font-size:12px;flex:none}
+.titlebar .t{flex:1}
+.titlebar .wc{display:flex}
+.titlebar .wc span{width:46px;height:32px;display:grid;place-items:center}
+.client{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
+.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.mono{font-variant-numeric:tabular-nums}
+.sr{position:absolute;left:-9999px}
+.overlay{position:absolute;inset:0;background:rgba(15,23,42,.28);display:flex;z-index:5}
+.pop{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);box-shadow:0 12px 32px rgba(15,23,42,.22);display:flex;flex-direction:column}
+.pop h3{font-size:14px;padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.pop .ft{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border)}
+.colrow{display:flex;align-items:center;gap:10px;height:32px;padding:0 12px;border-bottom:1px solid var(--row-line)}
+.colrow .grip{color:var(--muted);cursor:grab}
+.colrow.drag{background:var(--sel)}
+.gear{margin-left:auto;align-self:center;display:flex;align-items:center;gap:6px;color:var(--muted);padding:4px 8px;border-radius:var(--r);cursor:pointer}
+.gear:hover{background:var(--sel);color:var(--primary)}
+
+/* ============ Thành phần dùng chung (tùy biến bằng biến CSS) ============ */
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;font-weight:600;color:var(--muted)}
+.input{height:32px;border:1px solid var(--border);border-radius:var(--r);padding:0 10px;font:inherit;color:var(--fg);background:var(--input);display:flex;align-items:center;gap:8px}
+.input .ph{color:var(--muted)}
+.input.focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
+.btn{height:32px;border-radius:var(--r);padding:0 12px;font:inherit;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--card);color:var(--fg);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.lg{height:40px;font-size:14px;justify-content:center}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;height:32px}
+.seg span{padding:0 12px;display:flex;align-items:center;border-right:1px solid var(--border);color:var(--fg);background:var(--card)}
+.seg span:last-child{border-right:0}
+.seg span.on{background:var(--primary);color:var(--on-primary);font-weight:600}
+.chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;font-size:11px;font-weight:600}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.chip.bad{background:var(--bad-bg);color:var(--bad)}
+.chip.info{background:var(--info-bg);color:var(--info)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);padding:0 12px;background:var(--card)}
+.tabs span{padding:8px 12px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:600;white-space:nowrap}
+.tabs span.on{color:var(--primary);border-bottom-color:var(--primary)}
+.tabs .count{font-weight:400;color:var(--muted);margin-left:4px}
+table.grid{width:100%;border-collapse:collapse;font-size:12.5px}
+.grid th{position:sticky;top:0;background:var(--th-bg);color:var(--th-fg);font-weight:600;text-align:left;padding:0 10px;height:34px;border-bottom:1px solid var(--border);white-space:nowrap}
+.grid td{padding:0 10px;height:var(--row);border-bottom:1px solid var(--row-line);white-space:nowrap;color:var(--fg)}
+.grid tr:nth-child(even) td{background:var(--zebra)}
+.grid tr.sel td{background:var(--sel)}
+.grid .cb{width:32px;text-align:center}
+.box{width:14px;height:14px;border:1px solid var(--border);border-radius:3px;display:inline-block;vertical-align:middle;background:var(--input)}
+.box.on{background:var(--primary);border-color:var(--primary);position:relative}
+.box.on:after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid var(--on-primary);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.status{height:26px;flex:none;display:flex;align-items:center;gap:16px;padding:0 12px;font-size:12px;border-top:1px solid var(--border);background:var(--status-bg);color:var(--status-fg)}
+.status .sp{flex:1}
+.status a{color:var(--link);text-decoration:none;font-weight:600}
+.kpi{border:1px solid var(--border);border-radius:var(--r2);background:var(--card);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .k{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:none}
+.kpi .v{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg)}
+.kpi .s{font-size:11.5px;color:var(--muted)}
+.radio{display:inline-flex;align-items:center;gap:6px;color:var(--fg);white-space:nowrap}
+.radio i{width:14px;height:14px;border-radius:50%;border:1px solid var(--border);display:inline-block;background:var(--input)}
+.radio.on i{border:4px solid var(--primary)}
+.gridwrap{flex:1;overflow:auto;min-height:0;background:var(--card)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.vsep{width:1px;height:20px;background:var(--border)}
+.hint{font-size:11.5px;color:var(--muted)}
+.captcha{height:48px;flex:1;border:1px solid var(--border);border-radius:var(--r);background:repeating-linear-gradient(45deg,#f1f5f9 0 6px,#e2e8f0 6px 12px);display:grid;place-items:center;font:italic 700 24px Georgia,serif;letter-spacing:6px;color:#334155}
+.check{display:flex;align-items:center;gap:8px;color:var(--fg)}
+.err{font-size:12px;color:var(--bad);display:flex;gap:6px;align-items:center}
+
+/* ============ Bảng màu từng phương án ============ */
+.t1{--primary:#1e3a5f;--on-primary:#fff;--ring:rgba(37,99,235,.25);--fg:#0f172a;--muted:#475569;--border:#d5dbe3;--card:#fff;--input:#fff;--bg:#f4f6f9;--th-bg:#f1f4f8;--th-fg:#1e293b;--row:32px;--row-line:#edf0f4;--zebra:#fafbfc;--sel:#e0ebff;--status-bg:#f1f4f8;--status-fg:#334155;--link:#2563eb;--r:4px;--r2:6px;--ok:#047857;--ok-bg:#d1fae5;--warn:#b45309;--warn-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--info:#1d4ed8;--info-bg:#dbeafe}
+.t2{--primary:#0f766e;--on-primary:#fff;--ring:rgba(15,118,110,.22);--fg:#0f172a;--muted:#52606d;--border:#d9dee5;--card:#fff;--input:#fff;--bg:#f5f7f8;--th-bg:#f8fafb;--th-fg:#334155;--row:32px;--row-line:#eef1f3;--zebra:#fff;--sel:#ccfbf1;--status-bg:#fff;--status-fg:#52606d;--link:#0f766e;--r:6px;--r2:8px;--ok:#047857;--ok-bg:#d1fae5;--warn:#b45309;--warn-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--info:#0e7490;--info-bg:#cffafe}
+.t3{--primary:#185abd;--on-primary:#fff;--ring:rgba(24,90,189,.22);--fg:#1f1f1f;--muted:#5c5c5c;--border:#d1d1d1;--card:#fff;--input:#fff;--bg:#f3f3f3;--th-bg:#f3f3f3;--th-fg:#1f1f1f;--row:28px;--row-line:#e6e6e6;--zebra:#fafafa;--sel:#cfe3ff;--status-bg:#185abd;--status-fg:#fff;--link:#fff;--r:3px;--r2:4px;--ok:#107c10;--ok-bg:#dff6dd;--warn:#8a5a00;--warn-bg:#fff4ce;--bad:#a80000;--bad-bg:#fde7e9;--info:#185abd;--info-bg:#deecf9}
+.t4{--primary:#4338ca;--on-primary:#fff;--ring:rgba(67,56,202,.2);--fg:#111827;--muted:#4b5563;--border:#e2e4ea;--card:#fff;--input:#f9fafb;--bg:#f6f7fb;--th-bg:#fff;--th-fg:#4b5563;--row:36px;--row-line:#f0f1f5;--zebra:#fff;--sel:#eef0ff;--status-bg:#fff;--status-fg:#4b5563;--link:#4338ca;--r:6px;--r2:10px;--ok:#047857;--ok-bg:#d1fae5;--warn:#b45309;--warn-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--info:#4338ca;--info-bg:#e0e7ff}
+.t5{--primary:#3b82f6;--on-primary:#fff;--ring:rgba(59,130,246,.35);--fg:#e5e7eb;--muted:#9ca3af;--border:#2e3646;--card:#151b26;--input:#0f141d;--bg:#0b0f16;--th-bg:#1a2130;--th-fg:#cbd5e1;--row:30px;--row-line:#1f2735;--zebra:#131925;--sel:#1e3a8a;--status-bg:#0f141d;--status-fg:#9ca3af;--link:#60a5fa;--r:4px;--r2:6px;--ok:#34d399;--ok-bg:#064e3b;--warn:#fbbf24;--warn-bg:#4a3510;--bad:#f87171;--bad-bg:#4c1414;--info:#93c5fd;--info-bg:#1e3a8a}
+.t5 .captcha{background:repeating-linear-gradient(45deg,#1f2735 0 6px,#273043 6px 12px);color:#cbd5e1}
+.win.t1 .titlebar{background:#1e3a5f;color:#fff}
+.win.t2 .titlebar{background:#fff;color:#334155;border-bottom:1px solid #e5e7eb}
+.win.t3 .titlebar{background:#185abd;color:#fff}
+.win.t4 .titlebar{background:#fff;color:#4b5563;border-bottom:1px solid #eceef3}
+.win.t5 .titlebar{background:#0b0f16;color:#cbd5e1;border-bottom:1px solid #1f2735}
+</style>
+</head>
+<body>
+<div class="picker" role="toolbar" aria-label="Chọn phương án">
+  <b>E-Tax · Thiết kế lại</b>
+  <span id="opts"></span>
+  <span class="sep"></span>
+  <button data-screen="main" class="on">Màn hình chính</button>
+  <button data-screen="login">Đăng nhập</button>
+  <button data-screen="filter">Popup bộ lọc</button>
+  <button data-screen="columns">Popup chọn cột</button>
+</div>
+<div class="note" id="note"></div>
+<div class="stage"><div id="win"></div></div>
+
+<script>
+const I = {
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  print:'<path d="M6 9V3h12v6"/><rect x="6" y="14" width="12" height="7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>',
+  layers:'<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+  down:'<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  sheet:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  box:'<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+  cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  refresh:'<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  note:'<path d="M4 4h16v12H8l-4 4z"/>',
+  filter:'<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  chev:'<path d="m6 9 6 6 6-6"/>',
+  alert:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  calc:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  grip:'<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  layout:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+  min:'<path d="M5 12h14"/>', max:'<rect x="5" y="5" width="14" height="14"/>', x:'<path d="M6 6l12 12M18 6 6 18"/>'
+};
+const ic = (n, s='') => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" ${s}>${I[n]}</svg>`;
+
+const rows = [
+ ['Bán ra','0322681656','C26TAA','1000','31/10/2026','Công ty TNHH Thương mại An Phát','33.420.000','2.673.600','36.093.600','ok','Đã cấp mã'],
+ ['Bán ra','0357048784','C26TBB','1001','31/10/2026','Công ty CP Công nghệ Minh Long','6.310.000','504.800','6.814.800','ok','Đã cấp mã'],
+ ['Mua vào','0333633340','C26TAA','1002','30/10/2026','Công ty TNHH Dịch vụ Hoàng Gia','8.460.000','676.800','9.136.800','warn','Điều chỉnh'],
+ ['Mua vào','0356163050','C26TBB','1003','30/10/2026','Công ty CP Vận tải Sài Gòn','36.230.000','2.898.400','39.128.400','ok','Đã cấp mã'],
+ ['Bán ra','0378512549','C26TAA','1004','29/10/2026','Công ty TNHH Văn phòng phẩm Hồng Hà','8.720.000','697.600','9.417.600','ok','Đã cấp mã'],
+ ['Mua vào','0333158925','C26TBB','1005','29/10/2026','Công ty TNHH Thương mại An Phát','11.760.000','940.800','12.700.800','bad','Đã hủy'],
+ ['Bán ra','0338820986','C26TAA','1006','28/10/2026','Công ty CP Công nghệ Minh Long','25.300.000','2.024.000','27.324.000','ok','Đã cấp mã'],
+ ['Mua vào','0333422016','C26TBB','1007','28/10/2026','Công ty TNHH Dịch vụ Hoàng Gia','19.070.000','1.525.600','20.595.600','info','Thay thế'],
+ ['Bán ra','0313178693','C26TAA','1008','27/10/2026','Công ty CP Vận tải Sài Gòn','25.890.000','2.071.200','27.961.200','ok','Đã cấp mã'],
+ ['Mua vào','0361947716','C26TBB','1009','27/10/2026','Công ty TNHH Văn phòng phẩm Hồng Hà','40.710.000','3.256.800','43.966.800','ok','Đã cấp mã'],
+ ['Bán ra','0323697377','C26TAA','1010','26/10/2026','Công ty TNHH Thương mại An Phát','19.900.000','1.592.000','21.492.000','ok','Đã cấp mã'],
+ ['Mua vào','0310455821','C26TBB','1011','26/10/2026','Công ty CP Công nghệ Minh Long','4.150.000','332.000','4.482.000','ok','Đã cấp mã'],
+ ['Bán ra','0318822044','C26TAA','1012','25/10/2026','Công ty TNHH Dịch vụ Hoàng Gia','12.000.000','960.000','12.960.000','ok','Đã cấp mã'],
+ ['Mua vào','0304511239','C26TBB','1013','25/10/2026','Công ty CP Vận tải Sài Gòn','7.980.000','638.400','8.618.400','ok','Đã cấp mã'],
+];
+
+function grid(opts={}) {
+  const dir = opts.dir !== false;
+  return `<table class="grid"><thead><tr>
+    <th class="cb"><span class="box"></span></th><th>STT</th>${dir?'<th>Chiều</th>':''}<th>Ký hiệu</th><th>Số HĐ</th><th>Ngày lập</th>
+    <th>MST</th><th>Tên người bán / mua</th>${opts.amounts!==false?'<th class="num">Chưa thuế</th><th class="num">Thuế GTGT</th>':''}<th class="num">Tổng thanh toán</th><th>Trạng thái</th></tr></thead><tbody>
+    ${rows.map((r,i)=>`<tr class="${i===1?'sel':''}"><td class="cb"><span class="box ${i===1||i===3?'on':''}"></span></td><td class="mono">${i+1}</td>
+    ${dir?`<td>${r[0]}</td>`:''}<td>${r[2]}</td><td class="mono">${r[3]}</td><td class="mono">${r[4]}</td><td class="mono">${r[1]}</td>
+    <td style="max-width:${opts.nameW||240}px;overflow:hidden;text-overflow:ellipsis">${r[5]}</td>${opts.amounts!==false?`<td class="num">${r[6]}</td><td class="num">${r[7]}</td>`:''}<td class="num"><b>${r[8]}</b></td>
+    <td><span class="chip ${r[9]}">${r[10]}</span></td></tr>`).join('')}
+  </tbody></table>`;
+}
+const tabs = (on=0) => `<div class="tabs" role="tablist">${[['Tổng hợp',14],['Chi tiết',86],['Bảng kê mua',7],['Bảng kê bán',7],['Bảng kê thuế',''],['VAT nộp','']].map((t,i)=>`<span class="${i===on?'on':''}">${t[0]}${t[1]!==''?`<span class="count">${t[1]}</span>`:''}</span>`).join('')}<span class="gear" title="Chọn cột hiển thị">${ic('gear')}Cột</span></div>`;
+const titlebar = t => `<div class="titlebar"><span class="t">${t}</span><span class="wc"><span>${ic('min')}</span><span>${ic('max')}</span><span>${ic('x')}</span></span></div>`;
+const status = () => cur===7 && screen!=='login' ? `<div class="status"><span>Bán ra: 7 HĐ · 151.063.200 đ</span><span>Mua vào: 7 HĐ · 138.628.800 đ</span><span>Thuế tạm tính: <b>922.400 đ</b></span><span>Cần chú ý: <b>3</b></span><span class="sp"></span><span>Giao diện: <b>Gọn</b> ▾</span><span>${ic('user')} 0110443702</span><a href="#">Đăng xuất</a><span style="font-weight:700">Bản quyền: Đầy đủ</span></div>` : screen==='login' ? `<div class="status"><span>Chưa đăng nhập</span><span class="sp"></span><span style="font-weight:700">Bản quyền: Đầy đủ</span></div>` : `<div class="status"><span>Bán ra: 7 HĐ · 151.063.200 đ</span><span>Mua vào: 7 HĐ · 138.628.800 đ</span><span class="sp"></span><span style="display:flex;align-items:center;gap:4px">${ic('layout')} Giao diện: <b>${{3:'Ribbon',6:'Menu trái',7:'Gọn'}[cur]||'Ribbon'}</b> ▾</span><span>${ic('user')} 0110443702</span><a href="#">Đăng xuất</a><span style="font-weight:700">Bản quyền: Đầy đủ</span></div>`;
+const period = () => `<div class="field"><label>Kỳ thuế</label><div style="display:flex;gap:8px"><div class="input" style="width:96px">Tháng ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="width:64px">10 ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="width:76px">2026 ${ic('chev','style="margin-left:auto"')}</div></div></div>`;
+const dates = () => `<div class="field"><label>Từ ngày</label><div class="input" style="width:132px"><span class="mono">01/10/2026</span>${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>
+  <div class="field"><label>Đến ngày</label><div class="input" style="width:132px"><span class="mono">31/10/2026</span>${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>`;
+const dirSeg = () => `<div class="field"><label>Loại hóa đơn</label><div class="seg"><span>Bán ra</span><span>Mua vào</span><span class="on">Tất cả</span></div></div>`;
+const loginFields = (o={}) => `
+  <div class="field"><label for="u">Mã số thuế / Tài khoản</label><div class="input focus">${o.icons?ic('user','style="color:var(--muted)"'):''}<span>0110443702</span></div></div>
+  <div class="field"><label>Mật khẩu</label><div class="input">${o.icons?ic('lock','style="color:var(--muted)"'):''}<span class="ph">Nhập mật khẩu</span>${ic('eye','style="margin-left:auto;color:var(--muted)"')}</div></div>
+  <div class="field"><label>Mã xác nhận</label><div style="display:flex;gap:8px;align-items:stretch"><div class="captcha">5TA4AQ</div><button class="btn" style="height:48px;width:48px;justify-content:center" aria-label="Tải lại mã">${ic('refresh')}</button></div>
+    <div class="input" style="margin-top:6px"><span class="ph">Nhập 6 ký tự trong ảnh</span></div></div>
+  <label class="check"><span class="box on"></span>Duy trì đăng nhập trên máy này</label>
+  <button class="btn primary lg" style="width:100%">Đăng nhập</button>
+  <div class="hint" style="text-align:center">Tài khoản hoadondientu.gdt.gov.vn · App không lưu mật khẩu</div>`;
+
+/* ===================== Phương án 1: Navy Swiss — thanh lệnh trên, bộ lọc dạng một hàng, KPI ===================== */
+const D = {};
+D[1] = {
+  name:'1 · Navy chuẩn mực',
+  note:'<h2>Phương án 1 — Navy chuẩn mực (Swiss / Minimal)</h2>Thanh tiêu đề xanh navy, một hàng bộ lọc có nhãn rõ ràng phía trên ô nhập, thẻ số liệu tổng hợp, thanh lệnh chia nhóm (Xem · Xuất · Kiểm tra). Gần nhất với app hiện tại → ít rủi ro, làm nhanh nhất.',
+  login:()=>`<div class="client" style="background:var(--bg);display:grid;place-items:center">
+    <div style="width:400px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:32px;display:flex;flex-direction:column;gap:16px;box-shadow:0 4px 16px rgba(15,23,42,.06)">
+      <div><div style="display:flex;align-items:center;gap:10px"><div style="width:36px;height:36px;border-radius:6px;background:var(--primary);color:#fff;display:grid;place-items:center">${ic('file')}</div><div><div style="font-size:20px;font-weight:700">E-Tax</div><div class="hint">Tra cứu hóa đơn điện tử</div></div></div></div>
+      ${loginFields()}
+    </div></div>${status()}`,
+  main:()=>`<div class="client" style="background:var(--bg)">
+    <div style="background:#fff;border-bottom:1px solid var(--border);padding:12px 16px;display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+      ${period()}${dates()}${dirSeg()}
+      <button class="btn primary" style="height:32px">${ic('search')}Tìm kiếm</button>
+      <span style="flex:1"></span>
+      <button class="btn">${ic('box')}Kho hóa đơn</button>
+      <button class="btn">${ic('calc')}Lập tờ khai</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:12px 16px">
+      <div class="kpi"><span class="k">Bán ra</span><span class="v">151.063.200 đ</span><span class="s">7 hóa đơn · thuế 11.191.200</span></div>
+      <div class="kpi"><span class="k">Mua vào</span><span class="v">138.628.800 đ</span><span class="s">7 hóa đơn · thuế 10.268.800</span></div>
+      <div class="kpi"><span class="k">Thuế phải nộp (tạm tính)</span><span class="v">922.400 đ</span><span class="s">[40] = [35] − [25]</span></div>
+      <div class="kpi"><span class="k">Cần chú ý</span><span class="v" style="color:var(--warn)">3</span><span class="s">1 hủy · 1 thay thế · 1 điều chỉnh</span></div>
+    </div>
+    <div style="margin:0 16px 12px;border:1px solid var(--border);border-radius:6px;background:#fff;display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
+      ${tabs()}
+      <div class="toolbar" style="padding:8px 12px;border-bottom:1px solid var(--border)">
+        <span class="hint" style="font-weight:600">Đã chọn 2</span><span class="vsep"></span>
+        <button class="btn">${ic('eye')}Xem</button><button class="btn">${ic('print')}In PDF</button><button class="btn">${ic('layers')}Gộp PDF</button>
+        <span class="vsep"></span>
+        <button class="btn">${ic('sheet')}Xuất danh sách</button><button class="btn">${ic('sheet')}Xuất chi tiết</button><button class="btn">${ic('down')}Tải HĐ gốc</button>
+        <span class="vsep"></span><button class="btn">${ic('shield')}Kiểm tra NCC</button>
+        <span style="flex:1"></span>
+        <div class="input" style="width:220px">${ic('filter','style="color:var(--muted)"')}<span class="ph">Lọc MST, tên, số HĐ…</span></div>
+      </div>
+      <div class="gridwrap">${grid()}</div>
+    </div></div>${status()}`
+};
+
+/* ===================== Phương án 2: Sidebar điều hướng + bộ lọc dọc ===================== */
+D[2] = {
+  name:'2 · Thanh điều hướng trái',
+  note:'<h2>Phương án 2 — Thanh điều hướng bên trái (Teal, hiện đại)</h2>Menu dọc tách các khu vực: Tra cứu, Kho hóa đơn, Kê khai, Kiểm tra NCC. Bộ lọc đặt thành cột trái của trang Tra cứu, bảng chiếm phần lớn diện tích. Hợp khi app còn thêm nhiều chức năng.',
+  login:()=>`<div class="client" style="flex-direction:row">
+    <div style="width:44%;background:linear-gradient(160deg,#0f766e,#115e59);color:#ecfeff;padding:48px;display:flex;flex-direction:column;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700">${ic('file','style="width:24px;height:24px"')}E-Tax</div>
+      <div><div style="font-size:28px;font-weight:700;line-height:1.25;margin-bottom:12px">Hóa đơn, bảng kê và tờ khai<br>trong một chỗ.</div>
+      <div style="opacity:.85;line-height:1.6">Tra cứu từ cổng hoadondientu.gdt.gov.vn, lập bảng kê mua vào/bán ra, kiểm tra nhà cung cấp rủi ro.</div></div>
+      <div style="opacity:.7;font-size:12px">Phiên bản 1.0.0</div>
+    </div>
+    <div style="flex:1;display:grid;place-items:center;background:#fff"><div style="width:360px;display:flex;flex-direction:column;gap:16px">
+      <div><div style="font-size:22px;font-weight:700">Đăng nhập</div><div class="hint" style="font-size:13px">Dùng tài khoản cổng hóa đơn điện tử</div></div>
+      ${loginFields({icons:true})}</div></div></div>${status()}`,
+  main:()=>`<div class="client" style="flex-direction:row;background:var(--bg)">
+    <nav style="width:200px;background:#fff;border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 10px 14px;font-weight:700;font-size:15px;color:var(--primary)">${ic('file')}E-Tax</div>
+      ${[['search','Tra cứu hóa đơn',1],['box','Kho hóa đơn'],['calc','Lập tờ khai'],['list','Bảng kê'],['shield','Kiểm tra NCC'],['note','Ghi chú']].map(n=>`<div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:6px;${n[2]?'background:#ccfbf1;color:#0f766e;font-weight:600':'color:#334155'}">${ic(n[0])}${n[1]}</div>`).join('')}
+      <span style="flex:1"></span>
+      <div style="border-top:1px solid var(--border);padding:10px 10px 0;font-size:12px;color:var(--muted)"><div style="font-weight:600;color:var(--fg)">0110443702</div>Bản quyền: Đầy đủ</div>
+    </nav>
+    <aside style="width:236px;background:#fff;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-weight:700;font-size:14px">Bộ lọc</div>
+      <div class="field"><label>Kỳ thuế</label><div style="display:flex;gap:6px"><div class="input" style="flex:1">Tháng ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="width:56px">10</div></div></div>
+      <div class="field"><label>Năm</label><div class="input">2026 ${ic('chev','style="margin-left:auto"')}</div></div>
+      <div class="field"><label>Từ ngày</label><div class="input mono">01/10/2026${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>
+      <div class="field"><label>Đến ngày</label><div class="input mono">31/10/2026${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>
+      <div class="field"><label>Loại hóa đơn</label><div style="display:flex;flex-direction:column;gap:8px;padding-top:2px"><span class="radio"><i></i>Bán ra</span><span class="radio"><i></i>Mua vào</span><span class="radio on"><i></i>Tất cả</span></div></div>
+      <button class="btn primary lg">${ic('search')}Tìm kiếm</button>
+      <div class="hint">Mỗi lần tối đa 30 ngày/request, app tự chia nhỏ.</div>
+    </aside>
+    <main style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div style="padding:16px 20px 12px;display:flex;align-items:center;gap:12px">
+        <div style="white-space:nowrap"><div style="font-size:18px;font-weight:700">Tháng 10/2026</div><div class="hint">14 HĐ · Bán ra 151.063.200 · Mua vào 138.628.800</div></div>
+        <span style="flex:1"></span>
+        <div class="input" style="width:200px">${ic('search','style="color:var(--muted)"')}<span class="ph">Tìm trong kết quả</span></div>
+        <button class="btn">${ic('sheet')}Xuất Excel ${ic('chev')}</button>
+        <button class="btn">${ic('print')}PDF ${ic('chev')}</button>
+      </div>
+      <div style="margin:0 20px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        ${tabs()}<div class="gridwrap">${grid()}</div>
+        <div style="border-top:1px solid var(--border);padding:8px 12px;display:flex;gap:8px;align-items:center;background:#f8fafb">
+          <span class="hint" style="font-weight:600">2 hóa đơn đã chọn</span><button class="btn">${ic('eye')}Xem</button><button class="btn">${ic('down')}Tải HĐ gốc</button><button class="btn">${ic('shield')}Kiểm tra NCC</button>
+        </div>
+      </div>
+    </main></div>`
+};
+
+/* ===================== Phương án 3: Ribbon kiểu Office ===================== */
+D[3] = {
+  name:'A · Ribbon (đang dùng)',
+  note:'<h2>Phương án 3 — Ribbon kiểu Office/Excel</h2>Nhóm lệnh như Excel mà kế toán đã quen: Tra cứu · Hóa đơn · Xuất file · Kê khai · Kiểm tra. Nút to có chữ dưới biểu tượng, bảng dày (28px/dòng) để xem được nhiều hóa đơn. Thanh trạng thái xanh như Office.',
+  login:()=>`<div class="client" style="background:#f3f3f3;display:grid;place-items:center">
+    <div style="width:420px;background:#fff;border:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.08)">
+      <div style="background:#185abd;color:#fff;padding:20px 28px"><div style="font-size:20px;font-weight:600">E-Tax</div><div style="opacity:.85">Đăng nhập cổng hóa đơn điện tử</div></div>
+      <div style="padding:24px 28px;display:flex;flex-direction:column;gap:14px">${loginFields()}</div>
+    </div></div>${status()}`,
+  main:()=>{
+    const big=(i,t)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:58px;padding:6px 0;border-radius:3px;text-align:center;font-size:11.5px;line-height:1.2">${ic(i,'style="width:24px;height:24px;color:#185abd"')}<span>${t}</span></div>`;
+    const grp=(t,c)=>`<div style="display:flex;flex-direction:column;border-right:1px solid #e1e1e1;padding:0 6px"><div style="display:flex;gap:2px;align-items:flex-start;flex:1">${c}</div><div style="text-align:center;font-size:11px;color:#5c5c5c;padding-top:2px">${t}</div></div>`;
+    return `<div class="client" style="background:#fff">
+    <div style="display:flex;gap:2px;padding:0 8px;background:#f3f3f3;border-bottom:1px solid #d1d1d1;font-size:12.5px">${['Trang chủ','Bảng kê','Kê khai','Kho hóa đơn','Trợ giúp'].map((t,i)=>`<span style="padding:6px 12px;${i===0?'background:#fff;border:1px solid #d1d1d1;border-bottom-color:#fff;margin-bottom:-1px;color:#185abd;font-weight:600':''}">${t}</span>`).join('')}</div>
+    <div style="display:flex;padding:6px 0;border-bottom:1px solid #d1d1d1;height:96px">
+      ${grp('Tra cứu',`<div style="display:flex;flex-direction:column;gap:6px;padding-top:2px">
+        <div style="display:flex;gap:6px;align-items:center"><span style="width:52px;font-size:12px">Kỳ thuế</span><div class="input" style="height:26px;width:78px">Tháng ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="height:26px;width:48px">10</div><div class="input" style="height:26px;width:62px">2026</div></div>
+        <div style="display:flex;gap:6px;align-items:center"><span style="width:52px;font-size:12px">Từ – đến</span><div class="input mono" style="height:26px;width:96px">01/10/2026</div><div class="input mono" style="height:26px;width:96px">31/10/2026</div></div></div>
+        <div style="display:flex;flex-direction:column;gap:4px;padding:2px 6px;font-size:12px"><span class="radio"><i></i>Bán ra</span><span class="radio"><i></i>Mua vào</span><span class="radio on"><i></i>Tất cả</span></div>
+        ${big('search','Tìm kiếm')}`)}
+      ${grp('Hóa đơn',big('eye','Xem hóa đơn')+big('print','In PDF')+big('layers','Gộp PDF')+big('down','Tải HĐ gốc'))}
+      ${grp('Xuất Excel',big('sheet','Danh sách')+big('list','Chi tiết')+big('file','Bảng kê mua')+big('file','Bảng kê bán'))}
+      ${grp('Kê khai',big('calc','Lập tờ khai')+big('box','Kho hóa đơn'))}
+      ${grp('Kiểm tra',big('shield','Kiểm tra NCC')+big('note','Ghi chú'))}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #e1e1e1;background:#fafafa">
+      <div class="input" style="height:26px;width:260px">${ic('filter','style="color:var(--muted)"')}<span class="ph">Lọc theo MST, tên, số hóa đơn</span></div>
+      <label class="check" style="font-size:12px"><span class="box"></span>Chỉ HĐ có ghi chú</label>
+      <span style="flex:1"></span><span class="hint">Hiển thị 14 / 14 hóa đơn · đã chọn 2</span>
+    </div>
+    ${tabs()}<div class="gridwrap">${grid()}</div></div>${status()}`}
+};
+
+/* ===================== Phương án 4: Bảng + bảng chi tiết bên phải ===================== */
+D[4] = {
+  name:'4 · Bảng + ngăn chi tiết',
+  note:'<h2>Phương án 4 — Bảng + ngăn chi tiết bên phải (Indigo, thoáng)</h2>Bấm một hóa đơn → ngăn bên phải hiện thông tin người bán, dòng hàng, ghi chú, kết quả kiểm tra rủi ro. Thay cho khung "Thông tin ng bán" hiện nằm cố định ở góc. Dòng cao 36px, dễ đọc.',
+  login:()=>`<div class="client" style="background:radial-gradient(circle at 30% 20%,#eef0ff,#f6f7fb 60%);display:grid;place-items:center">
+    <div style="width:380px;display:flex;flex-direction:column;gap:20px">
+      <div style="text-align:center"><div style="width:48px;height:48px;border-radius:12px;background:var(--primary);color:#fff;display:grid;place-items:center;margin:0 auto 12px">${ic('file','style="width:24px;height:24px"')}</div>
+      <div style="font-size:22px;font-weight:700">Chào mừng trở lại</div><div class="hint" style="font-size:13px">Đăng nhập bằng tài khoản cổng hóa đơn điện tử</div></div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 10px 30px rgba(67,56,202,.08)">${loginFields({icons:true})}</div>
+    </div></div>${status()}`,
+  main:()=>`<div class="client" style="background:var(--bg)">
+    <div style="background:#fff;border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--primary);align-self:center;margin-right:8px">${ic('file')}E-Tax</div>
+      ${period()}${dates()}${dirSeg()}
+      <button class="btn primary">${ic('search')}Tìm kiếm</button>
+      <span style="flex:1"></span><button class="btn ghost">${ic('box')}Kho hóa đơn</button><button class="btn ghost">${ic('calc')}Tờ khai</button>
+    </div>
+    <div style="flex:1;display:flex;min-height:0;gap:12px;padding:12px 16px">
+      <div style="flex:1;border:1px solid var(--border);border-radius:10px;background:#fff;display:flex;flex-direction:column;min-width:0;overflow:hidden">
+        <div class="toolbar" style="padding:10px 12px">
+          <div class="input" style="width:240px">${ic('search','style="color:var(--muted)"')}<span class="ph">Lọc kết quả</span></div>
+          <span class="chip info">Tất cả 14</span><span class="chip ok">Hợp lệ 11</span><span class="chip warn">Cần xem 3</span>
+          <span style="flex:1"></span>
+          <button class="btn">${ic('sheet')}Xuất ${ic('chev')}</button><button class="btn">${ic('print')}PDF ${ic('chev')}</button>
+        </div>
+        ${tabs()}<div class="gridwrap">${grid({dir:false,amounts:false,nameW:220})}</div>
+      </div>
+      <aside style="width:320px;border:1px solid var(--border);border-radius:10px;background:#fff;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border)">
+          <div class="hint">C26TBB · Số 1001 · 31/10/2026</div>
+          <div style="font-weight:700;font-size:15px;margin:2px 0 6px">Công ty CP Công nghệ Minh Long</div>
+          <div style="display:flex;gap:6px"><span class="chip ok">Đã cấp mã</span><span class="chip ok">NCC không rủi ro</span></div>
+        </div>
+        <div style="padding:14px 16px;display:grid;grid-template-columns:auto 1fr;gap:8px 12px;font-size:12.5px;border-bottom:1px solid var(--border)">
+          <span class="hint">MST</span><span class="mono">0357048784</span>
+          <span class="hint">Địa chỉ</span><span>12 Nguyễn Trãi, Q.1, TP.HCM</span>
+          <span class="hint">Chưa thuế</span><span class="num">6.310.000</span>
+          <span class="hint">Thuế 8%</span><span class="num">504.800</span>
+          <span class="hint" style="font-weight:700;color:var(--fg)">Tổng</span><span class="num" style="font-weight:700">6.814.800</span>
+        </div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;flex:1">
+          <div class="field"><label>Ghi chú</label><div class="input" style="height:64px;align-items:flex-start;padding-top:8px"><span class="ph">Thêm ghi chú cho hóa đơn này</span></div></div>
+          <div style="display:flex;gap:8px"><button class="btn" style="flex:1;justify-content:center">${ic('eye')}Xem HĐ</button><button class="btn" style="flex:1;justify-content:center">${ic('down')}Tải gốc</button></div>
+          <button class="btn" style="justify-content:center">${ic('shield')}Kiểm tra lại NCC</button>
+        </div>
+      </aside>
+    </div></div>${status()}`
+};
+
+/* ===================== Phương án 5: Tối, dày đặc ===================== */
+D[5] = {
+  name:'5 · Nền tối, mật độ cao',
+  note:'<h2>Phương án 5 — Nền tối, mật độ cao</h2>Dành cho người ngồi nhiều giờ: nền tối dịu mắt, chữ tương phản ≥ 4.5:1, bảng 30px/dòng, lệnh gom thành thanh công cụ nhỏ. Lưu ý: WinForms không có dark mode sẵn, phải tự vẽ màu cho DataGridView/ComboBox/DateTimePicker → tốn công nhất.',
+  login:()=>`<div class="client" style="background:var(--bg);display:grid;place-items:center">
+    <div style="width:380px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:28px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:6px;background:var(--primary);display:grid;place-items:center;color:#fff">${ic('file')}</div><div style="font-size:18px;font-weight:700">E-Tax</div></div>
+      ${loginFields({icons:true})}
+    </div></div>${status()}`,
+  main:()=>`<div class="client" style="background:var(--bg)">
+    <div style="padding:10px 12px;display:flex;gap:12px;align-items:flex-end;border-bottom:1px solid var(--border);background:var(--card);flex-wrap:wrap">
+      ${period()}${dates()}${dirSeg()}<button class="btn primary">${ic('search')}Tìm kiếm</button>
+      <span style="flex:1"></span>
+      <div style="display:flex;gap:20px;font-size:12px;align-self:center;padding-right:4px;white-space:nowrap">
+        <div><div class="hint">Bán ra</div><b class="mono" style="font-size:14px">151.063.200</b></div>
+        <div><div class="hint">Mua vào</div><b class="mono" style="font-size:14px">138.628.800</b></div>
+        <div><div class="hint">Cần chú ý</div><b style="font-size:14px;color:var(--warn)">3</b></div>
+      </div>
+    </div>
+    <div class="toolbar" style="padding:6px 12px;border-bottom:1px solid var(--border);background:var(--card)">
+      ${[['eye','Xem'],['print','In PDF'],['layers','Gộp PDF'],['down','Tải gốc']].map(b=>`<button class="btn ghost">${ic(b[0])}${b[1]}</button>`).join('')}
+      <span class="vsep"></span>${[['sheet','Danh sách'],['list','Chi tiết'],['file','Bảng kê']].map(b=>`<button class="btn ghost">${ic(b[0])}${b[1]}</button>`).join('')}
+      <span class="vsep"></span><button class="btn ghost">${ic('shield')}Kiểm tra NCC</button><button class="btn ghost">${ic('calc')}Tờ khai</button><button class="btn ghost">${ic('box')}Kho HĐ</button>
+      <span style="flex:1"></span><div class="input" style="width:150px">${ic('filter','style="color:var(--muted)"')}<span class="ph">Lọc…</span></div>
+    </div>
+    ${tabs()}<div class="gridwrap">${grid()}</div></div>${status()}`
+};
+
+/* ===================== Popup dùng chung cho 3 kiểu A/B/C ===================== */
+const columnPopup = () => `<div class="overlay" style="justify-content:flex-end;align-items:flex-start;padding:150px 24px 0 0">
+  <div class="pop" style="width:340px">
+    <h3>${ic('gear')}Cột hiển thị — Tổng hợp<span style="flex:1"></span><span class="hint" style="font-weight:400">Kéo để đổi thứ tự</span></h3>
+    <div style="max-height:380px;overflow:auto">
+    ${[['STT',1,1],['Chiều',1],['Ký hiệu',1],['Số HĐ',1],['Ngày lập',1],['MST',1],['Tên người bán / mua',1],['Chưa thuế',1],['Thuế GTGT',1],['Tổng thanh toán',1],['Trạng thái',1],['Rủi ro NCC',0],['Ký hiệu mẫu số',0],['Tra cứu',0]]
+      .map((c,i)=>`<div class="colrow ${i===6?'drag':''}"><span class="grip">${ic('grip')}</span><span class="box ${c[1]?'on':''}"></span><span style="flex:1">${c[0]}</span>${c[2]?'<span class="hint">luôn hiện</span>':''}</div>`).join('')}
+    </div>
+    <div class="ft"><button class="btn ghost" style="margin-right:auto">Mặc định</button><button class="btn">Hủy</button><button class="btn primary">Áp dụng</button></div>
+  </div></div>`;
+
+const filterPopup = () => `<div class="overlay" style="justify-content:flex-start;align-items:flex-start;padding:64px 0 0 216px">
+  <div class="pop" style="width:430px">
+    <h3>${ic('filter')}Bộ lọc tra cứu</h3>
+    <div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field" style="grid-column:1/3"><label>Kỳ thuế</label><div style="display:flex;gap:8px"><div class="input" style="flex:1">Tháng ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="width:70px">10 ${ic('chev','style="margin-left:auto"')}</div><div class="input" style="width:84px">2026 ${ic('chev','style="margin-left:auto"')}</div></div></div>
+      <div class="field"><label>Từ ngày</label><div class="input mono">01/10/2026${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>
+      <div class="field"><label>Đến ngày</label><div class="input mono">31/10/2026${ic('cal','style="margin-left:auto;color:var(--muted)"')}</div></div>
+      <div class="field" style="grid-column:1/3"><label>Loại hóa đơn</label><div class="seg" style="width:fit-content"><span>Bán ra</span><span>Mua vào</span><span class="on">Tất cả</span></div></div>
+      <div style="grid-column:1/3;border-top:1px solid var(--border);padding-top:10px;font-weight:700">Lọc trong kết quả</div>
+      <div class="field"><label>Số HĐ</label><div class="input"><span class="ph">Số HĐ</span></div></div>
+      <div class="field"><label>MST / Tên</label><div class="input"><span class="ph">Tên hoặc MST</span></div></div>
+      <div class="field"><label>Loại</label><div class="input">Tất cả ${ic('chev','style="margin-left:auto"')}</div></div>
+      <label class="check" style="align-self:end;height:32px"><span class="box"></span>Chỉ HĐ có ghi chú</label>
+    </div>
+    <div class="ft"><button class="btn ghost" style="margin-right:auto">Xóa lọc</button><button class="btn">Đóng</button><button class="btn primary">${ic('search')}Tìm kiếm</button></div>
+  </div></div>`;
+
+/* ===================== B: Menu trái, bộ lọc mở popup ===================== */
+D[6] = {
+  name:'B · Menu trái + lọc popup',
+  note:'<h2>Kiểu B — Menu trái, bộ lọc mở popup</h2>Menu dọc theo khu vực (giống phương án 2 / ảnh mẫu) nhưng bỏ cột bộ lọc cố định: bấm <b>Bộ lọc</b> mở popup (kỳ thuế, ngày, loại HĐ và lọc trong kết quả). Số trên nút Bộ lọc = số điều kiện đang bật. Bánh răng "Cột" ở dải tab để chọn cột. Bấm "Popup bộ lọc" / "Popup chọn cột" ở thanh trên để xem popup.',
+  login:()=>D[3].login(),
+  main:()=>`<div class="client" style="flex-direction:row;background:var(--bg)">
+    <nav style="width:200px;background:#fff;border-right:1px solid var(--border);padding:12px 8px;display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 10px 14px;font-weight:700;font-size:15px;color:var(--primary)">${ic('file')}E-Tax</div>
+      ${[['search','Tra cứu hóa đơn',1],['list','Bảng kê'],['calc','Lập tờ khai'],['box','Kho hóa đơn'],['shield','Kiểm tra NCC'],['note','Ghi chú']].map(n=>`<div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:4px;${n[2]?'background:#deecf9;color:var(--primary);font-weight:600':'color:#333'}">${ic(n[0])}${n[1]}</div>`).join('')}
+      <span style="flex:1"></span>
+      <div style="border-top:1px solid var(--border);padding:10px 10px 0;font-size:12px;color:var(--muted)"><div style="font-weight:600;color:var(--fg)">0110443702</div>Bản quyền: Đầy đủ</div>
+    </nav>
+    <main style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div style="padding:14px 20px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="white-space:nowrap"><div style="font-size:18px;font-weight:700">Tra cứu hóa đơn</div><div class="hint">Tháng 10/2026 · Tất cả · 14 HĐ</div></div>
+        <button class="btn" style="margin-left:12px">${ic('filter')}Bộ lọc<span class="chip info" style="margin-left:4px">3</span></button>
+        <button class="btn primary">${ic('search')}Tìm kiếm</button>
+        <span style="flex:1"></span>
+        <button class="btn">${ic('eye')}Xem</button>
+        <button class="btn">${ic('print')}PDF ${ic('chev')}</button>
+        <button class="btn">${ic('sheet')}Xuất Excel ${ic('chev')}</button>
+        <button class="btn">${ic('down')}Tải HĐ gốc</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 20px 10px">
+        <div class="kpi"><span class="k">Bán ra</span><span class="v">151.063.200 đ</span><span class="s">7 HĐ · thuế 11.191.200</span></div>
+        <div class="kpi"><span class="k">Mua vào</span><span class="v">138.628.800 đ</span><span class="s">7 HĐ · thuế 10.268.800</span></div>
+        <div class="kpi"><span class="k">Thuế phải nộp (tạm tính)</span><span class="v">922.400 đ</span><span class="s">[40] = [35] − [25]</span></div>
+        <div class="kpi"><span class="k">Cần chú ý</span><span class="v" style="color:var(--warn)">3</span><span class="s">1 hủy · 1 thay thế · 1 điều chỉnh</span></div>
+      </div>
+      <div style="margin:0 20px 12px;border:1px solid var(--border);border-radius:4px;background:#fff;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        ${tabs()}<div class="gridwrap">${grid()}</div>
+      </div>
+    </main></div>${status()}`
+};
+
+/* ===================== C: Gọn, nền sáng (phương án 5 đổi sáng) ===================== */
+D[7] = {
+  name:'C · Gọn nền sáng',
+  note:'<h2>Kiểu C — Gọn, nền sáng</h2>Phương án 5 đổi sang nền sáng: một hàng điều kiện tìm (kèm nút Lọc kết quả mở popup), số liệu tổng nằm ở thanh trạng thái, một thanh công cụ nút nhỏ, bảng dày 26px/dòng để thấy nhiều hóa đơn nhất. "Lọc kết quả" mở popup như kiểu B. Bánh răng "Cột" ở dải tab.',
+  login:()=>D[3].login(),
+  main:()=>`<div class="client" style="background:var(--bg)">
+    <div style="padding:8px 12px;display:flex;gap:12px;align-items:flex-end;border-bottom:1px solid var(--border);background:#fff;flex-wrap:wrap">
+      ${period()}${dates()}${dirSeg()}<button class="btn primary">${ic('search')}Tìm kiếm</button><button class="btn">${ic('filter')}Lọc kết quả</button>    </div>
+    <div class="toolbar" style="padding:4px 12px;border-bottom:1px solid var(--border);background:#fafafa">
+      ${[['eye','Xem'],['print','In PDF'],['layers','Gộp PDF'],['down','Tải gốc']].map(b=>`<button class="btn ghost" style="height:28px">${ic(b[0])}${b[1]}</button>`).join('')}
+      <span class="vsep"></span>${[['sheet','Danh sách'],['list','Chi tiết'],['file','Bảng kê mua'],['file','Bảng kê bán']].map(b=>`<button class="btn ghost" style="height:28px">${ic(b[0])}${b[1]}</button>`).join('')}
+      <span class="vsep"></span><button class="btn ghost" style="height:28px">${ic('shield')}Kiểm tra NCC</button><button class="btn ghost" style="height:28px">${ic('calc')}Tờ khai</button><button class="btn ghost" style="height:28px">${ic('box')}Kho HĐ</button>
+    </div>
+    ${tabs()}<div class="gridwrap" style="--row:26px">${grid()}</div></div>${status()}`
+};
+
+let cur = 6, screen = 'main';
+const opts = document.getElementById('opts');
+opts.innerHTML = Object.keys(D).filter(k => [3,6,7].includes(+k)).map(k=>`<button data-opt="${k}">${D[k].name}</button>`).join(' ');
+function render(){
+  document.querySelectorAll('[data-opt]').forEach(b=>b.classList.toggle('on', +b.dataset.opt===cur));
+  document.querySelectorAll('[data-screen]').forEach(b=>b.classList.toggle('on', b.dataset.screen===screen));
+  document.getElementById('note').innerHTML = D[cur].note;
+  const title = screen==='login' ? 'E-Tax' : 'E-Tax — 0110443702';
+  const theme = cur >= 6 ? 3 : cur;
+  const base = screen === 'login' ? 'login' : 'main';
+  let html = D[cur][base]();
+  if (screen === 'filter' || screen === 'columns') {
+    const i = html.lastIndexOf('<div class="status">');
+    const pop = screen === 'filter' ? filterPopup() : columnPopup();
+    html = i > 0 ? html.slice(0, i) + pop + html.slice(i) : html + pop;
+  }
+  document.getElementById('win').innerHTML = `<div class="win t${theme}">${titlebar(title)}<div style="position:relative;flex:1;display:flex;flex-direction:column;min-height:0">${html}</div></div>`;
+}
+document.addEventListener('click', e=>{
+  const o = e.target.closest('[data-opt]'), s = e.target.closest('[data-screen]');
+  if(o){cur=+o.dataset.opt;render();} if(s){screen=s.dataset.screen;render();}
+});
+const h = new URLSearchParams(location.hash.slice(1) || location.search.slice(1)); if(h.get('o')) cur=+h.get('o'); if(h.get('s')) screen=h.get('s');
+render();
+</script>
+</body>
+</html>

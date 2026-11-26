@@ -277,6 +277,9 @@ namespace E_Tax
                         }
                     }
 
+                    // Cổng thường chỉ trả thtien và tỷ lệ thuế suất cho từng dòng: bổ sung tiền chưa thuế và tiền thuế
+                    InvoiceLineAmounts.Fill(invoiceItems);
+
                     if (invoiceItems.Count == 0)
                     {
                         noLineCount++;

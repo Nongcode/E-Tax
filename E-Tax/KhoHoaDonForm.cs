@@ -90,6 +90,7 @@ namespace E_Tax
 
             Load += async (_, _) => await LoadCompaniesAsync();
             FormClosing += (_, e) => { if (_busy) e.Cancel = true; };
+            UiTheme.ApplyTo(this);
         }
 
         /// <summary>ListView bỏ thông điệp bấm đúp để bấm nhanh hai lần không tự đổi tick.</summary>
