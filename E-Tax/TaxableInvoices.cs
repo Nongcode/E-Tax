@@ -124,6 +124,8 @@ namespace E_Tax
             int signedOutside = CountPurchasesSignedOutside(scoped, period);
             if (signedOutside > 0)
                 notes.Add($"Có {signedOutside} hóa đơn mua vào có ngày ký ngoài kỳ. Mua vào ghi nhận theo ngày ký: hãy kiểm tra ngày ký trên file XML và chuyển sang kỳ đúng.");
+            if (NonCashPaymentRule.Note(scoped) is string nonCash)
+                notes.Add(nonCash);
             int mismatches = CountTotalMismatches(itemList, headerList, direction);
             if (mismatches > 0)
                 notes.Add($"Có {mismatches} hóa đơn có tổng dòng hàng không khớp tổng tiền trên hóa đơn (lệch quá 1 đồng mỗi dòng). Hãy đối chiếu trước khi dùng.");
